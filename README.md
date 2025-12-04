@@ -72,8 +72,3 @@ ReadPartTest.exe
 1. **更多引用类型**：可以在 `RefSerializerEntry` 添加 `CRefSketchSeg` 的本地 ID 等属性。  
 2. **XML Schema/Validation**：提供一个 `UnifiedModel.xsd` 以便外部工具检查 generated XML。  
 3. **高性能序列化**：结合 `cereal::BinaryOutputArchive` 支持大模型快速读写。
-
-## 贡献与许可
-
-欢迎提交 issue/PR，项目遵循 MIT 风格许可（请根据实际仓库设置补充）。
-
