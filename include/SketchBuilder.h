@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "FeatureBuilderBase.h"
+#include "TypeAdapters.h"
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -19,13 +20,14 @@ public:
   /**
    * @brief 设置草图所在平面。
    */
-  SketchBuilder &SetPlane(const CPoint3D &origin, const CVector3D &xDir,
-                          const CVector3D &normal) {
+  template <typename PointT, typename VectorT>
+  SketchBuilder &SetPlane(const PointT &origin, const VectorT &xDir,
+                          const VectorT &normal) {
     auto plane = std::make_shared<CRefPlane>();
-    plane->origin = origin;
-    plane->xDir = xDir;
-    plane->normal = normal;
-    plane->yDir = CVector3D::Cross(normal, xDir);
+    plane->origin = PointAdapter<PointT>::Convert(origin);
+    plane->xDir = VectorAdapter<VectorT>::Convert(xDir);
+    plane->normal = VectorAdapter<VectorT>::Convert(normal);
+    plane->yDir = CVector3D::Cross(plane->normal, plane->xDir);
     plane->yDir.Normalize();
     m_feature->referencePlane = plane;
     return *this;
@@ -36,12 +38,12 @@ public:
    */
   SketchBuilder &SetReferencePlane(const std::string &planeID) {
     if (planeID == StandardID::PLANE_YZ) {
-      SetPlane({0, 0, 0}, {0, 1, 0}, {1, 0, 0});
+      SetPlane(CPoint3D{0, 0, 0}, CVector3D{0, 1, 0}, CVector3D{1, 0, 0});
     } else if (planeID == StandardID::PLANE_ZX) {
-      SetPlane({0, 0, 0}, {0, 0, 1}, {0, 1, 0});
+      SetPlane(CPoint3D{0, 0, 0}, CVector3D{0, 0, 1}, CVector3D{0, 1, 0});
     } else {
       // Default to XY plane
-      SetPlane({0, 0, 0}, {1, 0, 0}, {0, 0, 1});
+      SetPlane(CPoint3D{0, 0, 0}, CVector3D{1, 0, 0}, CVector3D{0, 0, 1});
     }
 
     // Set the target feature ID for reference
@@ -64,11 +66,12 @@ public:
   /**
    * @brief 添加直线。
    */
-  std::string AddLine(const CPoint3D &start, const CPoint3D &end,
+  template <typename PointT>
+  std::string AddLine(const PointT &start, const PointT &end,
                       bool isConstruction = false) {
     auto line = std::make_shared<CSketchLine>();
-    line->startPos = start;
-    line->endPos = end;
+    line->startPos = PointAdapter<PointT>::Convert(start);
+    line->endPos = PointAdapter<PointT>::Convert(end);
     line->localID = GenerateLocalID("L");
     line->isConstruction = isConstruction;
     m_feature->segments.push_back(line);
@@ -78,13 +81,14 @@ public:
   /**
    * @brief 添加圆。
    */
-  std::string AddCircle(const CPoint3D &center, double radius,
+  template <typename PointT>
+  std::string AddCircle(const PointT &center, double radius,
                         bool isConstruction = false) {
     if (radius <= 0) {
       throw std::invalid_argument("radius must be positive");
     }
     auto circle = std::make_shared<CSketchCircle>();
-    circle->center = center;
+    circle->center = PointAdapter<PointT>::Convert(center);
     circle->radius = radius;
     circle->localID = GenerateLocalID("C");
     circle->isConstruction = isConstruction;
@@ -95,13 +99,14 @@ public:
   /**
    * @brief 添加圆弧。
    */
-  std::string AddArc(const CPoint3D &center, double radius, double startAngle,
+  template <typename PointT>
+  std::string AddArc(const PointT &center, double radius, double startAngle,
                      double endAngle) {
     if (radius <= 0) {
       throw std::invalid_argument("radius must be positive");
     }
     auto arc = std::make_shared<CSketchArc>();
-    arc->center = center;
+    arc->center = PointAdapter<PointT>::Convert(center);
     arc->radius = radius;
     arc->startAngle = startAngle;
     arc->endAngle = endAngle;
@@ -114,9 +119,9 @@ public:
   /**
    * @brief 添加点。
    */
-  std::string AddPoint(const CPoint3D &pos) {
+  template <typename PointT> std::string AddPoint(const PointT &pos) {
     auto point = std::make_shared<CSketchPoint>();
-    point->position = pos;
+    point->position = PointAdapter<PointT>::Convert(pos);
     point->localID = GenerateLocalID("P");
     m_feature->segments.push_back(point);
     return point->localID;

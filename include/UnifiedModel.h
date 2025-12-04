@@ -9,6 +9,12 @@
 
 namespace CADExchange {
 
+struct ValidationReport {
+  bool isValid = true;
+  std::vector<std::string> errors;
+  std::vector<std::string> warnings;
+};
+
 /**
  * @brief 封装所有构建特征的容器，同时记录单位、名称等元数据。
  */
@@ -30,6 +36,9 @@ public:
     }
     m_features.push_back(feature);
     m_index[feature->featureID] = feature;
+    if (!feature->externalID.empty()) {
+      m_externalIndex[feature->externalID] = feature;
+    }
   }
 
   /**
@@ -40,6 +49,21 @@ public:
    */
   std::shared_ptr<CFeatureBase> GetFeature(const std::string &featureID) const {
     if (auto it = m_index.find(featureID); it != m_index.end()) {
+      return it->second;
+    }
+    return nullptr;
+  }
+
+  /**
+   * @brief 根据外部 ID 获取对应的特征对象。
+   *
+   * @param externalID 外部系统的 ID。
+   * @return 若存在则返回 shared_ptr，否则返回 nullptr。
+   */
+  std::shared_ptr<CFeatureBase>
+  GetFeatureByExternalID(const std::string &externalID) const {
+    if (auto it = m_externalIndex.find(externalID);
+        it != m_externalIndex.end()) {
       return it->second;
     }
     return nullptr;
@@ -57,6 +81,21 @@ public:
     static_assert(std::is_base_of<CFeatureBase, T>::value,
                   "T must derive from CFeatureBase");
     auto base = GetFeature(featureID);
+    if (!base) {
+      return nullptr;
+    }
+    return std::dynamic_pointer_cast<T>(base);
+  }
+
+  /**
+   * @brief 尝试将外部 ID 对应的特征安全地转换为指定类型。
+   */
+  template <typename T>
+  std::shared_ptr<T>
+  GetFeatureByExternalIDAs(const std::string &externalID) const {
+    static_assert(std::is_base_of<CFeatureBase, T>::value,
+                  "T must derive from CFeatureBase");
+    auto base = GetFeatureByExternalID(externalID);
     if (!base) {
       return nullptr;
     }
@@ -83,12 +122,31 @@ public:
   void Clear() {
     m_features.clear();
     m_index.clear();
+    m_externalIndex.clear();
+  }
+
+  /**
+   * @brief 验证模型完整性。
+   */
+  ValidationReport Validate() const {
+    ValidationReport report;
+    for (const auto &feature : m_features) {
+      if (feature->featureID.empty()) {
+        report.isValid = false;
+        report.errors.push_back("Feature with empty ID found.");
+      }
+      // Check for duplicate IDs (implicit in map, but good to check list)
+    }
+    // More complex checks can be added here
+    return report;
   }
 
 private:
   std::vector<std::shared_ptr<CFeatureBase>> m_features; ///< 特征列表
   std::unordered_map<std::string, std::shared_ptr<CFeatureBase>>
       m_index; ///< ID 索引
+  std::unordered_map<std::string, std::shared_ptr<CFeatureBase>>
+      m_externalIndex; ///< 外部 ID 索引
 };
 
 } // namespace CADExchange

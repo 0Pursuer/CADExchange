@@ -73,7 +73,49 @@ ReadPartTest.exe
 2. **XML Schema/Validation**：提供一个 `UnifiedModel.xsd` 以便外部工具检查 generated XML。  
 3. **高性能序列化**：结合 `cereal::BinaryOutputArchive` 支持大模型快速读写。
 
-## 贡献与许可
 
-欢迎提交 issue/PR，项目遵循 MIT 风格许可（请根据实际仓库设置补充）。
+## 使用指南 (Usage Guide)
+
+### 1. 外部 ID 映射 (External ID Mapping)
+
+为了简化集成，`CADExchange` 允许直接使用外部系统（如 SolidWorks, Creo）的 ID。
+
+```cpp
+// 1. 设置外部 ID
+builder.SetExternalID("SW-12345");
+
+// 2. 使用外部 ID 引用特征
+extrudeBuilder.SetProfileByExternalID("SW-12345");
+```
+
+### 2. 类型适配 (Type Adapters)
+
+无需手动转换点和向量类型，只需特化 `PointAdapter` 和 `VectorAdapter`。
+
+```cpp
+// 在头文件中定义适配器
+namespace CADExchange {
+    template <> struct PointAdapter<MyPoint> {
+        static CPoint3D Convert(const MyPoint& pt) { return { pt.x, pt.y, pt.z }; }
+    };
+}
+
+// 直接使用
+builder.AddLine(myPoint1, myPoint2);
+```
+
+### 3. 模型验证 (Validation)
+
+在导出前检查模型完整性。
+
+```cpp
+auto report = model.Validate();
+if (!report.isValid) {
+    for (const auto& err : report.errors) {
+        std::cerr << "Error: " << err << std::endl;
+    }
+}
+```
+
+更多示例请参考 `test/UsageExampleTest.cpp`。
 

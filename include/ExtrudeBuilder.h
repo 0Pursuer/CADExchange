@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "FeatureBuilderBase.h"
+#include "TypeAdapters.h"
 #include <cmath>
 #include <stdexcept>
 
@@ -26,8 +27,18 @@ public:
     return *this;
   }
 
-  ExtrudeBuilder &SetDirection(const CVector3D &dir) {
-    CVector3D normalized = dir;
+  ExtrudeBuilder &SetProfileByExternalID(const std::string &externalID) {
+    auto sketch = m_model.GetFeatureByExternalIDAs<CSketch>(externalID);
+    if (!sketch) {
+      throw std::runtime_error("Sketch profile not found by external ID: " +
+                               externalID);
+    }
+    m_feature->sketchProfile = sketch;
+    return *this;
+  }
+
+  template <typename VectorT> ExtrudeBuilder &SetDirection(const VectorT &dir) {
+    CVector3D normalized = VectorAdapter<VectorT>::Convert(dir);
     normalized.Normalize();
     m_feature->direction = normalized;
     return *this;

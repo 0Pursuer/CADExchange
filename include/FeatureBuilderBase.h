@@ -59,6 +59,14 @@ public:
   }
 
   /**
+   * @brief 设置外部系统 ID。
+   */
+  FeatureBuilderBase &SetExternalID(const std::string &externalID) {
+    m_feature->externalID = externalID;
+    return *this;
+  }
+
+  /**
    * @brief 将构建完成的特征写入模型并返回其标识符。
    */
   std::string Build() {

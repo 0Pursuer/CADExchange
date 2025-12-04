@@ -23,6 +23,7 @@ enum class BooleanOp { NEW_BODY, CUT, MERGE };
 struct CFeatureBase {
   std::string featureID;             ///< 全局唯一标识符 (UUID)
   std::string featureName;           ///< 用户可见名称
+  std::string externalID;            ///< 外部系统 ID (可选)
   bool isSuppressed = false;         ///< 是否被抑制，不参与求解
   virtual ~CFeatureBase() = default; ///< 虚析构函数，避免对象截断
 };
@@ -191,10 +192,10 @@ struct ExtrudeEndCondition {
   } type = Type::BLIND;
   double depth = 0.0;
   double offset = 0.0;
-  bool hasOffset = false;                       ///< 是否启用偏移
-  std::shared_ptr<CRefSubTopo> referenceEntity; ///< 参考实体
-  bool isFlip = false;                          ///< 是否反转方向
-  bool isFlipMaterialSide = false;              ///< 是否反转材料侧
+  bool hasOffset = false;                          ///< 是否启用偏移
+  std::shared_ptr<CRefEntityBase> referenceEntity; ///< 参考实体
+  bool isFlip = false;                             ///< 是否反转方向
+  bool isFlipMaterialSide = false;                 ///< 是否反转材料侧
 };
 
 /**
