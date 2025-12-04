@@ -1,10 +1,12 @@
 ﻿#pragma once
 
+#include "FeatureFormatter.h"
 #include "UnifiedModel.h"
 #include <atomic>
 #include <memory>
 #include <string>
 #include <type_traits>
+
 
 namespace CADExchange {
 namespace Builder {
@@ -73,6 +75,13 @@ public:
     m_model.AddFeature(m_feature);
     return m_feature->featureID;
   }
+
+  /**
+   * @brief 将当前特征的所有属性展示为 JSON 格式的字符串。
+   *
+   * @return std::string 包含特征信息的 JSON 字符串。
+   */
+  std::string Show() const { return FeatureFormatter::ToJson(m_feature); }
 
 protected:
   std::shared_ptr<T> m_feature;

@@ -5,7 +5,6 @@
 #include <cassert>
 #include <iostream>
 
-
 // User defined types
 struct MyPoint {
   float x, y, z;
@@ -99,9 +98,25 @@ void TestValidation() {
   std::cout << "TestValidation Passed" << std::endl;
 }
 
+void TestShow() {
+  CADExchange::UnifiedModel model;
+  CADExchange::Builder::SketchBuilder builder(model, "SketchShow");
+  builder.SetPlane(MyPoint{0, 0, 0}, MyVector{1, 0, 0}, MyVector{0, 0, 1});
+  builder.AddCircle(MyPoint{5, 5, 0}, 10.0);
+
+  std::string json = builder.Show();
+  std::cout << "Show() Output:\n" << json << std::endl;
+
+  assert(json.find("SketchShow") != std::string::npos);
+  assert(json.find("Radius") != std::string::npos);
+
+  std::cout << "TestShow Passed" << std::endl;
+}
+
 int main() {
   TestExternalID();
   TestTypeAdapters();
   TestValidation();
+  TestShow();
   return 0;
 }
