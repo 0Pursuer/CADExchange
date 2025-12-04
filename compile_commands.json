@@ -1,0 +1,20 @@
+[
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\src\\SerializationRegistry.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\src\\SerializationRegistry.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\src\\SerializationRegistry.cpp",
+  "output": "CMakeFiles\\cadexchange.dir\\src\\SerializationRegistry.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\ReadPartTest.dir\\test\\SolidWorks\\ReadPartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\ReadPartTest.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\ReadPartTest.cpp",
+  "output": "CMakeFiles\\ReadPartTest.dir\\test\\SolidWorks\\ReadPartTest.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\WritePartTest.dir\\test\\SolidWorks\\WritePartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\WritePartTest.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\WritePartTest.cpp",
+  "output": "CMakeFiles\\WritePartTest.dir\\test\\SolidWorks\\WritePartTest.cpp.obj"
+}
+]
