@@ -134,7 +134,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
             << std::endl;
   Builder::ExtrudeBuilder cutBuilder(model, "Cut-Extrude1");
   cutBuilder.SetProfile(sketch2ID);
-  cutBuilder.SetDirection({0, 0, 1});
+  cutBuilder.SetDirection(CVector3D{0, 0, 1});
   cutBuilder.SetOperation(BooleanOp::CUT);
 
   ExtrudeEndCondition cutCond;
@@ -160,8 +160,9 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
 
   Builder::SketchBuilder sketchBuilder3(model, "Sketch3");
   sketchBuilder3.SetReferenceFace(cutFaceRef);
-  auto sketch3Line = sketchBuilder3.AddLine({10, 25, 0}, {90, 25, 0});
-  auto sketch3Circle = sketchBuilder3.AddCircle({50, 25, 0}, 8.0);
+  auto sketch3Line =
+      sketchBuilder3.AddLine(CPoint3D{10, 25, 0}, CPoint3D{90, 25, 0});
+  auto sketch3Circle = sketchBuilder3.AddCircle(CPoint3D{50, 25, 0}, 8.0);
   sketchBuilder3.AddDistanceDimension(sketch3Line, sketch3Circle, 30.0);
   std::string sketch3ID = sketchBuilder3.Build();
   std::cout << "[SwRead Simulation] Sketch3 built. ID: " << sketch3ID
@@ -222,7 +223,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   Builder::ExtrudeBuilder vertexCut(model, "VertexCut");
   vertexCut.SetProfile(sketch3ID);
   vertexCut.SetOperation(BooleanOp::CUT);
-  vertexCut.SetDirection({0, 0, -1});
+  vertexCut.SetDirection(CVector3D{0, 0, -1});
   vertexCut.SetEndCondition1(vertexEnd);
   std::string vertexCutID = vertexCut.Build();
   std::cout << "[SwRead Simulation] VertexCut built. ID: " << vertexCutID
