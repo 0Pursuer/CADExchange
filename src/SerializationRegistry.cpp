@@ -1,4 +1,5 @@
 ﻿#include "../include/UnifiedSerialization.h"
+#include "../thirdParty/cereal/archives/json.hpp"
 #include "../thirdParty/cereal/types/polymorphic.hpp"
 
 using namespace CADExchange;

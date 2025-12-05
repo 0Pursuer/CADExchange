@@ -69,6 +69,9 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::cout << "[SwRead Simulation] Sketch built and added to model. ID: "
             << sketchID << std::endl;
 
+  std::cout << "[SwRead Simulation] show sketch JSON: " << sketchBuilder.Show()
+            << std::endl;
+
   // =========================================================
   // 2. 模拟读取拉伸 "Boss-Extrude1"
   // 对应 ExtrudeInfo::AnalyzeExtrude -> ExtractDirAndEndInfo
