@@ -1,27 +1,14 @@
 ﻿#pragma once
 
-#include "FeatureFormatter.h"
-#include "UnifiedModel.h"
+#include "../core/UnifiedModel.h"
+#include "StringHelper.h"
 #include <atomic>
 #include <memory>
 #include <string>
 #include <type_traits>
 
-
 namespace CADExchange {
 namespace Builder {
-
-/**
- * @brief 全局 ID 生成器，确保不同类型的 Builder 生成的 ID 也是全局唯一的。
- */
-class IDGenerator {
-public:
-  static std::string Generate() {
-    static std::atomic<int> counter{0};
-    return "FB-" +
-           std::to_string(counter.fetch_add(1, std::memory_order_relaxed) + 1);
-  }
-};
 
 /**
  * @brief Builder 体系的基类模板，提供生命周期管理和唯一 ID 分配。
@@ -44,7 +31,7 @@ public:
       : m_model(model) {
     m_feature = std::make_shared<T>();
     m_feature->featureName = name;
-    m_feature->featureID = IDGenerator::Generate();
+    m_feature->featureID = StringHelper::GenerateUUID();
   }
 
   /**
@@ -75,13 +62,6 @@ public:
     m_model.AddFeature(m_feature);
     return m_feature->featureID;
   }
-
-  /**
-   * @brief 将当前特征的所有属性展示为 JSON 格式的字符串。
-   *
-   * @return std::string 包含特征信息的 JSON 字符串。
-   */
-  std::string Show() const { return FeatureFormatter::ToJson(m_feature); }
 
 protected:
   std::shared_ptr<T> m_feature;

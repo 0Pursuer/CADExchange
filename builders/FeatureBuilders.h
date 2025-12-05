@@ -4,7 +4,6 @@
 #include "FeatureBuilderBase.h"
 #include "RevolveBuilder.h"
 #include "SketchBuilder.h"
-#include "UnifiedModel.h"
 
 
 /**

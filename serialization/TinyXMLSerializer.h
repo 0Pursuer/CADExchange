@@ -1,8 +1,8 @@
 ﻿#pragma once
 
 #include "../thirdParty/tinyxml2/tinyxml2.h"
-#include "UnifiedFeatures.h"
-#include "UnifiedModel.h"
+#include "../core/UnifiedFeatures.h"
+#include "../core/UnifiedModel.h"
 #include <filesystem>
 #include <iostream>
 namespace CADExchange {

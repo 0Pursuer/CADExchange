@@ -1,8 +1,9 @@
 ﻿#pragma once
-
+#include "../core/TypeAdapters.h"
+#include "EndConditionBuilder.h"
 #include "FeatureBuilderBase.h"
-#include "TypeAdapters.h"
-#include <cmath>
+#include "ReferenceBuilder.h"
+
 #include <stdexcept>
 
 namespace CADExchange {
@@ -55,51 +56,6 @@ public:
   }
   ExtrudeBuilder &SetEndCondition2(const ExtrudeEndCondition &cond) {
     m_feature->endCondition2 = cond;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetDepth(double depth) {
-    if (depth < 0) {
-      throw std::runtime_error("Depth must be non-negative.");
-    }
-    m_feature->endCondition1.type = ExtrudeEndCondition::Type::BLIND;
-    m_feature->endCondition1.depth = depth;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetThroughAll() {
-    m_feature->endCondition1.type = ExtrudeEndCondition::Type::THROUGH_ALL;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetUpToSurface(const CRefFace &faceInfo,
-                                 double offset = 0.0) {
-    auto targetFace = std::make_shared<CRefFace>(faceInfo);
-    m_feature->endCondition1.type = ExtrudeEndCondition::Type::UP_TO_FACE;
-    m_feature->endCondition1.referenceEntity = targetFace;
-    m_feature->endCondition1.hasOffset = std::abs(offset) > 1e-6;
-    m_feature->endCondition1.offset = offset;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetUpToNext() {
-    m_feature->endCondition1.type = ExtrudeEndCondition::Type::UP_TO_NEXT;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetDirection2Depth(double depth) {
-    if (depth < 0) {
-      throw std::runtime_error("Direction2 depth must be non-negative.");
-    }
-    m_feature->endCondition2.emplace();
-    m_feature->endCondition2->type = ExtrudeEndCondition::Type::BLIND;
-    m_feature->endCondition2->depth = depth;
-    return *this;
-  }
-
-  ExtrudeBuilder &SetDirection2ThroughAll() {
-    m_feature->endCondition2.emplace();
-    m_feature->endCondition2->type = ExtrudeEndCondition::Type::THROUGH_ALL;
     return *this;
   }
 

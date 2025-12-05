@@ -23,6 +23,18 @@ template <> struct PointAdapter<CPoint3D> {
 };
 
 /**
+ * @brief 对于数组类型到点类型的特化
+ */
+template <typename T, std::size_t N> struct PointAdapter<T[N],
+                                    typename std::enable_if<N == 3>::type> {
+  static CPoint3D Convert(const T (&arr)[N]) {
+    return {static_cast<double>(arr[0]), static_cast<double>(arr[1]),
+            static_cast<double>(arr[2])};
+  }
+};
+
+
+/**
  * @brief VectorAdapter traits for converting user-defined vector types to
  * CVector3D. Users should specialize this template for their own vector types.
  */

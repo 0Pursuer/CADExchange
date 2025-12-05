@@ -1,9 +1,21 @@
 ﻿#pragma once
+#include <atomic>
+#include <memory>
 #include <string>
 #include <windows.h> // 使用 Windows API 进行转换，稳定且支持中文
 
+
+namespace CADExchange {
+
 class StringHelper {
 public:
+  // UUID Generation
+  static std::string GenerateUUID() {
+    static std::atomic<int> counter{0};
+    return "FB-" +
+           std::to_string(counter.fetch_add(1, std::memory_order_relaxed) + 1);
+  }
+
   // 1. 宽字符串 (CAD) -> UTF-8 (内部结构/XML)
   static std::string ToUtf8(const std::wstring &wstr) {
     if (wstr.empty())
@@ -42,9 +54,9 @@ public:
         MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
 
     std::wstring wstrTo(size_needed, 0);
-    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0],
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], 
                         size_needed);
-
     return wstrTo;
   }
 };
+} // namespace CADExchange

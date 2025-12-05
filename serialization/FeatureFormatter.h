@@ -1,11 +1,12 @@
 ﻿#pragma once
 
+#include "../core/UnifiedFeatures.h"
+#include "../serialization/UnifiedSerialization.h"
 #include "../thirdParty/cereal/archives/json.hpp"
 #include "CADSerializer.h"
-#include "UnifiedFeatures.h"
-#include "UnifiedSerialization.h"
 #include <sstream>
 #include <string>
+
 
 namespace CADExchange {
 namespace Builder {

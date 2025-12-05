@@ -1,20 +1,56 @@
 [
 {
   "directory": "E:/Vscode/Project/CADExchange/build-clangd",
-  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\src\\SerializationRegistry.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\src\\SerializationRegistry.cpp",
-  "file": "E:\\Vscode\\Project\\CADExchange\\src\\SerializationRegistry.cpp",
-  "output": "CMakeFiles\\cadexchange.dir\\src\\SerializationRegistry.cpp.obj"
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\serialization\\SerializationRegistry.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\serialization\\SerializationRegistry.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\serialization\\SerializationRegistry.cpp",
+  "output": "CMakeFiles\\cadexchange.dir\\serialization\\SerializationRegistry.cpp.obj"
 },
 {
   "directory": "E:/Vscode/Project/CADExchange/build-clangd",
-  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\ReadPartTest.dir\\test\\SolidWorks\\ReadPartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\ReadPartTest.cpp",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\serialization\\TinyXMLSerializer.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\serialization\\TinyXMLSerializer.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\serialization\\TinyXMLSerializer.cpp",
+  "output": "CMakeFiles\\cadexchange.dir\\serialization\\TinyXMLSerializer.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\builders\\ReferenceFactory.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\builders\\ReferenceFactory.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\builders\\ReferenceFactory.cpp",
+  "output": "CMakeFiles\\cadexchange.dir\\builders\\ReferenceFactory.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\cadexchange.dir\\thirdParty\\tinyxml2\\tinyxml2.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\thirdParty\\tinyxml2\\tinyxml2.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\thirdParty\\tinyxml2\\tinyxml2.cpp",
+  "output": "CMakeFiles\\cadexchange.dir\\thirdParty\\tinyxml2\\tinyxml2.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -DCADEXCHANGE_EXPORTS -DCADExchangeDLL_EXPORTS -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\CADExchangeDLL.dir\\api\\CADExchange.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\api\\CADExchange.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\api\\CADExchange.cpp",
+  "output": "CMakeFiles\\CADExchangeDLL.dir\\api\\CADExchange.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\ReadPartTest.dir\\test\\SolidWorks\\ReadPartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\ReadPartTest.cpp",
   "file": "E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\ReadPartTest.cpp",
   "output": "CMakeFiles\\ReadPartTest.dir\\test\\SolidWorks\\ReadPartTest.cpp.obj"
 },
 {
   "directory": "E:/Vscode/Project/CADExchange/build-clangd",
-  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/include -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\WritePartTest.dir\\test\\SolidWorks\\WritePartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\WritePartTest.cpp",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\WritePartTest.dir\\test\\SolidWorks\\WritePartTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\WritePartTest.cpp",
   "file": "E:\\Vscode\\Project\\CADExchange\\test\\SolidWorks\\WritePartTest.cpp",
   "output": "CMakeFiles\\WritePartTest.dir\\test\\SolidWorks\\WritePartTest.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\UsageExampleTest.dir\\test\\UsageExampleTest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\UsageExampleTest.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\test\\UsageExampleTest.cpp",
+  "output": "CMakeFiles\\UsageExampleTest.dir\\test\\UsageExampleTest.cpp.obj"
+},
+{
+  "directory": "E:/Vscode/Project/CADExchange/build-clangd",
+  "command": "D:\\MinGW\\bin\\g++.exe -IE:/Vscode/Project/CADExchange/core -IE:/Vscode/Project/CADExchange/builders -IE:/Vscode/Project/CADExchange/serialization -IE:/Vscode/Project/CADExchange/thirdParty -IE:/Vscode/Project/CADExchange/api -O3 -DNDEBUG -std=gnu++17 -o CMakeFiles\\APITest.dir\\test\\APITest.cpp.obj -c E:\\Vscode\\Project\\CADExchange\\test\\APITest.cpp",
+  "file": "E:\\Vscode\\Project\\CADExchange\\test\\APITest.cpp",
+  "output": "CMakeFiles\\APITest.dir\\test\\APITest.cpp.obj"
 }
 ]

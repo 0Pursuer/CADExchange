@@ -5,10 +5,9 @@
 #include <fstream>
 #include <string>
 
+#include "../core/UnifiedModel.h"
+#include "../serialization/UnifiedSerialization.h"
 #include "TinyXMLSerializer.h"
-#include "UnifiedModel.h"
-#include "UnifiedSerialization.h"
-
 
 namespace CADExchange {
 void RegisterSerializationTypes();

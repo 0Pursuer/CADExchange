@@ -105,6 +105,39 @@ std::optional<BooleanOp> BooleanOpFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string SegTypeToString(CSketchSeg::SegType type) {
+  switch (type) {
+  case CSketchSeg::SegType::LINE:
+    return "Line";
+  case CSketchSeg::SegType::CIRCLE:
+    return "Circle";
+  case CSketchSeg::SegType::ARC:
+    return "Arc";
+  case CSketchSeg::SegType::SPLINE:
+    return "Spline";
+  case CSketchSeg::SegType::POINT:
+    return "Point";
+  }
+  return "Unknown";
+}
+
+CSketchSeg::SegType SegTypeFromString(const char *text) {
+  if (!text)
+    return CSketchSeg::SegType::LINE; // Default
+  std::string value = ToLower(text);
+  if (value == "line")
+    return CSketchSeg::SegType::LINE;
+  if (value == "circle")
+    return CSketchSeg::SegType::CIRCLE;
+  if (value == "arc")
+    return CSketchSeg::SegType::ARC;
+  if (value == "spline")
+    return CSketchSeg::SegType::SPLINE;
+  if (value == "point")
+    return CSketchSeg::SegType::POINT;
+  return CSketchSeg::SegType::LINE; // Default
+}
+
 std::string ExtrudeEndConditionTypeToString(ExtrudeEndCondition::Type type) {
   switch (type) {
   case ExtrudeEndCondition::Type::BLIND:
@@ -489,27 +522,25 @@ void TinyXMLSerializer::SaveSketchSeg(XMLDocument &doc, XMLElement *parent,
   parent->InsertEndChild(segElem);
 
   segElem->SetAttribute("LocalID", seg->localID.c_str());
+  segElem->SetAttribute("Type", SegTypeToString(seg->type).c_str());
+
   if (seg->type != CSketchSeg::SegType::POINT) {
     segElem->SetAttribute("Construction", seg->isConstruction);
   }
 
   if (auto line = std::dynamic_pointer_cast<CSketchLine>(seg)) {
-    segElem->SetAttribute("Type", "Line");
     SavePoint3D(segElem, "Start", line->startPos);
     SavePoint3D(segElem, "End", line->endPos);
   } else if (auto circle = std::dynamic_pointer_cast<CSketchCircle>(seg)) {
-    segElem->SetAttribute("Type", "Circle");
     SavePoint3D(segElem, "Center", circle->center);
     segElem->SetAttribute("Radius", circle->radius);
   } else if (auto arc = std::dynamic_pointer_cast<CSketchArc>(seg)) {
-    segElem->SetAttribute("Type", "Arc");
     SavePoint3D(segElem, "Center", arc->center);
     segElem->SetAttribute("Radius", arc->radius);
     segElem->SetAttribute("StartAngle", arc->startAngle);
     segElem->SetAttribute("EndAngle", arc->endAngle);
     segElem->SetAttribute("Clockwise", arc->isClockwise);
   } else if (auto pt = std::dynamic_pointer_cast<CSketchPoint>(seg)) {
-    segElem->SetAttribute("Type", "Point");
     SavePoint3D(segElem, "Position", pt->position);
   }
 }

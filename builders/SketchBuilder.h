@@ -1,7 +1,8 @@
 ﻿#pragma once
 
+#include "../core/TypeAdapters.h"
 #include "FeatureBuilderBase.h"
-#include "TypeAdapters.h"
+#include "ReferenceBuilder.h"
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
@@ -34,7 +35,7 @@ public:
   }
 
   /**
-   * @brief 使用标准平面 ID 设置草图参考面。
+   * @brief 使用标准平面 ID 设置草图参考面。仅限于 XY、YZ、ZX 三个标准平面。
    */
   SketchBuilder &SetReferencePlane(const std::string &planeID) {
     if (planeID == StandardID::PLANE_YZ) {
@@ -57,9 +58,8 @@ public:
   /**
    * @brief 使用实体面作为草图参考面。
    */
-  SketchBuilder &SetReferenceFace(const CRefFace &faceInfo) {
-    auto face = std::make_shared<CRefFace>(faceInfo);
-    m_feature->referencePlane = face;
+  SketchBuilder &SetReferenceFace(const std::shared_ptr<CRefEntityBase> &ref) {
+    m_feature->referencePlane = ref;
     return *this;
   }
 

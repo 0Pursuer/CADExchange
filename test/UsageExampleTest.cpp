@@ -1,13 +1,14 @@
-﻿#include "../include/CADSerializer.h"
-#include "../include/ExtrudeBuilder.h"
-#include "../include/RevolveBuilder.h"
-#include "../include/SketchBuilder.h"
-#include "../include/TypeAdapters.h"
-#include "../include/UnifiedModel.h"
-#include "../include/UnifiedTypes.h"
+﻿#include "../builders/ExtrudeBuilder.h"
+#include "../builders/RevolveBuilder.h"
+#include "../builders/SketchBuilder.h"
+#include "../core/TypeAdapters.h"
+#include "../core/UnifiedModel.h"
+#include "../core/UnifiedTypes.h"
+#include "../serialization/CADSerializer.h"
 #include <cassert>
 #include <iostream>
 #include <vector>
+
 
 using namespace CADExchange;
 

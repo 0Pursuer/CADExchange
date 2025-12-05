@@ -8,8 +8,8 @@
 #include "../thirdParty/cereal/types/string.hpp"
 #include "../thirdParty/cereal/types/vector.hpp"
 
-#include "UnifiedFeatures.h"
-#include "UnifiedModel.h"
+#include "../core/UnifiedFeatures.h"
+#include "../core/UnifiedModel.h"
 
 /**
  * @file UnifiedSerialization.h

@@ -1,11 +1,16 @@
-﻿#include "CADSerializer.h"
-#include "ExtrudeBuilder.h"
-#include "RevolveBuilder.h"
-#include "SketchBuilder.h"
-#include "UnifiedModel.h"
+﻿// clangd-format off
+#include "../../builders/EndConditionBuilder.h"
+#include "../../builders/ExtrudeBuilder.h"
+#include "../../builders/ReferenceBuilder.h"
+#include "../../builders/RevolveBuilder.h"
+#include "../../builders/SketchBuilder.h"
+#include "../../core/UnifiedModel.h"
+
+#include "../../serialization/CADSerializer.h"
 #include "UnifiedTypes.h"
 #include <iostream>
 #include <vector>
+// clangd-format on
 
 using namespace CADExchange;
 
@@ -69,8 +74,9 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::cout << "[SwRead Simulation] Sketch built and added to model. ID: "
             << sketchID << std::endl;
 
-  std::cout << "[SwRead Simulation] show sketch JSON: " << sketchBuilder.Show()
-            << std::endl;
+  // std::cout << "[SwRead Simulation] show sketch JSON: " <<
+  // sketchBuilder.Show()
+  //           << std::endl;
 
   // =========================================================
   // 2. 模拟读取拉伸 "Boss-Extrude1"
@@ -93,15 +99,9 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   extrudeBuilder.SetDirection(readDirection);
   extrudeBuilder.SetOperation(BooleanOp::BOSS); // IsBossFeature = true
 
-  ExtrudeEndCondition endCond1;
-  endCond1.type = ExtrudeEndCondition::Type::BLIND;
-  endCond1.depth = readDepth;
-  extrudeBuilder.SetEndCondition1(endCond1);
-
-  ExtrudeEndCondition endCond2;
-  endCond2.type = ExtrudeEndCondition::Type::BLIND;
-  endCond2.depth = readDepth / 2.0;
-  extrudeBuilder.SetEndCondition2(endCond2);
+  extrudeBuilder.SetEndCondition1(Builder::EndCondition::Blind(readDepth));
+  extrudeBuilder.SetEndCondition2(
+      Builder::EndCondition::Blind(readDepth / 2.0));
 
   // 2.3 提取薄壁特征 (IsThinFeature)
   // 假设 IsThin = false
@@ -115,13 +115,11 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   // =========================================================
   std::cout << "[SwRead Simulation] Building Sketch2 on extruded face..."
             << std::endl;
-  CRefFace faceRef;
-  faceRef.parentFeatureID = extrudeID;
-  faceRef.topologyIndex = 0;
-  faceRef.normal = {0, 0, 1};
-  faceRef.centroid = {50, 25, 20};
-  faceRef.uDir = {1, 0, 0};
-  faceRef.vDir = {0, -1, 0};
+  auto faceRef = Builder::Ref::Face(extrudeID, 0)
+                     .Normal(0, 0, 1)
+                     .Centroid(50, 25, 20)
+                     .UDir(1, 0, 0)
+                     .VDir(0, -1, 0);
 
   Builder::SketchBuilder sketchBuilder2(model, "Sketch2");
   sketchBuilder2.SetReferenceFace(faceRef);
@@ -139,10 +137,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   cutBuilder.SetProfile(sketch2ID);
   cutBuilder.SetDirection(CVector3D{0, 0, 1});
   cutBuilder.SetOperation(BooleanOp::CUT);
-
-  ExtrudeEndCondition cutCond;
-  cutCond.type = ExtrudeEndCondition::Type::THROUGH_ALL;
-  cutBuilder.SetEndCondition1(cutCond);
+  cutBuilder.SetEndCondition1(Builder::EndCondition::ThroughAll());
 
   std::string cutID = cutBuilder.Build();
   std::cout << "[SwRead Simulation] Cut extrude built. ID: " << cutID
@@ -153,13 +148,11 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   // =========================================================
   std::cout << "[SwRead Simulation] Building Sketch3 on cut face..."
             << std::endl;
-  CRefFace cutFaceRef;
-  cutFaceRef.parentFeatureID = cutID;
-  cutFaceRef.topologyIndex = 1;
-  cutFaceRef.normal = {0, 0, -1};
-  cutFaceRef.centroid = {50, 25, 0};
-  cutFaceRef.uDir = {1, 0, 0};
-  cutFaceRef.vDir = {0, 1, 0};
+  auto cutFaceRef = Builder::Ref::Face(cutID, 1)
+                        .Normal(0, 0, -1)
+                        .Centroid(50, 25, 0)
+                        .UDir(1, 0, 0)
+                        .VDir(0, 1, 0);
 
   Builder::SketchBuilder sketchBuilder3(model, "Sketch3");
   sketchBuilder3.SetReferenceFace(cutFaceRef);
@@ -214,20 +207,13 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   // 7. 顶点驱动的拉伸 (用于验证 CRefVertex 引用)
   // =========================================================
   std::cout << "[SwRead Simulation] Adding VertexCut extrude..." << std::endl;
-  auto vertexRef = std::make_shared<CRefVertex>();
-  vertexRef->parentFeatureID = revolveFeatureRefID;
-  vertexRef->topologyIndex = 0;
-  vertexRef->pos = {50, 25, 5};
-
-  ExtrudeEndCondition vertexEnd;
-  vertexEnd.type = ExtrudeEndCondition::Type::UP_TO_VERTEX;
-  vertexEnd.referenceEntity = vertexRef;
+  auto vertexRef = Builder::Ref::Vertex(revolveFeatureRefID, 0).Pos(50, 25, 5);
 
   Builder::ExtrudeBuilder vertexCut(model, "VertexCut");
   vertexCut.SetProfile(sketch3ID);
   vertexCut.SetOperation(BooleanOp::CUT);
   vertexCut.SetDirection(CVector3D{0, 0, -1});
-  vertexCut.SetEndCondition1(vertexEnd);
+  vertexCut.SetEndCondition1(Builder::EndCondition::UpToVertex(vertexRef));
   std::string vertexCutID = vertexCut.Build();
   std::cout << "[SwRead Simulation] VertexCut built. ID: " << vertexCutID
             << std::endl;

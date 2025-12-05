@@ -23,6 +23,16 @@ public:
     return *this;
   }
 
+  RevolveBuilder &SetProfileByExternalID(const std::string &externalID) {
+    auto sketch = m_model.GetFeatureByExternalIDAs<CSketch>(externalID);
+    if (!sketch) {
+      throw std::runtime_error("Sketch profile not found by external ID: " +
+                               externalID);
+    }
+    m_feature->profileSketchID = sketch->featureID;
+    return *this;
+  }
+
   RevolveBuilder &SetAxisFromSketchLine(const std::string &sketchLineID) {
     m_feature->axis.kind = CRevolveAxis::Kind::SketchLine;
     m_feature->axis.referenceLocalID = sketchLineID;
