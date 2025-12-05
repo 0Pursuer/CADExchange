@@ -91,7 +91,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   CVector3D readDirection{0, 0, 1};
 
   extrudeBuilder.SetDirection(readDirection);
-  extrudeBuilder.SetOperation(BooleanOp::NEW_BODY); // IsBossFeature = true
+  extrudeBuilder.SetOperation(BooleanOp::BOSS); // IsBossFeature = true
 
   ExtrudeEndCondition endCond1;
   endCond1.type = ExtrudeEndCondition::Type::BLIND;

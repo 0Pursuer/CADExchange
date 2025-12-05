@@ -82,8 +82,8 @@ std::optional<UnitType> UnitTypeFromString(const char *text) {
 
 std::string BooleanOpToString(BooleanOp op) {
   switch (op) {
-  case BooleanOp::NEW_BODY:
-    return "NewBody";
+  case BooleanOp::BOSS:
+    return "BOSS";
   case BooleanOp::CUT:
     return "Cut";
   case BooleanOp::MERGE:
@@ -96,8 +96,8 @@ std::optional<BooleanOp> BooleanOpFromString(const char *text) {
   if (!text)
     return std::nullopt;
   std::string value = ToLower(text);
-  if (value == "newbody")
-    return BooleanOp::NEW_BODY;
+  if (value == "boss")
+    return BooleanOp::BOSS;
   if (value == "cut")
     return BooleanOp::CUT;
   if (value == "merge")

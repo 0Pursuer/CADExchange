@@ -185,7 +185,7 @@ int main() {
     extrude->sketchProfile = sketch;
     extrude->endCondition1.depth = 50.0;
     extrude->endCondition1.type = ExtrudeEndCondition::Type::BLIND;
-    extrude->operation = BooleanOp::NEW_BODY;
+    extrude->operation = BooleanOp::BOSS;
 
     model.AddFeature(extrude);
   }

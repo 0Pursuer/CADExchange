@@ -15,7 +15,7 @@ namespace CADExchange {
 /**
  * @brief 描述特征之间的布尔运算类型。
  */
-enum class BooleanOp { NEW_BODY, CUT, MERGE };
+enum class BooleanOp { BOSS, CUT, MERGE };
 
 /**
  * @brief 所有特征的基类。
@@ -206,7 +206,7 @@ struct CExtrude : public CFeatureBase {
   CVector3D direction = {0, 0, 1};
   ExtrudeEndCondition endCondition1;
   std::optional<ExtrudeEndCondition> endCondition2;
-  BooleanOp operation = BooleanOp::NEW_BODY; ///< 默认新建实体
+  BooleanOp operation = BooleanOp::BOSS; ///< 默认新建实体
   std::optional<DraftOption> draft;
   std::optional<ThinWallOption> thinWall;
 };

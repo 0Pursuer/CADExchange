@@ -31,10 +31,15 @@ add_executable(WritePartTest test/SolidWorks/WritePartTest.cpp)
 target_include_directories(WritePartTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty)
 target_link_libraries(WritePartTest PRIVATE cadexchange)
 
+add_executable(UsageExampleTest test/UsageExampleTest.cpp)
+target_include_directories(UsageExampleTest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty)
+target_link_libraries(UsageExampleTest PRIVATE cadexchange)
+
 # Enable CTest integration
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
     enable_testing()
     add_test(NAME ReadPartTest COMMAND ReadPartTest)
     add_test(NAME WritePartTest COMMAND WritePartTest)
+    add_test(NAME UsageExampleTest COMMAND UsageExampleTest)
 endif()
