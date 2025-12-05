@@ -1,4 +1,5 @@
-﻿#include "../builders/ExtrudeBuilder.h"
+﻿#include "../builders/EndConditionBuilder.h"
+#include "../builders/ExtrudeBuilder.h"
 #include "../builders/RevolveBuilder.h"
 #include "../builders/SketchBuilder.h"
 #include "../core/TypeAdapters.h"
@@ -8,7 +9,6 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
-
 
 using namespace CADExchange;
 
@@ -115,12 +115,8 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::cout << "[SwRead Simulation] Building Sketch2 on extruded face..."
             << std::endl;
 
-  // 引用面目前仍需使用 Internal ID (parentFeatureID)
-  CRefFace faceRef;
-  faceRef.parentFeatureID = extrudeID;
-  faceRef.topologyIndex = 0;
-  faceRef.normal = {0, 0, 1};
-  faceRef.centroid = {50, 25, 20};
+  auto faceRef =
+      Builder::Ref::Face(extrudeID, 0).Normal(0, 0, 1).Centroid(50, 25, 20);
 
   Builder::SketchBuilder sketchBuilder2(model, "Sketch2");
   sketchBuilder2.SetExternalID("SW-Sketch2");
@@ -140,7 +136,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   cutBuilder.SetProfileByExternalID("SW-Sketch2");
   cutBuilder.SetDirection(MyVector{0, 0, 1});
   cutBuilder.SetOperation(BooleanOp::CUT);
-  cutBuilder.SetThroughAll();
+  cutBuilder.SetEndCondition1(Builder::EndCondition::ThroughAll());
 
   std::string cutID = cutBuilder.Build();
   std::cout
@@ -152,11 +148,8 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   // =========================================================
   std::cout << "[SwRead Simulation] Building Sketch3 on cut face..."
             << std::endl;
-  CRefFace cutFaceRef;
-  cutFaceRef.parentFeatureID = cutID;
-  cutFaceRef.topologyIndex = 1;
-  cutFaceRef.normal = {0, 0, -1};
-  cutFaceRef.centroid = {50, 25, 0};
+  auto cutFaceRef =
+      Builder::Ref::Face(cutID, 1).Normal(0, 0, -1).Centroid(50, 25, 0);
 
   Builder::SketchBuilder sketchBuilder3(model, "Sketch3");
   sketchBuilder3.SetExternalID("SW-Sketch3");
@@ -191,14 +184,33 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::string revolveSketchRefID = revolveSketchRef.Build();
   std::cout << "[SwRead Simulation] Revolve-SketchRef built." << std::endl;
 
+  std::cout << "[SwRead Simulation] Adding Revolve-EdgeRef..." << std::endl;
+  Builder::RevolveBuilder revolveEdgeRef(model, "Revolve-EdgeRef");
+  revolveEdgeRef.SetProfile(sketch3ID);
+  auto edgeRef = Builder::Ref::Edge(cutID, 2).MidPoint(50, 25, 2.5);
+  revolveEdgeRef.SetAxisRef(edgeRef);
+  revolveEdgeRef.SetAngle(180.0);
+  std::string revolveEdgeRefID = revolveEdgeRef.Build();
+  std::cout << "[SwRead Simulation] Revolve-EdgeRef built. ID: "
+            << revolveEdgeRefID << std::endl;
+
+  std::cout << "[SwRead Simulation] Adding Revolve-FeatureRef..." << std::endl;
+  Builder::RevolveBuilder revolveFeatureRef(model, "Revolve-FeatureRef");
+  revolveFeatureRef.SetProfile(sketch3ID);
+  auto featureRef =
+      std::make_shared<CRefFeature>(RefType::FEATURE_WHOLE_SKETCH);
+  featureRef->targetFeatureID = extrudeID;
+  revolveFeatureRef.SetAxisRef(featureRef);
+  revolveFeatureRef.SetAngle(90.0);
+  std::string revolveFeatureRefID = revolveFeatureRef.Build();
+  std::cout << "[SwRead Simulation] Revolve-FeatureRef built. ID: "
+            << revolveFeatureRefID << std::endl;
+
   // =========================================================
   // 7. 顶点驱动的拉伸
   // =========================================================
   std::cout << "[SwRead Simulation] Adding VertexCut extrude..." << std::endl;
-  auto vertexRef = std::make_shared<CRefVertex>();
-  vertexRef->parentFeatureID = revolveSketchRefID;
-  vertexRef->topologyIndex = 0;
-  vertexRef->pos = {50, 25, 5};
+  auto vertexRef = Builder::Ref::Vertex(revolveFeatureRefID, 0).Pos(50, 25, 5);
 
   ExtrudeEndCondition vertexEnd;
   vertexEnd.type = ExtrudeEndCondition::Type::UP_TO_VERTEX;
@@ -243,7 +255,7 @@ int main() {
   // 序列化保存 (Cereal)
   std::string outputPath = "SimulationPart_Advanced.xml";
   std::string error;
-  if (SaveModel(model, outputPath, &error)) {
+  if (SaveModel(model, outputPath, &error, SerializationFormat::TINYXML)) {
     std::cout << "Successfully serialized model (Cereal) to " << outputPath
               << std::endl;
   } else {

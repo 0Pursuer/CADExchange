@@ -181,10 +181,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::cout << "[SwRead Simulation] Adding Revolve-EdgeRef..." << std::endl;
   Builder::RevolveBuilder revolveEdgeRef(model, "Revolve-EdgeRef");
   revolveEdgeRef.SetProfile(sketch3ID);
-  auto edgeRef = std::make_shared<CRefEdge>();
-  edgeRef->parentFeatureID = cutID;
-  edgeRef->topologyIndex = 2;
-  edgeRef->midPoint = {50, 25, 2.5};
+  auto edgeRef = Builder::Ref::Edge(cutID, 2).MidPoint(50, 25, 2.5);
   revolveEdgeRef.SetAxisRef(edgeRef);
   revolveEdgeRef.SetAngle(180.0);
   std::string revolveEdgeRefID = revolveEdgeRef.Build();
