@@ -1,15 +1,15 @@
 ﻿#pragma once
 
-#include "../thirdParty/cereal/archives/xml.hpp"
-#include "../thirdParty/cereal/types/base_class.hpp"
-#include "../thirdParty/cereal/types/memory.hpp"
-#include "../thirdParty/cereal/types/optional.hpp"
-#include "../thirdParty/cereal/types/polymorphic.hpp"
-#include "../thirdParty/cereal/types/string.hpp"
-#include "../thirdParty/cereal/types/vector.hpp"
+#include "../../thirdParty/cereal/archives/xml.hpp"
+#include "../../thirdParty/cereal/types/base_class.hpp"
+#include "../../thirdParty/cereal/types/memory.hpp"
+#include "../../thirdParty/cereal/types/optional.hpp"
+#include "../../thirdParty/cereal/types/polymorphic.hpp"
+#include "../../thirdParty/cereal/types/string.hpp"
+#include "../../thirdParty/cereal/types/vector.hpp"
 
-#include "../core/UnifiedFeatures.h"
-#include "../core/UnifiedModel.h"
+#include "../../core/UnifiedFeatures.h"
+#include "../../core/UnifiedModel.h"
 
 /**
  * @file UnifiedSerialization.h
@@ -244,8 +244,7 @@ template <class Archive> void serialize(Archive &ar, CExtrude &ext) {
  * @brief 序列化旋转轴信息，包括参照与方向。
  */
 template <class Archive> void serialize(Archive &ar, CRevolveAxis &axis) {
-  ar(cereal::make_nvp("Kind", axis.kind),
-     cereal::make_nvp("ReferenceLocalID", axis.referenceLocalID),
+  ar(cereal::make_nvp("ReferenceLocalID", axis.referenceLocalID),
      cereal::make_nvp("ReferenceEntity", axis.referenceEntity),
      cereal::make_nvp("Origin", axis.origin),
      cereal::make_nvp("Direction", axis.direction));
@@ -284,6 +283,9 @@ template <class Archive> void save(Archive &ar, const UnifiedModel &model) {
   }
 }
 
+/**
+ * @brief 反序列化 UnifiedModel，重建单位、名称与特征集合。
+ */
 template <class Archive> void load(Archive &ar, UnifiedModel &model) {
   ar(cereal::make_nvp("UnitSystem", model.unit),
      cereal::make_nvp("ModelName", model.modelName));

@@ -1,8 +1,7 @@
 ﻿#pragma once
-#include "../core/TypeAdapters.h"
+#include "../../core/TypeAdapters.h"
 #include "EndConditionBuilder.h"
 #include "FeatureBuilderBase.h"
-#include "ReferenceBuilder.h"
 
 #include <stdexcept>
 
@@ -16,7 +15,6 @@ class ExtrudeBuilder : public FeatureBuilderBase<CExtrude> {
 public:
   ExtrudeBuilder(UnifiedModel &model, const std::string &name)
       : FeatureBuilderBase(model, name) {
-    m_feature->direction = {0, 0, 1};
   }
 
   ExtrudeBuilder &SetProfile(const std::string &sketchID) {

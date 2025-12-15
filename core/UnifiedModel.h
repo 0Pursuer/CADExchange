@@ -1,14 +1,17 @@
 ﻿#pragma once
-
+// clang-format off
 #include "UnifiedFeatures.h"
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
-
+// clang-format on
 namespace CADExchange {
 
+/**
+ * @brief 模型验证报告，包含错误和警告信息。
+ */
 struct ValidationReport {
   bool isValid = true;
   std::vector<std::string> errors;

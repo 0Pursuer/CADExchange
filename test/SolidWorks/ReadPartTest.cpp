@@ -1,12 +1,12 @@
 ﻿// clangd-format off
-#include "../../builders/EndConditionBuilder.h"
-#include "../../builders/ExtrudeBuilder.h"
-#include "../../builders/ReferenceBuilder.h"
-#include "../../builders/RevolveBuilder.h"
-#include "../../builders/SketchBuilder.h"
+#include "../../service/builders/EndConditionBuilder.h"
+#include "../../service/builders/ExtrudeBuilder.h"
+#include "../../service/builders/ReferenceBuilder.h"
+#include "../../service/builders/RevolveBuilder.h"
+#include "../../service/builders/SketchBuilder.h"
 #include "../../core/UnifiedModel.h"
 
-#include "../../serialization/CADSerializer.h"
+#include "../../service/serialization/CADSerializer.h"
 #include "UnifiedTypes.h"
 #include <iostream>
 #include <vector>

@@ -25,9 +25,22 @@ Cereal 用于高性能持久化）。
 
 ## 快速开始
 
+### 编译（推荐使用 MSVC）
+
 ```powershell
-cmake -S . -B build -G "Ninja"
-cmake --build build --config Release
+# 用 MSVC 配置
+cmake -S . -B build_msvc -G "Visual Studio 17 2022"
+
+# 编译 Release 版本
+cmake --build build_msvc --config Release
+```
+
+编译完成后在 `build_msvc/Release` 目录下找到可执行文件。
+
+### 编译（使用 Ninja/GCC）
+
+```powershell
+cmake -S . -B build_test -G Ninja ; cmake --build build_test --target PartReconstructionDemo
 ```
 
 以上命令会编译库与测试程序。编译完成后可在 `build/Release` 目录下找到：

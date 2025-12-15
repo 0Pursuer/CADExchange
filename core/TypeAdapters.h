@@ -1,8 +1,8 @@
 ﻿#pragma once
-
+// clang-format off
 #include "UnifiedTypes.h"
 #include <type_traits>
-
+// clang-format on
 namespace CADExchange {
 
 /**

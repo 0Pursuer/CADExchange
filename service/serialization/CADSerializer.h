@@ -1,12 +1,12 @@
 ﻿#pragma once
 
-#include "../thirdParty/cereal/archives/xml.hpp"
+#include "../../thirdParty/cereal/archives/xml.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
 
-#include "../core/UnifiedModel.h"
-#include "../serialization/UnifiedSerialization.h"
+#include "../../core/UnifiedModel.h"
+#include "UnifiedSerialization.h"
 #include "TinyXMLSerializer.h"
 
 namespace CADExchange {

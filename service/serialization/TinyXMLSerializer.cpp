@@ -271,7 +271,7 @@ void SaveFeatureReference(XMLElement *element,
 }
 
 CVector3D ComputePlaneYAxis(const CVector3D &normal, const CVector3D &xDir) {
-  CVector3D yDir = CVector3D::Cross(normal, xDir);
+  CVector3D yDir = Cross(normal, xDir);
   yDir.Normalize();
   return yDir;
 }
@@ -616,7 +616,6 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
 
   XMLElement *axisElem = doc.NewElement("Axis");
   element->InsertEndChild(axisElem);
-  axisElem->SetAttribute("Kind", static_cast<int>(revolve->axis.kind));
   axisElem->SetAttribute("RefLocalID", revolve->axis.referenceLocalID.c_str());
   SavePoint3D(axisElem, "Origin", revolve->axis.origin);
   SaveVector3D(axisElem, "Direction", revolve->axis.direction);
@@ -802,6 +801,20 @@ TinyXMLSerializer::LoadSketchSeg(XMLElement *element) {
     circle->center = LoadPoint3D(element, "Center");
     element->QueryDoubleAttribute("Radius", &circle->radius);
     seg = circle;
+  } else if(type == "Arc") {
+    auto arc = std::make_shared<CSketchArc>();
+    arc->center = LoadPoint3D(element, "Center");
+    element->QueryDoubleAttribute("Radius", &arc->radius);
+    element->QueryDoubleAttribute("StartAngle", &arc->startAngle);
+    element->QueryDoubleAttribute("EndAngle", &arc->endAngle);
+    bool clockwise = false;
+    element->QueryBoolAttribute("Clockwise", &clockwise);
+    arc->isClockwise = clockwise;
+    seg = arc;
+  } else if (type == "Point") {
+    auto pt = std::make_shared<CSketchPoint>();
+    pt->position = LoadPoint3D(element, "Position");
+    seg = pt;
   }
   // ... others
 
@@ -873,7 +886,16 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
       extrude->endCondition1.type = *typeOpt;
     }
     ec1->QueryDoubleAttribute("Depth", &extrude->endCondition1.depth);
-    // ...
+    ec1->QueryDoubleAttribute("Offset", &extrude->endCondition1.offset);
+    ec1->QueryBoolAttribute("HasOffset", &extrude->endCondition1.hasOffset);
+    ec1->QueryBoolAttribute("Flip", &extrude->endCondition1.isFlip);
+    ec1->QueryBoolAttribute("FlipMaterialSide", &extrude->endCondition1.isFlipMaterialSide);
+    
+    // 加载参考实体
+    XMLElement *refElem = ec1->FirstChildElement("ReferenceEntity");
+    if (refElem) {
+      extrude->endCondition1.referenceEntity = LoadRefEntity(refElem);
+    }
   }
   XMLElement *ec2 = element->FirstChildElement("EndCondition2");
   if (ec2) {
@@ -883,7 +905,17 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
       cond2.type = *typeOpt;
     }
     ec2->QueryDoubleAttribute("Depth", &cond2.depth);
-    // ...
+    ec2->QueryDoubleAttribute("Offset", &cond2.offset);
+    ec2->QueryBoolAttribute("HasOffset", &cond2.hasOffset);
+    ec2->QueryBoolAttribute("Flip", &cond2.isFlip);
+    ec2->QueryBoolAttribute("FlipMaterialSide", &cond2.isFlipMaterialSide);
+    
+    // 加载参考实体
+    XMLElement *refElem = ec2->FirstChildElement("ReferenceEntity");
+    if (refElem) {
+      cond2.referenceEntity = LoadRefEntity(refElem);
+    }
+    
     extrude->endCondition2 = cond2;
   }
 }

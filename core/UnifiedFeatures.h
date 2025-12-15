@@ -1,13 +1,13 @@
 ﻿#pragma once
-
+// clang-format off
 #include "UnifiedTypes.h"
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-
-#ifndef CEREAL_NVP
-#define CEREAL_NVP(x) x
+// clang-format on
+#ifndef CEREAL_NVP 
+#define CEREAL_NVP(x) x // 占位宏，避免编译错误
 #endif
 
 namespace CADExchange {
@@ -18,6 +18,16 @@ namespace CADExchange {
 enum class BooleanOp { BOSS, CUT, MERGE };
 
 /**
+ * @brief 特征类型枚举
+ */
+enum class FeatureType {
+    Unknown,
+    Extrude,
+    Revolve,
+    Sketch
+};
+
+/**
  * @brief 所有特征的基类。
  */
 struct CFeatureBase {
@@ -25,8 +35,13 @@ struct CFeatureBase {
   std::string featureName;           ///< 用户可见名称
   std::string externalID;            ///< 外部系统 ID (可选)
   bool isSuppressed = false;         ///< 是否被抑制，不参与求解
+  FeatureType featureType = FeatureType::Unknown;  ///< 特征类型，避免 dynamic_cast
   virtual ~CFeatureBase() = default; ///< 虚析构函数，避免对象截断
 };
+
+// ------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
 
 /**
  * @brief 引用系统 (Topological References)，用于存放拓扑指纹。
@@ -39,25 +54,26 @@ enum class RefType {
   TOPO_FACE,            // 拓扑面
   TOPO_EDGE,            // 拓扑边
   TOPO_VERTEX,          // 拓扑顶点
-  TOPO_SKETCH_SEG       // 拓扑草图段
+  TOPO_SKETCH_SEG,       // 拓扑草图段
+  KNOWN                // 未知类型
 };
 
 struct CRefEntityBase {
-  RefType refType = RefType::FEATURE_DATUM_PLANE;
+  RefType refType = RefType::KNOWN;
   virtual ~CRefEntityBase() = default;
 };
 
 struct CRefFeature : public CRefEntityBase {
   std::string targetFeatureID;
 
-  CRefFeature(RefType type = RefType::FEATURE_DATUM_PLANE) { refType = type; }
+  CRefFeature(RefType type = RefType::KNOWN) { refType = type; }
 };
 
 struct CRefSubTopo : public CRefEntityBase {
   std::string parentFeatureID;
   int topologyIndex = -1;
 
-  CRefSubTopo(RefType type = RefType::FEATURE_DATUM_PLANE) { refType = type; }
+  CRefSubTopo(RefType type = RefType::KNOWN) { refType = type; }
 };
 
 struct CRefPlane : public CRefFeature {
@@ -83,6 +99,8 @@ struct CRefFace : public CRefSubTopo {
 };
 
 struct CRefEdge : public CRefSubTopo {
+  CPoint3D startPoint;
+  CPoint3D endPoint;
   CPoint3D midPoint;
 
   CRefEdge() : CRefSubTopo(RefType::TOPO_EDGE) {}
@@ -99,6 +117,23 @@ struct CRefSketchSeg : public CRefSubTopo {
 
   CRefSketchSeg() : CRefSubTopo(RefType::TOPO_SKETCH_SEG) {}
 };
+
+struct CRefAxis : public CRefFeature {
+  CPoint3D origin{};
+  CVector3D direction{};
+
+  CRefAxis() : CRefFeature(RefType::FEATURE_DATUM_AXIS) {}
+};
+
+struct CRefPoint : public CRefFeature {
+  CPoint3D position{};
+
+  CRefPoint() : CRefFeature(RefType::FEATURE_DATUM_POINT) {}
+};
+
+// ------------------------------------------------------------------------------
+//
+//------------------------------------------------------------------------------
 
 /**
  * @brief 草图元素基类。
@@ -136,6 +171,8 @@ struct CSketchPoint : public CSketchSeg {
   CSketchPoint() { type = SegType::POINT; }
 };
 
+
+
 /**
  * @brief 约束类型定义。
  */
@@ -162,10 +199,12 @@ struct CSketch : public CFeatureBase {
   std::shared_ptr<CRefEntityBase> referencePlane;
   std::vector<std::shared_ptr<CSketchSeg>> segments;
   std::vector<CSketchConstraint> constraints;
+  
+  CSketch() { featureType = FeatureType::Sketch; }
 };
 
 /**
- * @brief 薄壁选项。
+ * @brief 拔模、薄壁选项。
  */
 struct DraftOption {
   double angle = 0.0;
@@ -209,13 +248,14 @@ struct CExtrude : public CFeatureBase {
   BooleanOp operation = BooleanOp::BOSS; ///< 默认新建实体
   std::optional<DraftOption> draft;
   std::optional<ThinWallOption> thinWall;
+  
+  CExtrude() { featureType = FeatureType::Extrude; }
 };
 
 /**
  * @brief 旋转轴描述。
  */
 struct CRevolveAxis {
-  enum class Kind { SketchLine, Explicit, Reference } kind = Kind::Explicit;
   std::string referenceLocalID;
   std::shared_ptr<CRefEntityBase> referenceEntity;
   CPoint3D origin;
@@ -235,6 +275,8 @@ struct CRevolve : public CFeatureBase {
   } angleKind = AngleKind::Single;
   double primaryAngle = 0.0;
   double secondaryAngle = 0.0;
+  
+  CRevolve() { featureType = FeatureType::Revolve; }
 };
 
 } // namespace CADExchange

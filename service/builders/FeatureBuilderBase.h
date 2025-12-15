@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "../core/UnifiedModel.h"
+#include "../../core/UnifiedModel.h"
 #include "StringHelper.h"
 #include <atomic>
 #include <memory>
@@ -38,6 +38,11 @@ public:
    * @brief 默认虚析构函数，确保派生类析构行为正确。
    */
   virtual ~FeatureBuilderBase() = default;
+
+  /**
+   * @brief 获取关联的模型。
+   */
+  UnifiedModel* GetModel() { return &m_model; }
 
   /**
    * @brief 设置特征的抑制状态（是否参与求解）。

@@ -1,8 +1,8 @@
 ﻿#pragma once
 
-#include "../core/UnifiedFeatures.h"
-#include "../serialization/UnifiedSerialization.h"
-#include "../thirdParty/cereal/archives/json.hpp"
+#include "../../core/UnifiedFeatures.h"
+#include "UnifiedSerialization.h"
+#include "../../thirdParty/cereal/archives/json.hpp"
 #include "CADSerializer.h"
 #include <sstream>
 #include <string>

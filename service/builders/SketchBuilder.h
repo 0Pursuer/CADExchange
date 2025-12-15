@@ -1,12 +1,12 @@
 ﻿#pragma once
-
-#include "../core/TypeAdapters.h"
+// clang-format off
+#include "../../core/TypeAdapters.h"
 #include "FeatureBuilderBase.h"
 #include "ReferenceBuilder.h"
 #include <initializer_list>
 #include <stdexcept>
 #include <string>
-
+// clang-format on
 namespace CADExchange {
 namespace Builder {
 
@@ -19,46 +19,38 @@ public:
       : FeatureBuilderBase(model, name) {}
 
   /**
-   * @brief 设置草图所在平面。
+   * @brief 设置草图的参考面。
+   *
+   * 支持两种参考面：
+   * 1. 标准平面（内置）：Ref::XY()、Ref::YZ()、Ref::ZX()
+   * 2. 自定义基准面：Ref::Plane("DatumPlane_001").Origin(0,0,0).XDir(1,0,0)
+   * 3. 实体面：Ref::Face(...)
+   *
+   * @param ref 参考面引用（CRefPlane 或 CRefEntityBase 的任意派生类）
+   * @return 自身引用，支持链式调用
    */
-  template <typename PointT, typename VectorT>
-  SketchBuilder &SetPlane(const PointT &origin, const VectorT &xDir,
-                          const VectorT &normal) {
-    auto plane = std::make_shared<CRefPlane>();
-    plane->origin = PointAdapter<PointT>::Convert(origin);
-    plane->xDir = VectorAdapter<VectorT>::Convert(xDir);
-    plane->normal = VectorAdapter<VectorT>::Convert(normal);
-    plane->yDir = CVector3D::Cross(plane->normal, plane->xDir);
-    plane->yDir.Normalize();
-    m_feature->referencePlane = plane;
-    return *this;
-  }
-
-  /**
-   * @brief 使用标准平面 ID 设置草图参考面。仅限于 XY、YZ、ZX 三个标准平面。
-   */
-  SketchBuilder &SetReferencePlane(const std::string &planeID) {
-    if (planeID == StandardID::PLANE_YZ) {
-      SetPlane(CPoint3D{0, 0, 0}, CVector3D{0, 1, 0}, CVector3D{1, 0, 0});
-    } else if (planeID == StandardID::PLANE_ZX) {
-      SetPlane(CPoint3D{0, 0, 0}, CVector3D{0, 0, 1}, CVector3D{0, 1, 0});
-    } else {
-      // Default to XY plane
-      SetPlane(CPoint3D{0, 0, 0}, CVector3D{1, 0, 0}, CVector3D{0, 0, 1});
+  SketchBuilder &SetReferencePlane(const std::shared_ptr<CRefEntityBase> &ref) {
+    if (!ref) {
+      throw std::invalid_argument("Reference plane cannot be null");
+    }
+    if(ref->refType==RefType::FEATURE_DATUM_PLANE ) {
+      if(auto standardPlane = std::dynamic_pointer_cast<CRefPlane>(ref)) {
+        // 如果是标准平面，直接使用
+        if (standardPlane->targetFeatureID == StandardID::PLANE_XY ||
+            standardPlane->targetFeatureID == StandardID::PLANE_YZ ||
+            standardPlane->targetFeatureID == StandardID::PLANE_ZX) {
+          // 标准平面，直接使用
+        } else {
+          // 自定义基准面，需要确保model中存在该特征
+          auto planeFeature = m_model.GetFeatureAs<CFeatureBase>(standardPlane->targetFeatureID);
+          if(!planeFeature) {
+            throw std::invalid_argument("Reference plane feature not found in model: " + standardPlane->targetFeatureID);
+          }
+        }
+      }
     }
 
-    // Set the target feature ID for reference
-    if (auto plane =
-            std::dynamic_pointer_cast<CRefPlane>(m_feature->referencePlane)) {
-      plane->targetFeatureID = planeID;
-    }
-    return *this;
-  }
 
-  /**
-   * @brief 使用实体面作为草图参考面。
-   */
-  SketchBuilder &SetReferenceFace(const std::shared_ptr<CRefEntityBase> &ref) {
     m_feature->referencePlane = ref;
     return *this;
   }

@@ -34,14 +34,14 @@ public:
   }
 
   RevolveBuilder &SetAxisFromSketchLine(const std::string &sketchLineID) {
-    m_feature->axis.kind = CRevolveAxis::Kind::SketchLine;
+
     m_feature->axis.referenceLocalID = sketchLineID;
     return *this;
   }
 
   RevolveBuilder &SetAxisExplicit(const CPoint3D &origin,
                                   const CVector3D &direction) {
-    m_feature->axis.kind = CRevolveAxis::Kind::Explicit;
+
     m_feature->axis.origin = origin;
     m_feature->axis.direction = direction;
     m_feature->axis.direction.Normalize();
@@ -49,7 +49,7 @@ public:
   }
 
   RevolveBuilder &SetAxisRef(std::shared_ptr<CRefEntityBase> edgeRef) {
-    m_feature->axis.kind = CRevolveAxis::Kind::Reference;
+
     m_feature->axis.referenceEntity = std::move(edgeRef);
     return *this;
   }

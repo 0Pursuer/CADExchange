@@ -1,4 +1,5 @@
-﻿#include "CADSerializer.h"
+﻿// clangd-format-off
+#include "../../service/serialization/CADSerializer.h"
 #include "UnifiedFeatures.h"
 #include "UnifiedModel.h"
 #include "UnifiedTypes.h"
@@ -6,7 +7,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-
+// clangd-format-on
 using namespace CADExchange;
 
 // =========================================================
