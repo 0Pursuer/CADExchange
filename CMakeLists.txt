@@ -9,6 +9,10 @@ if(MINGW OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options(-Wa,-mbig-obj)
 endif()
 
+if(MSVC)
+    add_compile_options(/bigobj)
+endif()
+
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/core
@@ -98,6 +102,14 @@ target_include_directories(APIWriteTest PRIVATE
 )
 target_link_libraries(APIWriteTest PRIVATE CADExchangeDLL)
 
+# Comparison Demo (Direct UnifiedModel vs ModelBuilder)
+add_executable(ComparisonDemo examples/ComparisonDemo.cpp)
+target_link_libraries(ComparisonDemo PRIVATE cadexchange)
+
+# Recommended Approach Demo (Individual Builders)
+add_executable(RecommendedApproach examples/RecommendedApproach.cpp)
+target_link_libraries(RecommendedApproach PRIVATE cadexchange)
+
 # CTest Integration
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
@@ -112,3 +124,9 @@ if(BUILD_TESTING)
     add_test(NAME APIReadTest COMMAND APIReadTest)
     add_test(NAME APIWriteTest COMMAND APIWriteTest)
 endif()
+
+# add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
+# target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
+
+add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
+target_link_libraries(DirectModelDemo PRIVATE cadexchange)

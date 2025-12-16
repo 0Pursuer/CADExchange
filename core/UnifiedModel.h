@@ -27,6 +27,8 @@ public:
   std::string modelName;           ///< 可选的模型名称。
 
   UnifiedModel() = default;
+  UnifiedModel(UnitType unitType, const std::string &name = "")
+      : unit(unitType), modelName(name) {}
 
   /**
    * @brief 将给定特征注册到模型，并同步索引。

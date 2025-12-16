@@ -37,7 +37,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
   std::string refPlaneID = StandardID::PLANE_XY; // 映射到标准 XY 平面
 
   Builder::SketchBuilder sketchBuilder(model, "Sketch1");
-  sketchBuilder.SetReferencePlane(refPlaneID);
+  sketchBuilder.SetReferencePlane(Builder::RefPlaneBuilder(refPlaneID));
 
   // 1.2 提取草图段 (ExtractSketchSegments)
   // 假设我们遍历 ISketchSegment 得到了以下几何数据
@@ -122,7 +122,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
                      .VDir(0, -1, 0);
 
   Builder::SketchBuilder sketchBuilder2(model, "Sketch2");
-  sketchBuilder2.SetReferenceFace(faceRef);
+  sketchBuilder2.SetReferencePlane(faceRef);
   sketchBuilder2.AddCircle(CPoint3D{50, 25, 20}, 10.0);
   std::string sketch2ID = sketchBuilder2.Build();
   std::cout << "[SwRead Simulation] Sketch2 built. ID: " << sketch2ID
@@ -155,7 +155,7 @@ void SimulateReadFromSolidWorks(UnifiedModel &model) {
                         .VDir(0, 1, 0);
 
   Builder::SketchBuilder sketchBuilder3(model, "Sketch3");
-  sketchBuilder3.SetReferenceFace(cutFaceRef);
+  sketchBuilder3.SetReferencePlane(cutFaceRef);
   auto sketch3Line =
       sketchBuilder3.AddLine(CPoint3D{10, 25, 0}, CPoint3D{90, 25, 0});
   auto sketch3Circle = sketchBuilder3.AddCircle(CPoint3D{50, 25, 0}, 8.0);

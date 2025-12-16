@@ -6,7 +6,9 @@
 #include <string>
 #include <vector>
 // clang-format on
-#ifndef CEREAL_NVP 
+
+// Placeholder macro - will be overridden by cereal if included later
+#ifndef CEREAL_NVP
 #define CEREAL_NVP(x) x // 占位宏，避免编译错误
 #endif
 

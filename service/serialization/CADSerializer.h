@@ -1,13 +1,23 @@
 ﻿#pragma once
 
-#include "../../thirdParty/cereal/archives/xml.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
 
 #include "../../core/UnifiedModel.h"
-#include "UnifiedSerialization.h"
 #include "TinyXMLSerializer.h"
+
+// Only include cereal when actually needed (not when using TINYXML)
+// This avoids compile-time static assertions from cereal on types that don't support it
+#ifdef ENABLE_CEREAL_SERIALIZATION
+  // Undefine placeholder CEREAL_NVP before including cereal to allow it to define the real one
+  #ifdef CEREAL_NVP
+  #undef CEREAL_NVP
+  #endif
+
+  #include "../../thirdParty/cereal/archives/xml.hpp"
+  #include "UnifiedSerialization.h"
+#endif
 
 namespace CADExchange {
 void RegisterSerializationTypes();
@@ -39,6 +49,7 @@ SaveModel(const UnifiedModel &model, const std::filesystem::path &filePath,
     return TinyXMLSerializer::Save(model, filePath, errorMessage);
   }
 
+#ifdef ENABLE_CEREAL_SERIALIZATION
   RegisterSerializationTypes();
   std::ofstream output(filePath, std::ios::binary);
   if (!output) {
@@ -60,6 +71,12 @@ SaveModel(const UnifiedModel &model, const std::filesystem::path &filePath,
   }
 
   return true;
+#else
+  if (errorMessage) {
+    *errorMessage = "CEREAL serialization not enabled. Please compile with ENABLE_CEREAL_SERIALIZATION flag.";
+  }
+  return false;
+#endif
 }
 
 /**
@@ -79,6 +96,7 @@ LoadModel(UnifiedModel &model, const std::filesystem::path &filePath,
     return TinyXMLSerializer::Load(model, filePath, errorMessage);
   }
 
+#ifdef ENABLE_CEREAL_SERIALIZATION
   RegisterSerializationTypes();
   std::ifstream input(filePath, std::ios::binary);
   if (!input) {
@@ -100,6 +118,12 @@ LoadModel(UnifiedModel &model, const std::filesystem::path &filePath,
   }
 
   return true;
+#else
+  if (errorMessage) {
+    *errorMessage = "CEREAL serialization not enabled. Please compile with ENABLE_CEREAL_SERIALIZATION flag.";
+  }
+  return false;
+#endif
 }
 
 } // namespace CADExchange
