@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include "../../core/UnifiedModel.h"
-#include "FeatureAccessor.h"
+#include "FeatureAccessorBase.h"
 #include <memory>
 #include <vector>
 

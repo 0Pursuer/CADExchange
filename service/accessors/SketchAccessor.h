@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "FeatureAccessor.h"
+#include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
 #include <memory>
 #include <vector>
