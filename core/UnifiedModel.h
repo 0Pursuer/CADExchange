@@ -75,6 +75,21 @@ public:
   }
 
   /**
+   * @brief 根据特征名称查找特征 ID。
+   *
+   * @param name 特征名称。
+   * @return 若找到则返回特征 ID，否则返回空字符串。
+   */
+  std::string GetFeatureIdByName(const std::string &name) const {
+    for (const auto &feature : m_features) {
+      if (feature->featureName == name) {
+        return feature->featureID;
+      }
+    }
+    return "";
+  }
+
+  /**
    * @brief 尝试将 ID 对应的特征安全地转换为指定类型。
    *
    * @tparam T 期望的派生类型。
