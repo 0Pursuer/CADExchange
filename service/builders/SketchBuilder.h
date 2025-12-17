@@ -93,7 +93,7 @@ public:
    */
   template <typename PointT>
   std::string AddArc(const PointT &center, double radius, double startAngle,
-                     double endAngle) {
+                     double endAngle,bool isClockwise = false, bool isConstruction = false) {
     if (radius <= 0) {
       throw std::invalid_argument("radius must be positive");
     }
@@ -102,7 +102,8 @@ public:
     arc->radius = radius;
     arc->startAngle = startAngle;
     arc->endAngle = endAngle;
-    arc->isClockwise = startAngle > endAngle;
+    arc->isClockwise = isClockwise;
+    arc->isConstruction = isConstruction;
     arc->localID = GenerateLocalID("A");
     m_feature->segments.push_back(arc);
     return arc->localID;
