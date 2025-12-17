@@ -39,13 +39,6 @@ target_include_directories(cadexchange PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# DLL Target (API Export)
-add_library(CADExchangeDLL SHARED
-    src/api/CAD_API.cpp
-)
-target_include_directories(CADExchangeDLL PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-target_link_libraries(CADExchangeDLL PRIVATE cadexchange)
-target_compile_definitions(CADExchangeDLL PRIVATE CADEXCHANGE_EXPORTS=1)
 
 # Tests (Internal - using core/builders directly)
 add_executable(ReadPartTest test/SolidWorks/ReadPartTest.cpp)
@@ -89,22 +82,10 @@ target_include_directories(PartReconstructionDemo PRIVATE
 )
 target_link_libraries(PartReconstructionDemo PRIVATE cadexchange)
 
-# API Tests (Static Linking - using SDK interface)
-add_executable(APIReadTest test/APITest/ReadTest.cpp)
-target_include_directories(APIReadTest PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-target_link_libraries(APIReadTest PRIVATE CADExchangeDLL)
 
-add_executable(APIWriteTest test/APITest/WriteTest.cpp)
-target_include_directories(APIWriteTest PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-target_link_libraries(APIWriteTest PRIVATE CADExchangeDLL)
 
-# Comparison Demo (Direct UnifiedModel vs ModelBuilder)
-add_executable(ComparisonDemo examples/ComparisonDemo.cpp)
-target_link_libraries(ComparisonDemo PRIVATE cadexchange)
+
+
 
 # Recommended Approach Demo (Individual Builders)
 add_executable(RecommendedApproach examples/RecommendedApproach.cpp)
@@ -128,5 +109,5 @@ endif()
 # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
 # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
 
-add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
-target_link_libraries(DirectModelDemo PRIVATE cadexchange)
+# add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
+# target_link_libraries(DirectModelDemo PRIVATE cadexchange)
