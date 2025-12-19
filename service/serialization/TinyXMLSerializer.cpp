@@ -4,16 +4,45 @@
 #include <functional>
 #include <optional>
 #include <sstream>
+#include <iomanip>
+#include <cmath>
 
 namespace CADExchange {
 
 using namespace tinyxml2;
 
 namespace {
+// Helper to format a single double value with max 6 decimals, treating near-zero values as 0
+double CleanupZero(double value) {
+  // If the absolute value is extremely small, treat it as 0
+  if (std::abs(value) < 1e-10) {
+    return 0.0;
+  }
+  return value;
+}
+
 std::string FormatTriple(double x, double y, double z) {
+  // Clean up near-zero values
+  x = CleanupZero(x);
+  y = CleanupZero(y);
+  z = CleanupZero(z);
+  
   std::ostringstream ss;
+  ss << std::fixed << std::setprecision(6);
   ss << '(' << x << ',' << y << ',' << z << ')';
-  return ss.str();
+  
+  std::string result = ss.str();
+  
+  // Remove trailing zeros after decimal point
+  size_t pos = result.find_last_not_of('0');
+  if (pos != std::string::npos && result[pos] == '.') {
+    // Remove trailing zeros and the decimal point if all decimals are zeros
+    result = result.substr(0, pos);
+  } else if (pos != std::string::npos) {
+    result = result.substr(0, pos + 1);
+  }
+  
+  return result;
 }
 
 bool TryParseTriple(const char *text, double &x, double &y, double &z) {

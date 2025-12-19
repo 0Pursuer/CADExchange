@@ -34,6 +34,89 @@ void PrintResult(const std::string& featureName, const std::string& id) {
     }
 }
 
+/**
+ * @brief 演示改进的 ExtrudeBuilder 用法（新方法）
+ * 
+ * 使用新的便利方法：
+ * - SetProfileByName()：直接接受草图名称，自动 ID 转换
+ * - 链式调用：流畅的方法链
+ * - EndConditionHelper：简化终止条件构造
+ */
+std::string DemoImprovedExtrudeBuilder(UnifiedModel& model) {
+    std::cout << "\n" << std::string(70, '=') << "\n";
+    std::cout << "IMPROVED ExtrudeBuilder DEMONSTRATION\n";
+    std::cout << std::string(70, '=') << "\n";
+
+    try {
+        // 方法 1: 使用 SetProfileByName() - 自动查找并转换 ID
+        std::cout << "\n[Demo 1] Using SetProfileByName() for convenience:\n";
+        auto extrudeId1 = ExtrudeBuilder(model, "ImprovedExtrude_1")
+            .SetProfileByName("BaseSketch")              // 直接用名字，自动转换 ID
+            .SetOperation(BooleanOp::BOSS)
+            .SetDirection(CVector3D{0, 0, 1})            // 指定类型以支持模板推导
+            .SetEndCondition1(EndCondition::Blind(15.0))
+            .Build();
+        PrintResult("ImprovedExtrude_1", extrudeId1);
+
+        // 方法 2: 使用 EndConditionHelper 简化复杂终止条件
+        std::cout << "\n[Demo 2] Using EndConditionHelper for complex conditions:\n";
+        
+        // 创建一个参考顶点用于演示
+        CPoint3D demoVertex{50.0, 25.0, 30.0};
+        
+        auto extrudeId2 = ExtrudeBuilder(model, "ImprovedExtrude_2")
+            .SetProfileByName("BaseSketch")
+            .SetOperation(BooleanOp::BOSS)
+            .SetDirection(CVector3D{0, 0, 1})
+            // 使用 Helper 简化拉伸到顶点的条件创建
+            .SetEndCondition1(
+                EndConditionHelper::UpToVertex(
+                    model,
+                    extrudeId1,              // 参考特征 ID
+                    demoVertex,              // 顶点坐标
+                    0,                       // 拓扑索引
+                    0.0))                    // 偏移
+            .Build();
+        PrintResult("ImprovedExtrude_2", extrudeId2);
+
+        // 方法 3: 两向拉伸（高级用法）
+        std::cout << "\n[Demo 3] BiDirectional extrude with two end conditions:\n";
+        auto extrudeId3 = ExtrudeBuilder(model, "BiDirectionalExtrude")
+            .SetProfileByName("BaseSketch")
+            .SetOperation(BooleanOp::BOSS)
+            .SetDirection(CVector3D{0, 0, 1})
+            .SetEndCondition1(EndCondition::Blind(10.0))    // 第一方向：盲孔 10mm
+            .SetEndCondition2(EndCondition::Blind(-5.0))    // 第二方向：向下 5mm
+            .SetDraft(2.0, true)                            // 拔模 2 度
+            .Build();
+        PrintResult("BiDirectionalExtrude", extrudeId3);
+
+        // 方法 4: 使用参考平面的高级示例
+        std::cout << "\n[Demo 4] Extrude with reference plane (Advanced):\n";
+        auto extrudeId4 = ExtrudeBuilder(model, "ExtrudeToPlane")
+            .SetProfileByName("BaseSketch")
+            .SetOperation(BooleanOp::BOSS)
+            .SetDirection(CVector3D{0, 0, 1})
+            .SetEndCondition1(
+                EndConditionHelper::UpToRefPlane(
+                    model,
+                    StandardID::PLANE_XY,
+                    StandardID::kOrigin,
+                    StandardID::kPlaneXYNormal,
+                    StandardID::kAxisX,
+                    5.0))  // 偏移 5 单位
+            .Build();
+        PrintResult("ExtrudeToPlane", extrudeId4);
+
+        std::cout << "\n✓ All improved extrude examples completed successfully!\n";
+        return extrudeId1;
+
+    } catch (const std::exception& e) {
+        std::cerr << "✗ Error in improved extrude demo: " << e.what() << "\n";
+        return "";
+    }
+}
+
 std::string BuildBaseSketch(UnifiedModel& model) {
     SketchBuilder sketch(model, "BaseSketch");
     sketch.SetReferencePlane(Ref::XY());
@@ -152,9 +235,15 @@ int main() {
         }
 
         // =========================================================================
+        // FEATURE 7: Demonstrate improved ExtrudeBuilder with new convenience methods
+        // =========================================================================
+        std::cout << "\n[7] Demonstrating improved ExtrudeBuilder methods...\n";
+        DemoImprovedExtrudeBuilder(model);
+
+        // =========================================================================
         // Save the model
         // =========================================================================
-        std::cout << "\n[7] Saving model...\n";
+        std::cout << "\n[8] Saving model...\n";
         try {
             std::string errorMsg;
             bool saveOk = SaveModel(model, "RecommendedApproach_Output.xml", &errorMsg, SerializationFormat::TINYXML);
@@ -180,13 +269,18 @@ int main() {
         std::cout << "   - EndCondition::Blind(depth)\n";
         std::cout << "   - EndCondition::ThroughAll()\n";
         std::cout << "   - EndCondition::UpToFace(ref, offset)\n";
-        std::cout << "4. Chain builder calls for fluent interface\n";
-        std::cout << "5. Use convenience methods (AddLine, AddCircle, etc.) for sketches\n";
+        std::cout << "4. Use improved ExtrudeBuilder convenience methods:\n";
+        std::cout << "   - SetProfileByName(name) - direct name-based lookup\n";
+        std::cout << "   - EndConditionHelper::UpToVertex() - simplified vertex refs\n";
+        std::cout << "   - EndConditionHelper::UpToRefPlane() - simplified plane refs\n";
+        std::cout << "5. Chain builder calls for fluent interface\n";
+        std::cout << "6. Use convenience methods (AddLine, AddCircle, etc.) for sketches\n";
         std::cout << "\nAdvantages:\n";
         std::cout << "- Type-safe: Each builder handles its own type\n";
         std::cout << "- Fluent: Easy to read and write\n";
-        std::cout << "- Convenient: Helper functions like AddLine() save boilerplate\n";
+        std::cout << "- Convenient: Helper functions save boilerplate code\n";
         std::cout << "- Flexible: Mix builders with direct API when needed\n";
+        std::cout << "- Maintainable: Clean separation of concerns\n";
 
         return 0;
 

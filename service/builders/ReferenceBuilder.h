@@ -47,6 +47,12 @@ public:
    * @brief 设置面引用的V方向。
    */
   BUILDER_ADD_VECTOR_SETTER(RefFaceBuilder, vDir, VDir)
+  
+  /**
+   * @brief 构建完成，返回面引用指针。
+   */
+  std::shared_ptr<CRefFace> Build() const { return m_ptr; }
+  
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; } // 转换为基类指针
   operator std::shared_ptr<CRefFace>() const { return m_ptr; } // 转换为具体类型指针
 };
@@ -66,6 +72,11 @@ public:
    * @brief 设置顶点位置。
    */
   BUILDER_ADD_POINT_SETTER(RefVertexBuilder, pos, Pos)
+
+  /**
+   * @brief 构建完成，返回顶点引用指针。
+   */
+  std::shared_ptr<CRefVertex> Build() const { return m_ptr; }
 
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; }
   operator std::shared_ptr<CRefVertex>() const { return m_ptr; }
@@ -116,6 +127,11 @@ public:
     m_ptr->targetFeatureID = sketchID;
   }
   
+  /**
+   * @brief 构建完成，返回草图引用指针。
+   */
+  std::shared_ptr<CRefSketch> Build() const { return m_ptr; }
+  
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; }
   operator std::shared_ptr<CRefSketch>() const { return m_ptr; }
 };
@@ -155,7 +171,10 @@ public:
    */
   BUILDER_ADD_VECTOR_SETTER(RefPlaneBuilder, normal, Normal)
 
-
+  /**
+   * @brief 构建完成，返回基准面引用指针。
+   */
+  std::shared_ptr<CRefPlane> Build() const { return m_ptr; }
   
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; }
   operator std::shared_ptr<CRefPlane>() const { return m_ptr; }

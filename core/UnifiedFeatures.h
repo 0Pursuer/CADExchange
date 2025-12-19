@@ -229,8 +229,11 @@ struct ExtrudeEndCondition {
     UP_TO_NEXT,   // 到下一面
     UP_TO_FACE,   // 到指定面
     UP_TO_VERTEX, // 到指定顶点
-    MID_PLANE     // 中间平面
-  } type = Type::BLIND;
+    MID_PLANE,     // 中间平面
+
+    UNKNOWN
+
+  } type = Type::UNKNOWN;
   double depth = 0.0;
   double offset = 0.0;
   bool hasOffset = false;                          ///< 是否启用偏移
