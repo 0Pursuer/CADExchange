@@ -2,8 +2,11 @@
 // clang-format off
 #include "../../core/UnifiedFeatures.h"
 #include "../../core/UnifiedTypes.h"
+#include "../../core/UnifiedModel.h"
 #include "../../core/TypeAdapters.h"
 #include "BuilderMacros.h"
+
+#include <stdexcept>
 // clang-format on
 namespace CADExchange {
 namespace Builder {
@@ -287,30 +290,110 @@ public:
 
   /**
    * @brief 创建基准面引用。
+   * 
+   * 可以通过 ID 或名字创建。
    */
   static RefPlaneBuilder Plane(const std::string &planeID) {
     return RefPlaneBuilder(planeID);
   }
 
   /**
+   * @brief 通过特征名字创建基准面引用。
+   * 
+   * 自动查找名字对应的特征 ID。
+   * 
+   * @param model UnifiedModel 引用
+   * @param planeName 基准面特征名字
+   * @return RefPlaneBuilder 对象
+   * @throws std::runtime_error 当基准面不存在时抛出
+   */
+  static RefPlaneBuilder Plane(UnifiedModel &model, const std::string &planeName) {
+    auto id = model.GetFeatureIdByName(planeName);
+    if (id.empty() || id == "UnknownSketchId") {
+      throw std::runtime_error("Plane not found by name: " + planeName);
+    }
+    return RefPlaneBuilder(id);
+  }
+
+  /**
    * @brief 创建基准轴引用。
+   * 
+   * 可以通过 ID 或名字创建。
    */
   static RefAxisBuilder Axis(const std::string &axisID) {
     return RefAxisBuilder(axisID);
   }
 
   /**
+   * @brief 通过特征名字创建基准轴引用。
+   * 
+   * 自动查找名字对应的特征 ID。
+   * 
+   * @param model UnifiedModel 引用
+   * @param axisName 基准轴特征名字
+   * @return RefAxisBuilder 对象
+   * @throws std::runtime_error 当基准轴不存在时抛出
+   */
+  static RefAxisBuilder Axis(UnifiedModel &model, const std::string &axisName) {
+    auto id = model.GetFeatureIdByName(axisName);
+    if (id.empty() || id == "UnknownSketchId") {
+      throw std::runtime_error("Axis not found by name: " + axisName);
+    }
+    return RefAxisBuilder(id);
+  }
+
+  /**
    * @brief 创建基准点引用。
+   * 
+   * 可以通过 ID 或名字创建。
    */
   static RefPointBuilder Point(const std::string &pointID) {
     return RefPointBuilder(pointID);
   }
 
   /**
+   * @brief 通过特征名字创建基准点引用。
+   * 
+   * 自动查找名字对应的特征 ID。
+   * 
+   * @param model UnifiedModel 引用
+   * @param pointName 基准点特征名字
+   * @return RefPointBuilder 对象
+   * @throws std::runtime_error 当基准点不存在时抛出
+   */
+  static RefPointBuilder Point(UnifiedModel &model, const std::string &pointName) {
+    auto id = model.GetFeatureIdByName(pointName);
+    if (id.empty() || id == "UnknownSketchId") {
+      throw std::runtime_error("Point not found by name: " + pointName);
+    }
+    return RefPointBuilder(id);
+  }
+
+  /**
    * @brief 创建草图引用。
+   * 
+   * 可以通过 ID 或名字创建。
    */
   static RefSketchBuilder Sketch(const std::string &sketchID) {
     return RefSketchBuilder(sketchID);
+  }
+
+  /**
+   * @brief 通过特征名字创建草图引用。
+   * 
+   * 自动查找名字对应的特征 ID。
+   * 
+   * @param model UnifiedModel 引用
+   * @param sketchName 草图特征名字
+   * @return RefSketchBuilder 对象
+   * @throws std::runtime_error 当草图不存在时抛出
+   */
+  static RefSketchBuilder Sketch(UnifiedModel &model, const std::string &sketchName) {
+    auto id = model.GetFeatureIdByName(sketchName);
+    if (id.empty() || id == "UnknownSketchId") {
+      throw std::runtime_error("Sketch not found by name: " + sketchName);
+    }
+    return RefSketchBuilder(id);
   }
 
   /**
