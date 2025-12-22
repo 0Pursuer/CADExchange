@@ -90,6 +90,19 @@ public:
   }
 
   /**
+   * @brief  获取特征的index。
+   * 
+   */
+  int GetFeatureIndexByID(const std::string &featureID) const {
+    for (size_t i = 0; i < m_features.size(); ++i) {
+      if (m_features[i]->featureID == featureID) {
+        return static_cast<int>(i);
+      }
+    }
+    return -1; // 未找到
+  }
+
+  /**
    * @brief 尝试将 ID 对应的特征安全地转换为指定类型。
    *
    * @tparam T 期望的派生类型。
