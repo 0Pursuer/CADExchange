@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
+#include "../../core/TypeAdapters.h"
 #include <optional>
 
 namespace CADExchange {
@@ -47,6 +48,12 @@ public:
 
     CVector3D GetDirection() const {
         return IsValid() ? m_extrude->direction : CVector3D{0, 0, 1};
+    }
+
+    template <typename VectorT>
+    VectorT GetDirectionAs() const {
+        CVector3D dir = GetDirection();
+            return VectorWriter<VectorT>::Convert(dir);
     }
 
     BooleanOp GetOperation() const {

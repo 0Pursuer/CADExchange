@@ -51,4 +51,44 @@ template <> struct VectorAdapter<CVector3D> {
   static CVector3D Convert(const CVector3D &vec) { return vec; }
 };
 
+// --- Writer adapters: convert internal types (CPoint3D/CVector3D) to user types ---
+/**
+ * @brief 将内部点类型转换为用户类型的适配器（默认实现）
+ *
+ * 默认实现尝试使用花括号初始化：T{ x, y, z }。
+ * 用户可以专门化此模板以支持自己自定义的点类型。
+ */
+template <typename T, typename Enable = void> struct PointWriter {
+  static T Convert(const CPoint3D &p) { return T{p.x, p.y, p.z}; }
+};
+
+template <> struct PointWriter<CPoint3D> {
+  static CPoint3D Convert(const CPoint3D &p) { return p; }
+};
+
+template <typename T, std::size_t N>
+struct PointWriter<std::array<T, N>, typename std::enable_if<N == 3>::type> {
+  static std::array<T, 3> Convert(const CPoint3D &p) {
+    return {static_cast<T>(p.x), static_cast<T>(p.y), static_cast<T>(p.z)};
+  }
+};
+
+/**
+ * @brief 将内部向量类型转换为用户类型的适配器（默认实现）
+ */
+template <typename T, typename Enable = void> struct VectorWriter {
+  static T Convert(const CVector3D &v) { return T{v.x, v.y, v.z}; }
+};
+
+template <> struct VectorWriter<CVector3D> {
+  static CVector3D Convert(const CVector3D &v) { return v; }
+};
+
+template <typename T, std::size_t N>
+struct VectorWriter<std::array<T, N>, typename std::enable_if<N == 3>::type> {
+  static std::array<T, 3> Convert(const CVector3D &v) {
+    return {static_cast<T>(v.x), static_cast<T>(v.y), static_cast<T>(v.z)};
+  }
+};
+
 } // namespace CADExchange

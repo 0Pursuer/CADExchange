@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
+#include "../../core/TypeAdapters.h"
 #include <memory>
 #include <vector>
 
@@ -48,6 +49,15 @@ public:
         return false;
     }
 
+    template <typename StartT, typename EndT>
+    bool GetLineCoords(StartT &outStart, EndT &outEnd) const {
+        CPoint3D s, e;
+        if (!GetLineCoords(s, e)) return false;
+        outStart = PointWriter<StartT>::Convert(s);
+        outEnd = PointWriter<EndT>::Convert(e);
+        return true;
+    }
+
     // --- 圆特有方法 ---
     bool GetCircleParams(CPoint3D& outCenter, double& outRadius) const {
         if (auto circle = std::dynamic_pointer_cast<const CSketchCircle>(m_seg)) {
@@ -56,6 +66,16 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetCircleParams(PointT &outCenter, double &outRadius) const {
+        CPoint3D c;
+        double r;
+        if (!GetCircleParams(c, r)) return false;
+        outCenter = PointWriter<PointT>::Convert(c);
+        outRadius = r;
+        return true;
     }
 
     // --- 圆弧特有方法 ---
@@ -70,6 +90,18 @@ public:
         return false;
     }
 
+    template <typename PointT>
+    bool GetArcParams(PointT &outCenter, double &outStart, double &outEnd, double &outRadius) const {
+        CPoint3D c;
+        double s,e,r;
+        if (!GetArcParams(c, s, e, r)) return false;
+        outCenter = PointWriter<PointT>::Convert(c);
+        outStart = s;
+        outEnd = e;
+        outRadius = r;
+        return true;
+    }
+
     // --- 点特有方法 ---
     bool GetPointCoord(CPoint3D& outPos) const {
         if (auto point = std::dynamic_pointer_cast<const CSketchPoint>(m_seg)) {
@@ -77,6 +109,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetPointCoord(PointT &outPos) const {
+        CPoint3D p;
+        if (!GetPointCoord(p)) return false;
+        outPos = PointWriter<PointT>::Convert(p);
+        return true;
     }
 
     /**

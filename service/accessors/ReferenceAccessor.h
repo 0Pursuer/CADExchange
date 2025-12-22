@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "../../core/UnifiedFeatures.h"
+#include "../../core/TypeAdapters.h"
 #include <memory>
 #include <string>
 
@@ -84,6 +85,14 @@ public:
         return false;
     }
 
+    template <typename VecT>
+    bool GetFaceNormal(VecT &outNormal) const {
+        CVector3D tmp;
+        if (!GetFaceNormal(tmp)) return false;
+        outNormal = VectorWriter<VecT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取面质心（如果是面引用）。
      */
@@ -93,6 +102,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetFaceCentroid(PointT &outCentroid) const {
+        CPoint3D tmp;
+        if (!GetFaceCentroid(tmp)) return false;
+        outCentroid = PointWriter<PointT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -106,6 +123,14 @@ public:
         return false;
     }
 
+    template <typename VecT>
+    bool GetFaceUDir(VecT &outUDir) const {
+        CVector3D tmp;
+        if (!GetFaceUDir(tmp)) return false;
+        outUDir = VectorWriter<VecT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取面 V 方向（如果是面引用）。
      */
@@ -115,6 +140,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename VecT>
+    bool GetFaceVDir(VecT &outVDir) const {
+        CVector3D tmp;
+        if (!GetFaceVDir(tmp)) return false;
+        outVDir = VectorWriter<VecT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -128,6 +161,14 @@ public:
         return false;
     }
 
+    template <typename PointT>
+    bool GetEdgeStartPoint(PointT &outStart) const {
+        CPoint3D tmp;
+        if (!GetEdgeStartPoint(tmp)) return false;
+        outStart = PointWriter<PointT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取边的终点（如果是边引用）。
      */
@@ -137,6 +178,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetEdgeEndPoint(PointT &outEnd) const {
+        CPoint3D tmp;
+        if (!GetEdgeEndPoint(tmp)) return false;
+        outEnd = PointWriter<PointT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -150,6 +199,14 @@ public:
         return false;
     }
 
+    template <typename PointT>
+    bool GetEdgeMidPoint(PointT &outMid) const {
+        CPoint3D tmp;
+        if (!GetEdgeMidPoint(tmp)) return false;
+        outMid = PointWriter<PointT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取顶点位置（如果是顶点引用）。
      */
@@ -159,6 +216,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetVertexPosition(PointT &outPos) const {
+        CPoint3D tmp;
+        if (!GetVertexPosition(tmp)) return false;
+        outPos = PointWriter<PointT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -172,6 +237,14 @@ public:
         return false;
     }
 
+    template <typename PointT>
+    bool GetPlaneOrigin(PointT &outOrigin) const {
+        CPoint3D tmp;
+        if (!GetPlaneOrigin(tmp)) return false;
+        outOrigin = PointWriter<PointT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取平面法向（如果是基准平面）。
      */
@@ -181,6 +254,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename VecT>
+    bool GetPlaneNormal(VecT &outNormal) const {
+        CVector3D tmp;
+        if (!GetPlaneNormal(tmp)) return false;
+        outNormal = VectorWriter<VecT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -194,6 +275,14 @@ public:
         return false;
     }
 
+    template <typename VecT>
+    bool GetPlaneXDir(VecT &outXDir) const {
+        CVector3D tmp;
+        if (!GetPlaneXDir(tmp)) return false;
+        outXDir = VectorWriter<VecT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取平面 Y 方向（如果是基准平面）。
      */
@@ -203,6 +292,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename VecT>
+    bool GetPlaneYDir(VecT &outYDir) const {
+        CVector3D tmp;
+        if (!GetPlaneYDir(tmp)) return false;
+        outYDir = VectorWriter<VecT>::Convert(tmp);
+        return true;
     }
 
     /**
@@ -216,6 +313,14 @@ public:
         return false;
     }
 
+    template <typename PointT>
+    bool GetAxisOrigin(PointT &outOrigin) const {
+        CPoint3D tmp;
+        if (!GetAxisOrigin(tmp)) return false;
+        outOrigin = PointWriter<PointT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取轴方向（如果是基准轴）。
      */
@@ -227,6 +332,14 @@ public:
         return false;
     }
 
+    template <typename VecT>
+    bool GetAxisDirection(VecT &outDir) const {
+        CVector3D tmp;
+        if (!GetAxisDirection(tmp)) return false;
+        outDir = VectorWriter<VecT>::Convert(tmp);
+        return true;
+    }
+
     /**
      * @brief 尝试获取点位置（如果是基准点）。
      */
@@ -236,6 +349,14 @@ public:
             return true;
         }
         return false;
+    }
+
+    template <typename PointT>
+    bool GetPointPosition(PointT &outPos) const {
+        CPoint3D tmp;
+        if (!GetPointPosition(tmp)) return false;
+        outPos = PointWriter<PointT>::Convert(tmp);
+        return true;
     }
 
     // --- 底层访问 ---
