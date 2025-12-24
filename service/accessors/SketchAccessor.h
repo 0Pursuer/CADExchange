@@ -79,26 +79,29 @@ public:
     }
 
     // --- 圆弧特有方法 ---
-    bool GetArcParams(CPoint3D& outCenter, double& outStart, double& outEnd, double& outRadius) const {
+    bool GetArcParams(CPoint3D& outCenter, double& outStart, double& outEnd, double& outRadius, bool & outClockWise) const {
         if (auto arc = std::dynamic_pointer_cast<const CSketchArc>(m_seg)) {
             outCenter = arc->center;
             outStart = arc->startAngle;
             outEnd = arc->endAngle;
             outRadius = arc->radius;
+            outClockWise = arc->isClockwise;
             return true;
         }
         return false;
     }
 
     template <typename PointT>
-    bool GetArcParams(PointT &outCenter, double &outStart, double &outEnd, double &outRadius) const {
+    bool GetArcParams(PointT &outCenter, double &outStart, double &outEnd, double &outRadius, bool & outClockWise) const {
         CPoint3D c;
         double s,e,r;
-        if (!GetArcParams(c, s, e, r)) return false;
+        bool cw;
+        if (!GetArcParams(c, s, e, r, cw)) return false;
         outCenter = PointWriter<PointT>::Convert(c);
         outStart = s;
         outEnd = e;
         outRadius = r;
+        outClockWise = cw;
         return true;
     }
 
