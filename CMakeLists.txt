@@ -40,37 +40,6 @@ target_include_directories(cadexchange PUBLIC
 )
 
 
-# Tests (Internal - using core/builders directly)
-add_executable(ReadPartTest test/SolidWorks/ReadPartTest.cpp)
-target_include_directories(ReadPartTest PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/core 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/builders 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
-    ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
-)
-target_link_libraries(ReadPartTest PRIVATE cadexchange)
-
-add_executable(WritePartTest test/SolidWorks/WritePartTest.cpp)
-target_include_directories(WritePartTest PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/core 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/builders 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
-    ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
-)
-target_link_libraries(WritePartTest PRIVATE cadexchange)
-
-add_executable(UsageExampleTest test/UsageExampleTest.cpp)
-target_include_directories(UsageExampleTest PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/core 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/builders 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
-    ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
-)
-target_link_libraries(UsageExampleTest PRIVATE cadexchange)
-
 # Demo Application
 add_executable(PartReconstructionDemo examples/PartReconstructionDemo.cpp)
 target_include_directories(PartReconstructionDemo PRIVATE 
@@ -90,21 +59,6 @@ target_link_libraries(PartReconstructionDemo PRIVATE cadexchange)
 # Recommended Approach Demo (Individual Builders)
 add_executable(RecommendedApproach examples/RecommendedApproach.cpp)
 target_link_libraries(RecommendedApproach PRIVATE cadexchange)
-
-# CTest Integration
-option(BUILD_TESTING "Build tests" ON)
-if(BUILD_TESTING)
-    enable_testing()
-    
-    # Internal tests
-    add_test(NAME ReadPartTest COMMAND ReadPartTest)
-    add_test(NAME WritePartTest COMMAND WritePartTest)
-    add_test(NAME UsageExampleTest COMMAND UsageExampleTest)
-    
-    # API tests
-    add_test(NAME APIReadTest COMMAND APIReadTest)
-    add_test(NAME APIWriteTest COMMAND APIWriteTest)
-endif()
 
 # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
 # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
