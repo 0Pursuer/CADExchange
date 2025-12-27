@@ -45,6 +45,11 @@ public:
   UnifiedModel* GetModel() { return &m_model; }
 
   /**
+   * @brief 获取正在构建的特征。
+   */
+  std::shared_ptr<T> GetFeature() { return m_feature; }
+
+  /**
    * @brief 设置特征的抑制状态（是否参与求解）。
    */
   FeatureBuilderBase &SetSuppressed(bool isSuppressed) {
