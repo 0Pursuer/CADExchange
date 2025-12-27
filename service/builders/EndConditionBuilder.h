@@ -76,6 +76,14 @@ public:
     c.type = ExtrudeEndCondition::Type::UP_TO_NEXT;
     return c;
   }
+
+  // 拉伸到中间面
+  static ExtrudeEndCondition UpToMidPlane() {
+    ExtrudeEndCondition c;
+    c.type = ExtrudeEndCondition::Type::MID_PLANE;
+    return c;
+  }
+
 };
 
 /**
