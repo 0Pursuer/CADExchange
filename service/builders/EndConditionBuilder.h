@@ -78,9 +78,10 @@ public:
   }
 
   // 拉伸到中间面
-  static ExtrudeEndCondition MidPlane() {
+  static ExtrudeEndCondition MidPlane(double depth = 0.0) {
     ExtrudeEndCondition c;
     c.type = ExtrudeEndCondition::Type::MID_PLANE;
+    c.depth = depth;
     return c;
   }
 
