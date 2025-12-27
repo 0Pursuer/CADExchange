@@ -230,6 +230,7 @@ struct ExtrudeEndCondition {
     UP_TO_FACE,   // 到指定面
     UP_TO_VERTEX, // 到指定顶点
     MID_PLANE,     // 中间平面
+    THROUGH_ALL_BOTH_SIDES, // 双向贯穿
 
     UNKNOWN
 

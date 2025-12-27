@@ -78,9 +78,16 @@ public:
   }
 
   // 拉伸到中间面
-  static ExtrudeEndCondition UpToMidPlane() {
+  static ExtrudeEndCondition MidPlane() {
     ExtrudeEndCondition c;
     c.type = ExtrudeEndCondition::Type::MID_PLANE;
+    return c;
+  }
+
+  // 双向贯穿
+  static ExtrudeEndCondition ThroughAllBothSides() {
+    ExtrudeEndCondition c;
+    c.type = ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES;
     return c;
   }
 
