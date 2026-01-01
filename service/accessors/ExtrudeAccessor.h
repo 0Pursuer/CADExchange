@@ -1,7 +1,8 @@
 ﻿#pragma once
+#include "../../core/TypeAdapters.h"
+#include "AccessorMacros.h"
 #include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
-#include "../../core/TypeAdapters.h"
 #include <optional>
 
 namespace CADExchange {
@@ -9,162 +10,169 @@ namespace Accessor {
 
 /**
  * @brief 拉伸特征访问器，提供对拉伸特征的只读访问。
- * 
+ *
  * 对应 Builder 层的 ExtrudeBuilder，提供与其相反的操作：
  * - Builder: SetProfile() + SetDirection() + Build()
  * - Accessor: GetProfileSketchID() + GetDirection() + IsValid()
- * 
+ *
  * 使用 HasXXX() + GetXXX() 模式处理 optional 字段。
  */
 class ExtrudeAccessor : public FeatureAccessorBase {
 private:
-    std::shared_ptr<const CExtrude> m_extrude;
+  std::shared_ptr<const CExtrude> m_extrude;
 
 public:
-    explicit ExtrudeAccessor(std::shared_ptr<const CFeatureBase> feat)
-        : FeatureAccessorBase(feat) {
-        m_extrude = std::dynamic_pointer_cast<const CExtrude>(feat);
-    }
+  explicit ExtrudeAccessor(std::shared_ptr<const CFeatureBase> feat)
+      : FeatureAccessorBase(feat) {
+    m_extrude = std::dynamic_pointer_cast<const CExtrude>(feat);
+  }
 
-    explicit ExtrudeAccessor(const FeatureAccessorBase& other)
-        : FeatureAccessorBase(other.GetRaw()) {
-        m_extrude = std::dynamic_pointer_cast<const CExtrude>(other.GetRaw());
-    }
+  explicit ExtrudeAccessor(const FeatureAccessorBase &other)
+      : FeatureAccessorBase(other.GetRaw()) {
+    m_extrude = std::dynamic_pointer_cast<const CExtrude>(other.GetRaw());
+  }
 
-    explicit ExtrudeAccessor(std::shared_ptr<FeatureAccessorBase> feat)
-        : FeatureAccessorBase(feat ? feat->GetRaw() : nullptr) {
-        if (feat) m_extrude = std::dynamic_pointer_cast<const CExtrude>(feat->GetRaw());
-    }
+  explicit ExtrudeAccessor(std::shared_ptr<FeatureAccessorBase> feat)
+      : FeatureAccessorBase(feat ? feat->GetRaw() : nullptr) {
+    if (feat)
+      m_extrude = std::dynamic_pointer_cast<const CExtrude>(feat->GetRaw());
+  }
 
-    bool IsValid() const {
-        return m_extrude != nullptr;
-    }
+  const CExtrude *Data() const { return m_extrude.get(); }
 
-    // --- 核心属性 ---
-    std::string GetProfileSketchID() const {
-        if (!IsValid() || !m_extrude->sketchProfile) return "";
-        return m_extrude->sketchProfile->featureID;
-    }
+  const CExtrude *operator->() const { return m_extrude.get(); }
 
-    CVector3D GetDirection() const {
-        return IsValid() ? m_extrude->direction : CVector3D{0, 0, 1};
-    }
+  // --- 核心属性 ---
+  std::string GetProfileSketchID() const {
+    // Access via Data() or operator->
+    if (!IsValid() || !Data()->sketchProfile)
+      return "";
+    return Data()->sketchProfile->featureID;
+  }
 
-    template <typename VectorT>
-    VectorT GetDirectionAs() const {
-        CVector3D dir = GetDirection();
-            return VectorWriter<VectorT>::Convert(dir);
-    }
+  // 使用宏定义简化代码
+  ACCESSOR_GETTER(CVector3D, Direction, direction,
+                  (CVector3D{0, 0,
+                             1})) // 相当于 GetDirection() { return IsValid() ?
+                                  // Data()->direction : CVector3D{0, 0, 1}; }
+  ACCESSOR_GETTER(BooleanOp, Operation, operation, BooleanOp::BOSS)
 
-    BooleanOp GetOperation() const {
-        return IsValid() ? m_extrude->operation : BooleanOp::BOSS;
-    }
+  template <typename VectorT> VectorT GetDirectionAs() const {
+    CVector3D dir = GetDirection();
+    return VectorWriter<VectorT>::Convert(dir);
+  }
 
-    // --- 拉伸方向 1（主方向） ---
-    ExtrudeEndCondition::Type GetEndType1() const {
-        return IsValid() ? m_extrude->endCondition1.type : ExtrudeEndCondition::Type::BLIND;
-    }
+  // --- 拉伸方向 1（主方向） ---
+  // Note: m_extrude->endCondition1 is a struct, not a pointer, so we access
+  // fields directly via . But our macro expects m_data->MemberName. My macro:
+  // return IsValid() ? Data()->MemberName : DefaultValue; For endCondition1
+  // which is a struct member of CExtrude, we can't use the simple macro
+  // directly for its sub-fields unless we treat EndCondition1 as the member.
+  // Let's manually refactor these to use Data() to show the pattern A mixed
+  // with B where possible.
 
-    double GetDepth1() const {
-        return IsValid() ? m_extrude->endCondition1.depth : 0.0;
-    }
+  ExtrudeEndCondition::Type GetEndType1() const {
+    return IsValid() ? Data()->endCondition1.type
+                     : ExtrudeEndCondition::Type::BLIND;
+  }
 
-    double GetOffset1() const {
-        return IsValid() ? m_extrude->endCondition1.offset : 0.0;
-    }
+  double GetDepth1() const {
+    return IsValid() ? Data()->endCondition1.depth : 0.0;
+  }
 
-    bool HasOffset1() const {
-        return IsValid() && m_extrude->endCondition1.hasOffset;
-    }
+  double GetOffset1() const {
+    return IsValid() ? Data()->endCondition1.offset : 0.0;
+  }
 
-    bool IsFlip1() const {
-        return IsValid() && m_extrude->endCondition1.isFlip;
-    }
+  bool HasOffset1() const {
+    return IsValid() && Data()->endCondition1.hasOffset;
+  }
 
-    bool IsFlipMaterialSide1() const {
-        return IsValid() && m_extrude->endCondition1.isFlipMaterialSide;
-    }
+  bool IsFlip1() const { return IsValid() && Data()->endCondition1.isFlip; }
 
-    ReferenceAccessor GetReference1() const {
-        if (IsValid()) {
-            return ReferenceAccessor(m_extrude->endCondition1.referenceEntity);
-        }
-        return ReferenceAccessor(nullptr);
-    }
+  bool IsFlipMaterialSide1() const {
+    return IsValid() && Data()->endCondition1.isFlipMaterialSide;
+  }
 
-    // --- 拉伸方向 2（可选） ---
-    bool HasDirection2() const {
-        return IsValid() && m_extrude->endCondition2.has_value();
+  ReferenceAccessor GetReference1() const {
+    if (IsValid()) {
+      return ReferenceAccessor(Data()->endCondition1.referenceEntity);
     }
+    return ReferenceAccessor(nullptr);
+  }
 
-    ExtrudeEndCondition::Type GetEndType2() const {
-        if (!HasDirection2()) return ExtrudeEndCondition::Type::BLIND;
-        return m_extrude->endCondition2->type;
-    }
+  // --- 拉伸方向 2（可选） ---
+  // endCondition2 is std::optional<ExtrudeEndCondition>
 
-    double GetDepth2() const {
-        if (!HasDirection2()) return 0.0;
-        return m_extrude->endCondition2->depth;
-    }
+  bool HasDirection2() const {
+    return IsValid() && Data()->endCondition2.has_value();
+  }
 
-    double GetOffset2() const {
-        if (!HasDirection2()) return 0.0;
-        return m_extrude->endCondition2->offset;
-    }
+  ExtrudeEndCondition::Type GetEndType2() const {
+    if (!HasDirection2())
+      return ExtrudeEndCondition::Type::BLIND;
+    return Data()->endCondition2->type;
+  }
 
-    bool HasOffset2() const {
-        return HasDirection2() && m_extrude->endCondition2->hasOffset;
-    }
+  double GetDepth2() const {
+    if (!HasDirection2())
+      return 0.0;
+    return Data()->endCondition2->depth;
+  }
 
-    bool IsFlip2() const {
-        return HasDirection2() && m_extrude->endCondition2->isFlip;
-    }
+  double GetOffset2() const {
+    if (!HasDirection2())
+      return 0.0;
+    return Data()->endCondition2->offset;
+  }
 
-    bool IsFlipMaterialSide2() const {
-        return HasDirection2() && m_extrude->endCondition2->isFlipMaterialSide;
-    }
+  bool HasOffset2() const {
+    return HasDirection2() && Data()->endCondition2->hasOffset;
+  }
 
-    ReferenceAccessor GetReference2() const {
-        if (HasDirection2()) {
-            return ReferenceAccessor(m_extrude->endCondition2->referenceEntity);
-        }
-        return ReferenceAccessor(nullptr);
-    }
+  bool IsFlip2() const {
+    return HasDirection2() && Data()->endCondition2->isFlip;
+  }
 
-    // --- 拔模（可选） ---
-    bool HasDraft() const {
-        return IsValid() && m_extrude->draft.has_value();
-    }
+  bool IsFlipMaterialSide2() const {
+    return HasDirection2() && Data()->endCondition2->isFlipMaterialSide;
+  }
 
-    double GetDraftAngle() const {
-        if (!HasDraft()) return 0.0;
-        return m_extrude->draft->angle;
+  ReferenceAccessor GetReference2() const {
+    if (HasDirection2()) {
+      return ReferenceAccessor(Data()->endCondition2->referenceEntity);
     }
+    return ReferenceAccessor(nullptr);
+  }
 
-    bool IsDraftOutward() const {
-        if (!HasDraft()) return false;
-        return m_extrude->draft->outward;
-    }
+  // --- 拔模（可选） ---
+  ACCESSOR_HAS_GETTER(Draft, draft)
+  ACCESSOR_OPTIONAL_GETTER(double, DraftAngle, draft, angle, 0.0)
+  // ACCESSOR_OPTIONAL_GETTER(bool, IsDraftOutward, draft, outward, false) //
+  // 宏名字冲突？ No, macro is generic. But IsDraftOutward implies boolean
+  // return.
 
-    // --- 薄壁（可选） ---
-    bool HasThinWall() const {
-        return IsValid() && m_extrude->thinWall.has_value();
-    }
+  bool IsDraftOutward() const {
+    if (!HasDraft())
+      return false;
+    return Data()->draft->outward;
+  }
 
-    double GetThinWallThickness() const {
-        if (!HasThinWall()) return 0.0;
-        return m_extrude->thinWall->thickness;
-    }
+  // --- 薄壁（可选） ---
+  ACCESSOR_HAS_GETTER(ThinWall, thinWall)
+  ACCESSOR_OPTIONAL_GETTER(double, ThinWallThickness, thinWall, thickness, 0.0)
 
-    bool IsThinWallOneSided() const {
-        if (!HasThinWall()) return false;
-        return m_extrude->thinWall->isOneSided;
-    }
+  bool IsThinWallOneSided() const {
+    if (!HasThinWall())
+      return false;
+    return Data()->thinWall->isOneSided;
+  }
 
-    bool IsThinWallCovered() const {
-        if (!HasThinWall()) return false;
-        return m_extrude->thinWall->isCovered;
-    }
+  bool IsThinWallCovered() const {
+    if (!HasThinWall())
+      return false;
+    return Data()->thinWall->isCovered;
+  }
 };
 
 } // namespace Accessor

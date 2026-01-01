@@ -104,10 +104,14 @@ void TraverseAndDisplayFeatures(const std::string &xmlPath) {
       extraInfo = std::to_string(sketch->GetSegmentCount()) + " segs";
     } else if (auto extrude = feat->As<ExtrudeAccessor>()) {
       typeStr = "Extrude";
-      extraInfo = "D=" + std::to_string(extrude->GetDepth1());
+      // 演示：使用新的直接访问方式 (Data()->...)
+      // 旧方式: extrude->GetDepth1()
+      // 新方式: extrude->Data()->endCondition1.depth
+      extraInfo = "D=" + std::to_string(extrude->Data()->endCondition1.depth);
     } else if (auto revolve = feat->As<RevolveAccessor>()) {
       typeStr = "Revolve";
-      extraInfo = "Angle=" + std::to_string(revolve->GetPrimaryAngle());
+      // 演示：使用 Data() 显式访问底层数据
+      extraInfo = "Angle=" + std::to_string(revolve->Data()->primaryAngle);
     } else {
       typeStr = "Other";
     }
@@ -284,7 +288,8 @@ void ExtractExtrudeData(const std::string &xmlPath) {
                 << ")" << std::endl;
 
       std::cout << "  操作类型: ";
-      switch (extrude->GetOperation()) {
+      // 使用新API直接访问枚举
+      switch (extrude->Data()->operation) {
       case BooleanOp::BOSS:
         std::cout << "BOSS (凸出)";
         break;
@@ -604,8 +609,8 @@ void AnalyzeDependencies(const std::string &xmlPath) {
     }
     // 旋转依赖分析
     else if (auto revolve = feat->As<RevolveAccessor>()) {
-      // 依赖于轮廓草图
-      std::string profileID = revolve->GetProfileSketchID();
+      // 依赖于轮廓草图 (直接访问)
+      std::string profileID = revolve->Data()->profileSketchID;
       if (!profileID.empty()) {
         dependencies[featID].push_back(profileID);
       }
