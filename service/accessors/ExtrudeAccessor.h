@@ -42,7 +42,7 @@ public:
 
   const CExtrude *operator->() const { return m_extrude.get(); }
 
-  bool IsValid() const { return m_extrude != nullptr; }
+  bool IsValid() const override { return m_extrude != nullptr; }
 
   // --- 核心属性 ---
   std::string GetProfileSketchID() const {

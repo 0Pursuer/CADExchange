@@ -4,7 +4,6 @@
 #include <optional>
 #include <string>
 
-
 namespace CADExchange {
 namespace Accessor {
 
@@ -28,7 +27,7 @@ public:
   virtual ~FeatureAccessorBase() = default;
 
   // --- 有效性检查 ---
-  bool IsValid() const { return m_feature != nullptr; }
+  virtual bool IsValid() const { return m_feature != nullptr; }
 
   /**
    * @brief 转换为特定类型的 Accessor (语法糖)

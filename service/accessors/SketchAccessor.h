@@ -173,7 +173,7 @@ public:
 
   const CSketch *operator->() const { return m_sketch.get(); }
 
-  bool IsValid() const { return m_sketch != nullptr; }
+  bool IsValid() const override { return m_sketch != nullptr; }
 
   // --- 参考平面 ---
   ACCESSOR_REF_GETTER(ReferenceAccessor, ReferencePlane, referencePlane)

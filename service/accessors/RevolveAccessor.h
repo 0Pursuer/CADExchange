@@ -5,7 +5,6 @@
 #include <memory>
 #include <string>
 
-
 namespace CADExchange {
 namespace Accessor {
 
@@ -40,7 +39,7 @@ public:
 
   const CRevolve *operator->() const { return m_revolve.get(); }
 
-  bool IsValid() const { return m_revolve != nullptr; }
+  bool IsValid() const override { return m_revolve != nullptr; }
 
   // --- 基本属性 ---
   ACCESSOR_GETTER(std::string, ProfileSketchID, profileSketchID, "")
