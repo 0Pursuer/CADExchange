@@ -42,6 +42,8 @@ public:
 
   const CExtrude *operator->() const { return m_extrude.get(); }
 
+  bool IsValid() const { return m_extrude != nullptr; }
+
   // --- 核心属性 ---
   std::string GetProfileSketchID() const {
     // Access via Data() or operator->
