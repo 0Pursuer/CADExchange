@@ -4,7 +4,6 @@
 #include <memory>
 #include <string>
 
-
 namespace CADExchange {
 namespace Accessor {
 
@@ -60,6 +59,18 @@ public:
       return feat->targetFeatureID;
     }
     return "";
+  }
+
+  /**
+   * @brief 判断当前引用是否指向标准基准（面、轴或原点）。
+   */
+  bool IsStandard() const {
+    if (auto feat = std::dynamic_pointer_cast<const CRefFeature>(m_ref)) {
+      const std::string &id = feat->targetFeatureID;
+      return StandardID::IsStandardPlane(id) ||
+             StandardID::IsStandardAxis(id) || StandardID::IsStandardPoint(id);
+    }
+    return false;
   }
 
   /**

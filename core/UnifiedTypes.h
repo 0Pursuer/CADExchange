@@ -51,8 +51,6 @@ inline bool operator!=(const CPoint3D &a, const CPoint3D &b) {
   return !(a == b);
 }
 
-
-
 struct CVector3D {
   double x{};
   double y{};
@@ -75,19 +73,17 @@ struct CVector3D {
   double Dot(const CVector3D &other) const {
     return x * other.x + y * other.y + z * other.z;
   }
-  
 
   bool IsParallel(const CVector3D &other) const {
     double lenA = std::sqrt(x * x + y * y + z * z);
-    double lenB = std::sqrt(other.x * other.x + other.y * other.y +
-                            other.z * other.z);
+    double lenB =
+        std::sqrt(other.x * other.x + other.y * other.y + other.z * other.z);
     if (lenA < GeoUtils::EPSILON || lenB < GeoUtils::EPSILON) {
       return false; // 零向量无法定义方向
     }
     double dot = (x * other.x + y * other.y + z * other.z) / (lenA * lenB);
     return std::abs(std::abs(dot) - 1.0) < (GeoUtils::EPSILON * 10);
   }
-
 };
 
 /** * @brief 计算两个向量的叉积。
@@ -99,9 +95,7 @@ inline CVector3D Cross(const CVector3D &a, const CVector3D &b) {
 /**
  * @brief 计算两个向量的点积。
  */
-inline double Dot(const CVector3D &a, const CVector3D &b) {
-  return a.Dot(b);
-}
+inline double Dot(const CVector3D &a, const CVector3D &b) { return a.Dot(b); }
 
 /**
  * @brief 判断两个向量是否平行或反向。
@@ -111,16 +105,14 @@ inline bool IsParallel(const CVector3D &a, const CVector3D &b) {
 }
 
 // 支持点减点得到向量
-inline CVector3D operator-(const CPoint3D& a, const CPoint3D& b) {
+inline CVector3D operator-(const CPoint3D &a, const CPoint3D &b) {
   return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
 
 // 支持点加向量得到点
-inline CPoint3D operator+(const CPoint3D& p, const CVector3D& v) {
+inline CPoint3D operator+(const CPoint3D &p, const CVector3D &v) {
   return {p.x + v.x, p.y + v.y, p.z + v.z};
 }
-
-
 
 /**
  * @brief 统一的标准基准 ID 及辅助匹配逻辑，用于屏蔽不同 CAD 系统默认平面差异。
@@ -146,7 +138,24 @@ inline constexpr CVector3D kAxisX{1.0, 0.0, 0.0};
 inline constexpr CVector3D kAxisY{0.0, 1.0, 0.0};
 inline constexpr CVector3D kAxisZ{0.0, 0.0, 1.0};
 
+/**
+ * @brief 判断给定的 ID 是否为标准基准面 ID。
+ */
+inline bool IsStandardPlane(const std::string &id) {
+  return id == PLANE_XY || id == PLANE_YZ || id == PLANE_ZX;
+}
 
+/**
+ * @brief 判断给定的 ID 是否为标准基准轴 ID。
+ */
+inline bool IsStandardAxis(const std::string &id) {
+  return id == AXIS_X || id == AXIS_Y || id == AXIS_Z;
+}
+
+/**
+ * @brief 判断给定的 ID 是否为标准原点 ID。
+ */
+inline bool IsStandardPoint(const std::string &id) { return id == ORIGIN; }
 
 /**
  * @brief 将法向量映射为标准基准面 ID。

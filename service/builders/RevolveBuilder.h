@@ -49,6 +49,8 @@ public:
   }
 
   RevolveBuilder &SetAxisRef(std::shared_ptr<CRefEntityBase> edgeRef) {
+    // 验证引用实体的合法性
+    ValidateReference(edgeRef);
 
     m_feature->axis.referenceEntity = std::move(edgeRef);
     return *this;

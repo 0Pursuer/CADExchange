@@ -33,23 +33,8 @@ public:
     if (!ref) {
       throw std::invalid_argument("Reference plane cannot be null");
     }
-    if(ref->refType==RefType::FEATURE_DATUM_PLANE ) {
-      if(auto standardPlane = std::dynamic_pointer_cast<CRefPlane>(ref)) {
-        // 如果是标准平面，直接使用
-        if (standardPlane->targetFeatureID == StandardID::PLANE_XY ||
-            standardPlane->targetFeatureID == StandardID::PLANE_YZ ||
-            standardPlane->targetFeatureID == StandardID::PLANE_ZX) {
-          // 标准平面，直接使用
-        } else {
-          // 自定义基准面，需要确保model中存在该特征
-          auto planeFeature = m_model.GetFeatureAs<CFeatureBase>(standardPlane->targetFeatureID);
-          if(!planeFeature) {
-            throw std::invalid_argument("Reference plane feature not found in model: " + standardPlane->targetFeatureID);
-          }
-        }
-      }
-    }
 
+    ValidateReference(ref);
 
     m_feature->referencePlane = ref;
     return *this;
@@ -93,7 +78,8 @@ public:
    */
   template <typename PointT>
   std::string AddArc(const PointT &center, double radius, double startAngle,
-                     double endAngle,bool isClockwise = false, bool isConstruction = false) {
+                     double endAngle, bool isClockwise = false,
+                     bool isConstruction = false) {
     if (radius <= 0) {
       throw std::invalid_argument("radius must be positive");
     }

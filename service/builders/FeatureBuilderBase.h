@@ -4,8 +4,10 @@
 #include "StringHelper.h"
 #include <atomic>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
+
 
 namespace CADExchange {
 namespace Builder {
@@ -42,7 +44,7 @@ public:
   /**
    * @brief 获取关联的模型。
    */
-  UnifiedModel* GetModel() { return &m_model; }
+  UnifiedModel *GetModel() { return &m_model; }
 
   /**
    * @brief 获取正在构建的特征。
@@ -74,6 +76,56 @@ public:
   }
 
 protected:
+  /**
+   * @brief 验证引用实体是否合法。
+   *
+   * 对于基准面、基准轴等引用，如果不是标准 ID，则必须在模型中存在对应特征。
+   *
+   * @param ref 需要验证的引用实体指针
+   * @throws std::runtime_error 当引用特征在模型中不存在时抛出
+   */
+  void ValidateReference(const std::shared_ptr<CRefEntityBase> &ref) const {
+    if (!ref)
+      return;
+
+    // 处理基准面引用
+    if (ref->refType == RefType::FEATURE_DATUM_PLANE) {
+      if (auto plane = std::dynamic_pointer_cast<const CRefPlane>(ref)) {
+        if (!StandardID::IsStandardPlane(plane->targetFeatureID)) {
+          if (!m_model.GetFeature(plane->targetFeatureID)) {
+            throw std::runtime_error(
+                "Reference plane feature not found in model: " +
+                plane->targetFeatureID);
+          }
+        }
+      }
+    }
+    // 处理基准轴引用
+    else if (ref->refType == RefType::FEATURE_DATUM_AXIS) {
+      if (auto axis = std::dynamic_pointer_cast<const CRefAxis>(ref)) {
+        if (!StandardID::IsStandardAxis(axis->targetFeatureID)) {
+          if (!m_model.GetFeature(axis->targetFeatureID)) {
+            throw std::runtime_error(
+                "Reference axis feature not found in model: " +
+                axis->targetFeatureID);
+          }
+        }
+      }
+    }
+    // 处理基准点引用
+    else if (ref->refType == RefType::FEATURE_DATUM_POINT) {
+      if (auto pnt = std::dynamic_pointer_cast<const CRefPoint>(ref)) {
+        if (!StandardID::IsStandardPoint(pnt->targetFeatureID)) {
+          if (!m_model.GetFeature(pnt->targetFeatureID)) {
+            throw std::runtime_error(
+                "Reference point feature not found in model: " +
+                pnt->targetFeatureID);
+          }
+        }
+      }
+    }
+  }
+
   std::shared_ptr<T> m_feature;
   UnifiedModel &m_model;
 };
