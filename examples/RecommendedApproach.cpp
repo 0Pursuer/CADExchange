@@ -120,6 +120,7 @@ std::string DemoImprovedExtrudeBuilder(UnifiedModel& model) {
 std::string BuildBaseSketch(UnifiedModel& model) {
     SketchBuilder sketch(model, "BaseSketch");
     sketch.SetReferencePlane(Ref::XY());
+    sketch.SetCSys(CPoint3D{0,0,0}, CVector3D{1,0,0}, CVector3D{0,1,0}, CVector3D{0,0,1});
     sketch.AddLine(CPoint3D{0.0, 0.0, 0.0}, CPoint3D{100.0, 0.0, 0.0});
     sketch.AddLine(CPoint3D{100.0, 0.0, 0.0}, CPoint3D{100.0, 50.0, 0.0});
     sketch.AddLine(CPoint3D{100.0, 50.0, 0.0}, CPoint3D{0.0, 50.0, 0.0});
@@ -135,6 +136,8 @@ std::string CreateFaceCenteredSketch(UnifiedModel& model,
                                      double maxY) {
     SketchBuilder sketch(model, name);
     sketch.SetReferencePlane(ref);
+    sketch.SetCSys(CPoint3D{0, 0, 20.0}, CVector3D{1, 0, 0}, CVector3D{0, 1, 0},
+                   CVector3D{0, 0, 1});
     sketch.AddLine(CPoint3D{minX, minY, 20.0}, CPoint3D{maxX, minY, 20.0});
     sketch.AddLine(CPoint3D{maxX, minY, 20.0}, CPoint3D{maxX, maxY, 20.0});
     sketch.AddLine(CPoint3D{maxX, maxY, 20.0}, CPoint3D{minX, maxY, 20.0});
@@ -145,6 +148,8 @@ std::string CreateFaceCenteredSketch(UnifiedModel& model,
 std::string BuildRevolveProfileSketch(UnifiedModel& model) {
     SketchBuilder sketch(model, "RevolveProfile");
     sketch.SetReferencePlane(Ref::YZ());
+    sketch.SetCSys(CPoint3D{0, 0, 0}, CVector3D{0, 1, 0}, CVector3D{0, 0, 1},
+                   CVector3D{1, 0, 0});
     sketch.AddLine(CPoint3D{0.0, 40.0, 0.0}, CPoint3D{0.0, 40.0, 25.0});
     sketch.AddLine(CPoint3D{0.0, 40.0, 25.0}, CPoint3D{0.0, 50.0, 25.0});
     sketch.AddLine(CPoint3D{0.0, 50.0, 25.0}, CPoint3D{0.0, 50.0, 0.0});

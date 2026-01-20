@@ -195,12 +195,31 @@ struct CSketchConstraint {
 };
 
 /**
+ * @brief 草图局部坐标系
+*/
+struct CSketchCSys {
+  CPoint3D origin;
+  CVector3D xDir;
+  CVector3D yDir;
+  CVector3D zDir;
+
+  bool IsValid() const {
+    CVector3D zCross = Cross(xDir, yDir);
+    zCross.Normalize();
+    CVector3D zDirNorm = zDir;
+    zDirNorm.Normalize();
+    return zCross.IsParallel(zDirNorm);
+  }
+};
+
+/**
  * @brief 草图特征。
  */
 struct CSketch : public CFeatureBase {
   std::shared_ptr<CRefEntityBase> referencePlane;
   std::vector<std::shared_ptr<CSketchSeg>> segments;
   std::vector<CSketchConstraint> constraints;
+  CSketchCSys sketchCSys;
   
   CSketch() { featureType = FeatureType::Sketch; }
 };

@@ -182,6 +182,32 @@ public:
     return IsValid() && Data()->referencePlane != nullptr;
   }
 
+  // --- 局部坐标系 ---
+  bool GetCSys(CPoint3D &outOrigin, CVector3D &outXDir, CVector3D &outYDir,
+               CVector3D &outZDir) const {
+    if (!IsValid())
+      return false;
+    outOrigin = m_sketch->sketchCSys.origin;
+    outXDir = m_sketch->sketchCSys.xDir;
+    outYDir = m_sketch->sketchCSys.yDir;
+    outZDir = m_sketch->sketchCSys.zDir;
+    return true;
+  }
+
+  template <typename PointT, typename VectorT>
+  bool GetCSys(PointT &outOrigin, VectorT &outXDir, VectorT &outYDir,
+               VectorT &outZDir) const {
+    CPoint3D o;
+    CVector3D x, y, z;
+    if (!GetCSys(o, x, y, z))
+      return false;
+    outOrigin = PointWriter<PointT>::Convert(o);
+    outXDir = VectorWriter<VectorT>::Convert(x);
+    outYDir = VectorWriter<VectorT>::Convert(y);
+    outZDir = VectorWriter<VectorT>::Convert(z);
+    return true;
+  }
+
   // --- 几何段访问 ---
   int GetSegmentCount() const {
     if (!IsValid())

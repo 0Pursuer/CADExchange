@@ -174,6 +174,15 @@ void serialize(Archive &ar, CSketchConstraint &constraint) {
      cereal::make_nvp("Dimension", constraint.dimensionValue));
 }
 
+/**
+ * @brief 序列化草图局部坐标系。
+ */
+template <class Archive> void serialize(Archive &ar, CSketchCSys &csys) {
+  ar(cereal::make_nvp("Origin", csys.origin),
+     cereal::make_nvp("XDir", csys.xDir), cereal::make_nvp("YDir", csys.yDir),
+     cereal::make_nvp("ZDir", csys.zDir));
+}
+
 // ==========================================
 // 特征系统序列化
 // ==========================================
@@ -222,6 +231,7 @@ template <class Archive> void serialize(Archive &ar, CFeatureBase &feat) {
 template <class Archive> void serialize(Archive &ar, CSketch &sk) {
   ar(cereal::base_class<CFeatureBase>(&sk),
      cereal::make_nvp("Plane", sk.referencePlane),
+     cereal::make_nvp("CSys", sk.sketchCSys),
      cereal::make_nvp("Segments", sk.segments),
      cereal::make_nvp("Constraints", sk.constraints));
 }

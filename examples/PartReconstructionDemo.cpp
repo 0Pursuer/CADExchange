@@ -143,8 +143,22 @@ void ExtractSketchData(const std::string &xmlPath) {
     if (auto sketch = feat->As<SketchAccessor>()) {
       PrintSubseparator("草图: " + sketch->GetName());
 
+      // 获取局部坐标系信息
+      std::cout << "局部坐标系 (CSys):" << std::endl;
+      std::array<double, 3> csysOrigin{}, csysX{}, csysY{}, csysZ{};
+      if (sketch->GetCSys(csysOrigin, csysX, csysY, csysZ)) {
+        std::cout << "  原点: (" << csysOrigin[0] << ", " << csysOrigin[1] << ", "
+                  << csysOrigin[2] << ")" << std::endl;
+        std::cout << "  X轴: (" << csysX[0] << ", " << csysX[1] << ", "
+                  << csysX[2] << ")" << std::endl;
+        std::cout << "  Y轴: (" << csysY[0] << ", " << csysY[1] << ", "
+                  << csysY[2] << ")" << std::endl;
+        std::cout << "  Z轴: (" << csysZ[0] << ", " << csysZ[1] << ", "
+                  << csysZ[2] << ")" << std::endl;
+      }
+
       // 获取参考面信息
-      std::cout << "参考面信息:" << std::endl;
+      std::cout << "\n参考面信息:" << std::endl;
       if (sketch->HasReferencePlane()) {
         auto refPlane = sketch->GetReferencePlane();
 
@@ -750,7 +764,11 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
     if (auto sketch = feat->As<SketchAccessor>()) {
       // 重建草图
       std::cout << "  ✓ 识别为草图" << std::endl;
-      std::cout << "  ✓ 建立坐标系...";
+      
+      std::array<double, 3> csysOrigin{}, dummyX{}, dummyY{}, dummyZ{};
+      sketch->GetCSys(csysOrigin, dummyX, dummyY, dummyZ);
+      std::cout << "  ✓ 建立坐标系: Origin(" << csysOrigin[0] << "," 
+                << csysOrigin[1] << "," << csysOrigin[2] << ")...";
 
       if (sketch->HasReferencePlane()) {
         std::cout << " 绑定参考面成功" << std::endl;

@@ -181,6 +181,10 @@ std::string ExtrudeEndConditionTypeToString(ExtrudeEndCondition::Type type) {
     return "UpToVertex";
   case ExtrudeEndCondition::Type::MID_PLANE:
     return "MidPlane";
+  case ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES:
+    return "ThroughAllBothSides";
+  case ExtrudeEndCondition::Type::UNKNOWN:
+    return "Unknown";
   }
   return "Unknown";
 }
@@ -530,6 +534,13 @@ void TinyXMLSerializer::SaveSketch(XMLDocument &doc, XMLElement *element,
                                    const std::shared_ptr<CSketch> &sketch) {
   SaveRefEntity(doc, element, "ReferencePlane", sketch->referencePlane);
 
+  XMLElement *csysElem = doc.NewElement("LocalCSys");
+  element->InsertEndChild(csysElem);
+  SavePoint3D(csysElem, "Origin", sketch->sketchCSys.origin);
+  SaveVector3D(csysElem, "XDir", sketch->sketchCSys.xDir);
+  SaveVector3D(csysElem, "YDir", sketch->sketchCSys.yDir);
+  SaveVector3D(csysElem, "ZDir", sketch->sketchCSys.zDir);
+
   XMLElement *segsElem = doc.NewElement("Segments");
   element->InsertEndChild(segsElem);
   for (const auto &seg : sketch->segments) {
@@ -790,6 +801,14 @@ void TinyXMLSerializer::LoadSketch(XMLElement *element,
                                    std::shared_ptr<CSketch> &sketch) {
   sketch->referencePlane =
       LoadRefEntity(element->FirstChildElement("ReferencePlane"));
+
+  XMLElement *csysElem = element->FirstChildElement("LocalCSys");
+  if (csysElem) {
+    sketch->sketchCSys.origin = LoadPoint3D(csysElem, "Origin");
+    sketch->sketchCSys.xDir = LoadVector3D(csysElem, "XDir");
+    sketch->sketchCSys.yDir = LoadVector3D(csysElem, "YDir");
+    sketch->sketchCSys.zDir = LoadVector3D(csysElem, "ZDir");
+  }
 
   XMLElement *segsElem = element->FirstChildElement("Segments");
   if (segsElem) {
