@@ -642,8 +642,12 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
     ec2->SetAttribute("Depth", extrude->endCondition2->depth);
     ec2->SetAttribute("HasOffset", extrude->endCondition2->hasOffset);
     ec2->SetAttribute("Offset", extrude->endCondition2->offset);
-
-    // ... other fields
+    ec2->SetAttribute("Flip", extrude->endCondition2->isFlip);
+    ec2->SetAttribute("FlipMaterialSide",
+                      extrude->endCondition2->isFlipMaterialSide);
+    SaveRefEntity(doc, ec2, "ReferenceEntity",
+                  extrude->endCondition2->referenceEntity);
+    element->InsertEndChild(ec2);
   }
 }
 
