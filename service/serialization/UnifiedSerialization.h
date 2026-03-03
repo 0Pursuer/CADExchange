@@ -241,7 +241,7 @@ template <class Archive> void serialize(Archive &ar, CSketch &sk) {
  */
 template <class Archive> void serialize(Archive &ar, CExtrude &ext) {
   ar(cereal::base_class<CFeatureBase>(&ext),
-     cereal::make_nvp("Profile", ext.sketchProfile),
+     cereal::make_nvp("ProfileSketchID", ext.profileSketchID),
      cereal::make_nvp("Direction", ext.direction),
      cereal::make_nvp("Operation", ext.operation),
      cereal::make_nvp("EndCondition1", ext.endCondition1),

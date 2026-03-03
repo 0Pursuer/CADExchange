@@ -89,19 +89,7 @@ ReadPartTest.exe
 
 ## 使用指南 (Usage Guide)
 
-### 1. 外部 ID 映射 (External ID Mapping)
-
-为了简化集成，`CADExchange` 允许直接使用外部系统（如 SolidWorks, Creo）的 ID。
-
-```cpp
-// 1. 设置外部 ID
-builder.SetExternalID("SW-12345");
-
-// 2. 使用外部 ID 引用特征
-extrudeBuilder.SetProfileByExternalID("SW-12345");
-```
-
-### 2. 类型适配 (Type Adapters)
+### 1. 类型适配 (Type Adapters)
 
 无需手动转换点和向量类型，只需特化 `PointAdapter` 和 `VectorAdapter`。
 
@@ -117,7 +105,7 @@ namespace CADExchange {
 builder.AddLine(myPoint1, myPoint2);
 ```
 
-### 3. 模型验证 (Validation)
+### 2. 模型验证 (Validation)
 
 在导出前检查模型完整性。
 

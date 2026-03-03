@@ -603,10 +603,9 @@ void TinyXMLSerializer::SaveConstraint(XMLDocument &doc, XMLElement *parent,
 
 void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
                                     const std::shared_ptr<CExtrude> &extrude) {
-  if (extrude->sketchProfile) {
+  if (!extrude->profileSketchID.empty()) {
     XMLElement *profileElem = doc.NewElement("ProfileSketchID");
-    profileElem->SetAttribute("Value",
-                              extrude->sketchProfile->featureID.c_str());
+    profileElem->SetAttribute("Value", extrude->profileSketchID.c_str());
     element->InsertEndChild(profileElem);
   }
 
@@ -617,37 +616,24 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
   element->SetAttribute("Operation",
                         BooleanOpToString(extrude->operation).c_str());
 
-  // EndCondition1
-  XMLElement *ec1 = doc.NewElement("EndCondition1");
-  element->InsertEndChild(ec1);
-  ec1->SetAttribute(
-      "Type",
-      ExtrudeEndConditionTypeToString(extrude->endCondition1.type).c_str());
-  ec1->SetAttribute("Depth", extrude->endCondition1.depth);
-  ec1->SetAttribute("Offset", extrude->endCondition1.offset);
-  ec1->SetAttribute("HasOffset", extrude->endCondition1.hasOffset);
-  ec1->SetAttribute("Flip", extrude->endCondition1.isFlip);
-  ec1->SetAttribute("FlipMaterialSide",
-                    extrude->endCondition1.isFlipMaterialSide);
-  SaveRefEntity(doc, ec1, "ReferenceEntity",
-                extrude->endCondition1.referenceEntity);
+  // 内部辅助函数：将 EndCondition 序列化为 XML 子元素，EC1/EC2 统一使用同一逻辑，
+  // 避免字段不对称导致的静默数据丢失（如 ReferenceEntity 漏写）。
+  auto saveEC = [&](const char *tag, const ExtrudeEndCondition &ec) {
+    XMLElement *elem = doc.NewElement(tag);
+    elem->SetAttribute("Type",
+                       ExtrudeEndConditionTypeToString(ec.type).c_str());
+    elem->SetAttribute("Depth", ec.depth);
+    elem->SetAttribute("Offset", ec.offset);
+    elem->SetAttribute("HasOffset", ec.hasOffset);
+    elem->SetAttribute("Flip", ec.isFlip);
+    elem->SetAttribute("FlipMaterialSide", ec.isFlipMaterialSide);
+    SaveRefEntity(doc, elem, "ReferenceEntity", ec.referenceEntity);
+    element->InsertEndChild(elem);
+  };
 
-  // EndCondition2
+  saveEC("EndCondition1", extrude->endCondition1);
   if (extrude->endCondition2) {
-    XMLElement *ec2 = doc.NewElement("EndCondition2");
-    element->InsertEndChild(ec2);
-    ec2->SetAttribute(
-        "Type",
-        ExtrudeEndConditionTypeToString(extrude->endCondition2->type).c_str());
-    ec2->SetAttribute("Depth", extrude->endCondition2->depth);
-    ec2->SetAttribute("HasOffset", extrude->endCondition2->hasOffset);
-    ec2->SetAttribute("Offset", extrude->endCondition2->offset);
-    ec2->SetAttribute("Flip", extrude->endCondition2->isFlip);
-    ec2->SetAttribute("FlipMaterialSide",
-                      extrude->endCondition2->isFlipMaterialSide);
-    SaveRefEntity(doc, ec2, "ReferenceEntity",
-                  extrude->endCondition2->referenceEntity);
-    element->InsertEndChild(ec2);
+    saveEC("EndCondition2", *extrude->endCondition2);
   }
 }
 
@@ -905,21 +891,9 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
   // Note: In a real scenario, we might need to resolve this ID to a pointer,
   // but CExtrude stores a shared_ptr.
   // The current LoadModel logic in Cereal deserializes the pointer directly if
-  // it was serialized as such. Here we only have the ID. We might need a second
-  // pass to link pointers or store the ID temporarily. For this simplified
-  // implementation, we'll assume the caller or a post-process step handles
-  // linking, OR we just create a dummy sketch with that ID if we can't find it.
-  // However, CExtrude definition has std::shared_ptr<CSketch> sketchProfile.
-  // We can't easily fill this without a lookup map.
-  // For now, let's create a placeholder sketch with the ID so we don't lose the
-  // info.
   if (profileElem) {
-    const char *value = profileElem->Attribute("Value");
-    if (value) {
-      auto placeholder = std::make_shared<CSketch>();
-      placeholder->featureID = value;
-      extrude->sketchProfile = placeholder;
-    }
+    if (const char *value = profileElem->Attribute("Value"))
+      extrude->profileSketchID = value;
   }
 
   XMLElement *directionElem = element->FirstChildElement("Direction");

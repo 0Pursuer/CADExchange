@@ -49,7 +49,6 @@ public:
     // 通用属性
     std::string GetID() const { return IsValid() ? m_feature->featureID : ""; }
     std::string GetName() const { return IsValid() ? m_feature->featureName : ""; }
-    std::string GetExternalID() const { return IsValid() ? m_feature->externalID : ""; }
     bool IsSuppressed() const { return IsValid() ? m_feature->isSuppressed : false; }
 
     // 类型查询

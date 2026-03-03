@@ -35,11 +35,10 @@ public:
    * @throws std::runtime_error 当草图不存在时抛出
    */
   ExtrudeBuilder &SetProfile(const std::string &sketchID) {
-    auto sketch = m_model.GetFeatureAs<CSketch>(sketchID);
-    if (!sketch) {
+    if (!m_model.GetFeatureAs<CSketch>(sketchID)) {
       throw std::runtime_error("Sketch profile not found: " + sketchID);
     }
-    m_feature->sketchProfile = sketch;
+    m_feature->profileSketchID = sketchID;
     return *this;
   }
 
@@ -59,23 +58,6 @@ public:
       throw std::runtime_error("Sketch not found by name: " + sketchName);
     }
     return SetProfile(sketchId);
-  }
-
-  /**
-   * @brief 通过外部系统 ID 设置草图轮廓。
-   *
-   * @param externalID 外部系统的草图 ID
-   * @return 返回 *this 以支持链式调用
-   * @throws std::runtime_error 当草图不存在时抛出
-   */
-  ExtrudeBuilder &SetProfileByExternalID(const std::string &externalID) {
-    auto sketch = m_model.GetFeatureByExternalIDAs<CSketch>(externalID);
-    if (!sketch) {
-      throw std::runtime_error("Sketch profile not found by external ID: " +
-                               externalID);
-    }
-    m_feature->sketchProfile = sketch;
-    return *this;
   }
 
   /**

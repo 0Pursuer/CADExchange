@@ -46,10 +46,9 @@ public:
 
   // --- 核心属性 ---
   std::string GetProfileSketchID() const {
-    // Access via Data() or operator->
-    if (!IsValid() || !Data()->sketchProfile)
+    if (!IsValid())
       return "";
-    return Data()->sketchProfile->featureID;
+    return Data()->profileSketchID;
   }
 
   // 使用宏定义简化代码

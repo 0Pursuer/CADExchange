@@ -46,15 +46,11 @@ public:
     return std::nullopt;
   }
 
-  // --- 通用属性（对应 Builder 的 SetName/SetExternalID 等） ---
+  // --- 通用属性 ---
   std::string GetID() const { return IsValid() ? m_feature->featureID : ""; }
 
   std::string GetName() const {
     return IsValid() ? m_feature->featureName : "";
-  }
-
-  std::string GetExternalID() const {
-    return IsValid() ? m_feature->externalID : "";
   }
 
   bool IsSuppressed() const {

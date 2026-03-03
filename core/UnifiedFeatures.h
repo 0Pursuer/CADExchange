@@ -35,7 +35,6 @@ enum class FeatureType {
 struct CFeatureBase {
   std::string featureID;             ///< 全局唯一标识符 (UUID)
   std::string featureName;           ///< 用户可见名称
-  std::string externalID;            ///< 外部系统 ID (可选)
   bool isSuppressed = false;         ///< 是否被抑制，不参与求解
   FeatureType featureType = FeatureType::Unknown;  ///< 特征类型，避免 dynamic_cast
   virtual ~CFeatureBase() = default; ///< 虚析构函数，避免对象截断
@@ -56,26 +55,26 @@ enum class RefType {
   TOPO_FACE,            // 拓扑面
   TOPO_EDGE,            // 拓扑边
   TOPO_VERTEX,          // 拓扑顶点
-  TOPO_SKETCH_SEG,       // 拓扑草图段
-  KNOWN                // 未知类型
+  TOPO_SKETCH_SEG,      // 拓扑草图段
+  UNKNOWN               // 未知/未初始化类型
 };
 
 struct CRefEntityBase {
-  RefType refType = RefType::KNOWN;
+  RefType refType = RefType::UNKNOWN;
   virtual ~CRefEntityBase() = default;
 };
 
 struct CRefFeature : public CRefEntityBase {
   std::string targetFeatureID;
 
-  CRefFeature(RefType type = RefType::KNOWN) { refType = type; }
+  CRefFeature(RefType type = RefType::UNKNOWN) { refType = type; }
 };
 
 struct CRefSubTopo : public CRefEntityBase {
   std::string parentFeatureID;
   int topologyIndex = -1;
 
-  CRefSubTopo(RefType type = RefType::KNOWN) { refType = type; }
+  CRefSubTopo(RefType type = RefType::UNKNOWN) { refType = type; }
 };
 
 struct CRefPlane : public CRefFeature {
@@ -93,7 +92,9 @@ struct CRefSketch : public CRefFeature {
 
 struct CRefFace : public CRefSubTopo {
   CVector3D normal;
-  CPoint3D centroid; // 几何中心
+  /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles) 第一个三角形的重心，
+  /// 保证该点落在面的几何表面内，用于 SelectByRay 选面。并非该面的几何质心。
+  CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
 
@@ -266,7 +267,7 @@ struct ExtrudeEndCondition {
  * @brief 拉伸特征。
  */
 struct CExtrude : public CFeatureBase {
-  std::shared_ptr<CSketch> sketchProfile;
+  std::string profileSketchID;          ///< 草图轮廓的特征 ID（引用，不嵌入）
   CVector3D direction = {0, 0, 1};
   ExtrudeEndCondition endCondition1;
   std::optional<ExtrudeEndCondition> endCondition2;
