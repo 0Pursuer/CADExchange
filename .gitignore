@@ -1,0 +1,4 @@
+build/
+build_ninja/
+build_msvc/
+.cache/
