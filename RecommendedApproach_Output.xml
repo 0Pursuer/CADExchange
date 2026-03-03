@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<UnifiedModel UnitSystem="Meter" ModelName="model RecommendedApproach" FeatureCount="10">
+    <Feature Type="Sketch" ID="FB-1" Name="BaseSketch" Suppressed="false">
+        <ReferencePlane TargetFeatureID="STD_DATUM_XY" Origin="(0.000000,0.000000,0.000000)" XDir="(1.000000,0.000000,0.000000)" YDir="(0.000000,1.000000,0.000000)" Normal="(0.000000,0.000000,1.000000)" Type="Plane"/>
+        <LocalCSys Origin="(0.000000,0.000000,0.000000)" XDir="(1.000000,0.000000,0.000000)" YDir="(0.000000,1.000000,0.000000)" ZDir="(0.000000,0.000000,1.000000)"/>
+        <Segments>
+            <Segment LocalID="L_1" Type="Line" Construction="false" Start="(0.000000,0.000000,0.000000)" End="(100.000000,0.000000,0.000000)"/>
+            <Segment LocalID="L_2" Type="Line" Construction="false" Start="(100.000000,0.000000,0.000000)" End="(100.000000,50.000000,0.000000)"/>
+            <Segment LocalID="L_3" Type="Line" Construction="false" Start="(100.000000,50.000000,0.000000)" End="(0.000000,50.000000,0.000000)"/>
+            <Segment LocalID="L_4" Type="Line" Construction="false" Start="(0.000000,50.000000,0.000000)" End="(0.000000,0.000000,0.000000)"/>
+            <Segment LocalID="C_5" Type="Circle" Construction="false" Center="(50.000000,25.000000,0.000000)" Radius="15"/>
+        </Segments>
+        <Constraints/>
+    </Feature>
+    <Feature Type="Extrude" Operation="BOSS" ID="FB-2" Name="Extrude_Pad" Suppressed="false">
+        <ProfileSketchID Value="FB-1"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="Blind" Depth="20" Offset="0" HasOffset="false" Flip="false" FlipMaterialSide="false"/>
+    </Feature>
+    <Feature Type="Sketch" ID="FB-3" Name="SketchOnFace" Suppressed="false">
+        <ReferencePlane ParentFeatureID="FB-2" TopologyIndex="0" U="(1.000000,0.000000,0.000000)" V="(0.000000,1.000000,0.000000)" Normal="(0.000000,0.000000,1.000000)" Center="(50.000000,25.000000,20.000000)" Type="Face"/>
+        <LocalCSys Origin="(0.000000,0.000000,20.000000)" XDir="(1.000000,0.000000,0.000000)" YDir="(0.000000,1.000000,0.000000)" ZDir="(0.000000,0.000000,1.000000)"/>
+        <Segments>
+            <Segment LocalID="L_1" Type="Line" Construction="false" Start="(35.000000,15.000000,20.000000)" End="(65.000000,15.000000,20.000000)"/>
+            <Segment LocalID="L_2" Type="Line" Construction="false" Start="(65.000000,15.000000,20.000000)" End="(65.000000,35.000000,20.000000)"/>
+            <Segment LocalID="L_3" Type="Line" Construction="false" Start="(65.000000,35.000000,20.000000)" End="(35.000000,35.000000,20.000000)"/>
+            <Segment LocalID="L_4" Type="Line" Construction="false" Start="(35.000000,35.000000,20.000000)" End="(35.000000,15.000000,20.000000)"/>
+        </Segments>
+        <Constraints/>
+    </Feature>
+    <Feature Type="Extrude" Operation="Cut" ID="FB-4" Name="Extrude_Cut" Suppressed="false">
+        <ProfileSketchID Value="FB-3"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="ThroughAll" Depth="0" Offset="0" HasOffset="false" Flip="false" FlipMaterialSide="false"/>
+    </Feature>
+    <Feature Type="Sketch" ID="FB-5" Name="RevolveProfile" Suppressed="false">
+        <ReferencePlane TargetFeatureID="STD_DATUM_YZ" Origin="(0.000000,0.000000,0.000000)" XDir="(0.000000,1.000000,0.000000)" YDir="(0.000000,0.000000,1.000000)" Normal="(1.000000,0.000000,0.000000)" Type="Plane"/>
+        <LocalCSys Origin="(0.000000,0.000000,0.000000)" XDir="(0.000000,1.000000,0.000000)" YDir="(0.000000,0.000000,1.000000)" ZDir="(1.000000,0.000000,0.000000)"/>
+        <Segments>
+            <Segment LocalID="L_1" Type="Line" Construction="false" Start="(0.000000,40.000000,0.000000)" End="(0.000000,40.000000,25.000000)"/>
+            <Segment LocalID="L_2" Type="Line" Construction="false" Start="(0.000000,40.000000,25.000000)" End="(0.000000,50.000000,25.000000)"/>
+            <Segment LocalID="L_3" Type="Line" Construction="false" Start="(0.000000,50.000000,25.000000)" End="(0.000000,50.000000,0.000000)"/>
+        </Segments>
+        <Constraints/>
+    </Feature>
+    <Feature Type="Revolve" ProfileSketchID="FB-5" AngleKind="0" PrimaryAngle="360" SecondaryAngle="0" ID="FB-6" Name="RevolveFeature" Suppressed="false">
+        <Axis RefLocalID="" Origin="(0.000000,0.000000,0.000000)" Direction="(0.000000,0.000000,0.000000)">
+            <ReferenceEntity TargetFeatureID="STD_AXIS_Z" Type="Axis"/>
+        </Axis>
+    </Feature>
+    <Feature Type="Extrude" Operation="BOSS" ID="FB-7" Name="ImprovedExtrude_1" Suppressed="false">
+        <ProfileSketchID Value="FB-1"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="Blind" Depth="15" Offset="0" HasOffset="false" Flip="false" FlipMaterialSide="false"/>
+    </Feature>
+    <Feature Type="Extrude" Operation="BOSS" ID="FB-8" Name="ImprovedExtrude_2" Suppressed="false">
+        <ProfileSketchID Value="FB-1"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="UpToVertex" Depth="0" Offset="0" HasOffset="false" Flip="false" FlipMaterialSide="false">
+            <ReferenceEntity ParentFeatureID="FB-7" TopologyIndex="0" Position="(50.000000,25.000000,30.000000)" Type="Vertex"/>
+        </EndCondition1>
+    </Feature>
+    <Feature Type="Extrude" Operation="BOSS" ID="FB-9" Name="BiDirectionalExtrude" Suppressed="false">
+        <ProfileSketchID Value="FB-1"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="Blind" Depth="10" Offset="0" HasOffset="false" Flip="false" FlipMaterialSide="false"/>
+        <EndCondition2 Type="Blind" Depth="-5" HasOffset="false" Offset="0"/>
+    </Feature>
+    <Feature Type="Extrude" Operation="BOSS" ID="FB-10" Name="ExtrudeToPlane" Suppressed="false">
+        <ProfileSketchID Value="FB-1"/>
+        <Direction Value="(0.000000,0.000000,1.000000)"/>
+        <EndCondition1 Type="UpToFace" Depth="0" Offset="5" HasOffset="true" Flip="false" FlipMaterialSide="false">
+            <ReferenceEntity TargetFeatureID="STD_DATUM_XY" Origin="(0.000000,0.000000,0.000000)" XDir="(1.000000,0.000000,0.000000)" YDir="(0.000000,0.000000,0.000000)" Normal="(0.000000,0.000000,1.000000)" Type="Plane"/>
+        </EndCondition1>
+    </Feature>
+</UnifiedModel>
