@@ -231,6 +231,7 @@ bool TinyXMLSerializer::Save(const UnifiedModel &model,
   root->SetAttribute("ModelName", model.modelName.c_str());
   root->SetAttribute("FeatureCount",
                      static_cast<int64_t>(model.GetFeatures().size()));
+  root->SetAttribute("SchemaVersion", 1);
 
   // Features
   for (const auto &feature : model.GetFeatures()) {
@@ -635,6 +636,16 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
   if (extrude->endCondition2) {
     saveEC("EndCondition2", *extrude->endCondition2);
   }
+
+  // 薄壁参数（可选）——若未设置则不写节点，保持旧 XML 兼容
+  if (extrude->thinWall.has_value()) {
+    XMLElement *twElem = doc.NewElement("ThinWall");
+    twElem->SetAttribute("Thickness", extrude->thinWall->thickness);
+    twElem->SetAttribute("OneSided",  extrude->thinWall->isOneSided);
+    twElem->SetAttribute("Outward",   extrude->thinWall->isOutward);
+    twElem->SetAttribute("Covered",   extrude->thinWall->isCovered);
+    element->InsertEndChild(twElem);
+  }
 }
 
 void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
@@ -675,6 +686,16 @@ bool TinyXMLSerializer::Load(UnifiedModel &model,
     return false;
   }
 
+  // SchemaVersion 检查（warn but continue for forward compatibility）
+  int schemaVersion = 0;
+  if (root->QueryIntAttribute("SchemaVersion", &schemaVersion) != XML_SUCCESS) {
+    std::cerr << "[TinyXMLSerializer][WARN] Missing SchemaVersion attribute — "
+                 "file may have been created by an older version.\n";
+  } else if (schemaVersion != 1) {
+    std::cerr << "[TinyXMLSerializer][WARN] SchemaVersion=" << schemaVersion
+              << " (expected 1) — compatibility not guaranteed.\n";
+  }
+
   const char *unitText = root->Attribute("UnitSystem");
   if (auto unitOpt = UnitTypeFromString(unitText)) {
     model.unit = *unitOpt;
@@ -691,6 +712,14 @@ bool TinyXMLSerializer::Load(UnifiedModel &model,
     auto feature = LoadFeature(featElem);
     if (feature) {
       model.AddFeature(feature);
+    } else {
+      // 严格模式：记录跳过原因（Type 未知或 ID 缺失）
+      const char *typeStr = featElem->Attribute("Type");
+      const char *idStr   = featElem->Attribute("ID");
+      std::cerr << "[TinyXMLSerializer][WARN] Skipped Feature"
+                << " Type=" << (typeStr ? typeStr : "<missing>")
+                << " ID="   << (idStr   ? idStr   : "<missing>")
+                << " — unknown type or missing ID.\n";
     }
     featElem = featElem->NextSiblingElement("Feature");
   }
@@ -754,7 +783,7 @@ std::shared_ptr<CFeatureBase>
 TinyXMLSerializer::LoadFeature(XMLElement *element) {
   const char *typeStr = element->Attribute("Type");
   if (!typeStr)
-    return nullptr;
+    return nullptr; // 无 Type，调用方会打印 warn
   std::string type = typeStr;
 
   std::shared_ptr<CFeatureBase> feature;
@@ -771,12 +800,19 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto revolve = std::make_shared<CRevolve>();
     LoadRevolve(element, revolve);
     feature = revolve;
+  } else {
+    return nullptr; // 未知 Type，调用方会打印 warn
   }
 
   if (feature) {
     const char *id = element->Attribute("ID");
-    if (id)
-      feature->featureID = id;
+    if (!id || std::string(id).empty()) {
+      // 严格模式：ID 缺失或为空，丢弃该特征
+      std::cerr << "[TinyXMLSerializer][WARN] Feature Type=" << type
+                << " has missing or empty ID — skipped.\n";
+      return nullptr;
+    }
+    feature->featureID = id;
     const char *name = element->Attribute("Name");
     if (name)
       feature->featureName = name;
@@ -907,9 +943,12 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
 
   XMLElement *ec1 = element->FirstChildElement("EndCondition1");
   if (ec1) {
-    if (auto typeOpt =
-            ExtrudeEndConditionTypeFromString(ec1->Attribute("Type"))) {
+    if (auto typeOpt = ExtrudeEndConditionTypeFromString(ec1->Attribute("Type"))) {
       extrude->endCondition1.type = *typeOpt;
+    } else {
+      std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
+                << "' EC1 has missing or unknown Type attribute — "
+                   "defaulting to UNKNOWN.\n";
     }
     ec1->QueryDoubleAttribute("Depth", &extrude->endCondition1.depth);
     ec1->QueryDoubleAttribute("Offset", &extrude->endCondition1.offset);
@@ -926,9 +965,12 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
   XMLElement *ec2 = element->FirstChildElement("EndCondition2");
   if (ec2) {
     ExtrudeEndCondition cond2;
-    if (auto typeOpt =
-            ExtrudeEndConditionTypeFromString(ec2->Attribute("Type"))) {
+    if (auto typeOpt = ExtrudeEndConditionTypeFromString(ec2->Attribute("Type"))) {
       cond2.type = *typeOpt;
+    } else {
+      std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
+                << "' EC2 has missing or unknown Type attribute — "
+                   "defaulting to UNKNOWN.\n";
     }
     ec2->QueryDoubleAttribute("Depth", &cond2.depth);
     ec2->QueryDoubleAttribute("Offset", &cond2.offset);
@@ -943,6 +985,22 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
     }
     
     extrude->endCondition2 = cond2;
+  }
+
+  // 薄壁参数（可选）
+  XMLElement *twElem = element->FirstChildElement("ThinWall");
+  if (twElem) {
+    ThinWallOption tw;
+    twElem->QueryDoubleAttribute("Thickness", &tw.thickness);
+    twElem->QueryBoolAttribute("OneSided",    &tw.isOneSided);
+    twElem->QueryBoolAttribute("Outward",     &tw.isOutward);
+    twElem->QueryBoolAttribute("Covered",     &tw.isCovered);
+    if (tw.thickness > 1e-9) {
+      extrude->thinWall = tw;
+    } else {
+      std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
+                << "' ThinWall.Thickness is zero or missing — skipping.\n";
+    }
   }
 }
 

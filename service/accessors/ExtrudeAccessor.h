@@ -169,6 +169,13 @@ public:
     return Data()->thinWall->isOneSided;
   }
 
+  /// 仅 isOneSided=true 时有意义：向外(true) vs 向内(false,默认)
+  bool IsThinWallOutward() const {
+    if (!HasThinWall())
+      return false;
+    return Data()->thinWall->isOutward;
+  }
+
   bool IsThinWallCovered() const {
     if (!HasThinWall())
       return false;

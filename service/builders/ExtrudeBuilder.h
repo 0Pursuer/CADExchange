@@ -158,11 +158,11 @@ public:
    * @throws std::runtime_error 当厚度不为正时抛出
    */
   ExtrudeBuilder &SetThinWall(double thickness, bool isOneSided = true,
-                              bool isCovered = false) {
+                              bool isOutward = false, bool isCovered = false) {
     if (thickness <= 0) {
       throw std::runtime_error("Thickness must be positive.");
     }
-    m_feature->thinWall = ThinWallOption{thickness, isOneSided, isCovered};
+    m_feature->thinWall = ThinWallOption{thickness, isOneSided, isOutward, isCovered};
     return *this;
   }
 };

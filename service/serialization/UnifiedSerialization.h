@@ -199,8 +199,9 @@ template <class Archive> void serialize(Archive &ar, DraftOption &draft) {
  */
 template <class Archive> void serialize(Archive &ar, ThinWallOption &thinWall) {
   ar(cereal::make_nvp("Thickness", thinWall.thickness),
-     cereal::make_nvp("OneSided", thinWall.isOneSided),
-     cereal::make_nvp("Covered", thinWall.isCovered));
+     cereal::make_nvp("OneSided",  thinWall.isOneSided),
+     cereal::make_nvp("Outward",   thinWall.isOutward),
+     cereal::make_nvp("Covered",   thinWall.isCovered));
 }
 
 /**
