@@ -1,6 +1,7 @@
 ﻿#pragma once
 // clang-format off
 #include "UnifiedTypes.h"
+#include <array>
 #include <type_traits>
 // clang-format on
 namespace CADExchange {
@@ -28,6 +29,14 @@ template <> struct PointAdapter<CPoint3D> {
 template <typename T, std::size_t N> struct PointAdapter<T[N],
                                     typename std::enable_if<N == 3>::type> {
   static CPoint3D Convert(const T (&arr)[N]) {
+    return {static_cast<double>(arr[0]), static_cast<double>(arr[1]),
+            static_cast<double>(arr[2])};
+  }
+};
+
+template <typename T, std::size_t N>
+struct PointAdapter<std::array<T, N>, typename std::enable_if<N == 3>::type> {
+  static CPoint3D Convert(const std::array<T, 3>& arr) {
     return {static_cast<double>(arr[0]), static_cast<double>(arr[1]),
             static_cast<double>(arr[2])};
   }
