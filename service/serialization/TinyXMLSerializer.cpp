@@ -206,6 +206,8 @@ ExtrudeEndConditionTypeFromString(const char *text) {
     return ExtrudeEndCondition::Type::UP_TO_VERTEX;
   if (value == "midplane")
     return ExtrudeEndCondition::Type::MID_PLANE;
+  if (value == "throughallbothsides")
+    return ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES;
   return std::nullopt;
 }
 } // namespace
