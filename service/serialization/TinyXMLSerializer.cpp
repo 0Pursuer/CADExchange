@@ -515,17 +515,22 @@ void TinyXMLSerializer::SaveFeature(
   XMLElement *featElem = doc.NewElement("Feature");
   parent->InsertEndChild(featElem);
 
-  if (auto sketch = std::dynamic_pointer_cast<CSketch>(feature)) {
-    featElem->SetAttribute("Type", "Sketch");
-    SaveSketch(doc, featElem, sketch);
-  } else if (auto extrude = std::dynamic_pointer_cast<CExtrude>(feature)) {
-    featElem->SetAttribute("Type", "Extrude");
-    SaveExtrude(doc, featElem, extrude);
-  } else if (auto revolve = std::dynamic_pointer_cast<CRevolve>(feature)) {
-    featElem->SetAttribute("Type", "Revolve");
-    SaveRevolve(doc, featElem, revolve);
-  } else {
-    featElem->SetAttribute("Type", "Unknown");
+  switch (feature->featureType) {
+    case FeatureType::Sketch:
+      featElem->SetAttribute("Type", "Sketch");
+      SaveSketch(doc, featElem, std::static_pointer_cast<CSketch>(feature));
+      break;
+    case FeatureType::Extrude:
+      featElem->SetAttribute("Type", "Extrude");
+      SaveExtrude(doc, featElem, std::static_pointer_cast<CExtrude>(feature));
+      break;
+    case FeatureType::Revolve:
+      featElem->SetAttribute("Type", "Revolve");
+      SaveRevolve(doc, featElem, std::static_pointer_cast<CRevolve>(feature));
+      break;
+    default:
+      featElem->SetAttribute("Type", "Unknown");
+      break;
   }
 
   featElem->SetAttribute("ID", feature->featureID.c_str());

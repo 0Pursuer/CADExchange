@@ -1,9 +1,12 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <utility>
+
+#include "../../core/UnifiedModel.h"
 
 namespace CADExchange::BridgeCommon {
 
@@ -145,5 +148,31 @@ inline bool TryGetJsonStringValue(const std::wstring &json, std::wstring_view ke
   return false;
 }
 
-} // namespace CADExchange::BridgeCommon
+/// Writes the standard "validation" JSON object (including all errors and warnings)
+/// to an already-open wofstream. The caller is responsible for the surrounding braces.
+/// Writes exactly:
+///   "validation": { "valid": ..., "error_count": ..., "warning_count": ...,
+///                   "errors": [...], "warnings": [...] }
+inline void AppendValidationJson(std::wofstream &out, const ValidationReport &report) {
+  out << L"  \"validation\": {\n";
+  out << L"    \"valid\": " << (report.isValid ? L"true" : L"false") << L",\n";
+  out << L"    \"error_count\": " << report.errors.size() << L",\n";
+  out << L"    \"warning_count\": " << report.warnings.size() << L",\n";
+  out << L"    \"errors\": [";
+  for (size_t i = 0; i < report.errors.size(); ++i) {
+    out << (i == 0 ? L"\n      \"" : L",\n      \"")
+        << JsonEscape(std::wstring(report.errors[i].begin(), report.errors[i].end()))
+        << L"\"";
+  }
+  out << (report.errors.empty() ? L"" : L"\n    ") << L"],\n";
+  out << L"    \"warnings\": [";
+  for (size_t i = 0; i < report.warnings.size(); ++i) {
+    out << (i == 0 ? L"\n      \"" : L",\n      \"")
+        << JsonEscape(std::wstring(report.warnings[i].begin(), report.warnings[i].end()))
+        << L"\"";
+  }
+  out << (report.warnings.empty() ? L"" : L"\n    ") << L"]\n";
+  out << L"  }\n";
+}
 
+} // namespace CADExchange::BridgeCommon

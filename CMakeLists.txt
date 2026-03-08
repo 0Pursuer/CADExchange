@@ -25,8 +25,10 @@ include_directories(
 
 # Library target (Internal Service Layer)
 add_library(cadexchange STATIC
+    core/UnitConverter.cpp
     service/serialization/SerializationRegistry.cpp
     service/serialization/TinyXMLSerializer.cpp
+    service/validation/ModelValidator.cpp
     thirdParty/tinyxml2/tinyxml2.cpp
 )
 
@@ -35,6 +37,7 @@ target_include_directories(cadexchange PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/service/builders
     ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization
     ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
+    ${CMAKE_CURRENT_SOURCE_DIR}/service/validation
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
