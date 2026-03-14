@@ -20,10 +20,7 @@ class GeometryCollectorBase {
 public:
   using EdgeType = EdgeT;
 
-  template <typename... Args>
-  auto Collect(Args &&...args)
-      -> decltype(std::declval<Derived &>().CollectImpl(
-          std::forward<Args>(args)...)) {
+  template <typename... Args> auto Collect(Args &&...args) {
     Clear();
     return DerivedSelf().CollectImpl(std::forward<Args>(args)...);
   }
