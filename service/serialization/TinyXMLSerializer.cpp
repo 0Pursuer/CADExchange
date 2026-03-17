@@ -3,8 +3,8 @@
 #include <cctype>
 #include <functional>
 #include <optional>
+#include <cstdio>
 #include <sstream>
-#include <iomanip>
 #include <cmath>
 
 namespace CADExchange {
@@ -14,35 +14,22 @@ using namespace tinyxml2;
 namespace {
 // Helper to format a single double value with max 6 decimals, treating near-zero values as 0
 double CleanupZero(double value) {
-  // If the absolute value is extremely small, treat it as 0
-  if (std::abs(value) < 1e-10) {
+  if (std::abs(value) < 1e-10)
     return 0.0;
-  }
   return value;
 }
 
+// Format one component with %.6g: strips trailing zeros per-component.
+// e.g. 1.0->"1", 0.5->"0.5", 3.141593->"3.14159"
+std::string FormatDouble(double v) {
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.6g", CleanupZero(v));
+  return buf;
+}
+
+// Format a (x,y,z) triple; each component formatted independently.
 std::string FormatTriple(double x, double y, double z) {
-  // Clean up near-zero values
-  x = CleanupZero(x);
-  y = CleanupZero(y);
-  z = CleanupZero(z);
-  
-  std::ostringstream ss;
-  ss << std::fixed << std::setprecision(6);
-  ss << '(' << x << ',' << y << ',' << z << ')';
-  
-  std::string result = ss.str();
-  
-  // Remove trailing zeros after decimal point
-  size_t pos = result.find_last_not_of('0');
-  if (pos != std::string::npos && result[pos] == '.') {
-    // Remove trailing zeros and the decimal point if all decimals are zeros
-    result = result.substr(0, pos);
-  } else if (pos != std::string::npos) {
-    result = result.substr(0, pos + 1);
-  }
-  
-  return result;
+  return "(" + FormatDouble(x) + "," + FormatDouble(y) + "," + FormatDouble(z) + ")";
 }
 
 bool TryParseTriple(const char *text, double &x, double &y, double &z) {
@@ -210,7 +197,85 @@ ExtrudeEndConditionTypeFromString(const char *text) {
     return ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES;
   return std::nullopt;
 }
-} // namespace
+
+// ─── Internal helpers moved into anon-ns; not exported ──────────────────────
+std::string FormatPoint(const CPoint3D &pt) {
+  return FormatTriple(pt.x, pt.y, pt.z);
+}
+
+std::string FormatVector(const CVector3D &vec) {
+  return FormatTriple(vec.x, vec.y, vec.z);
+}
+
+CPoint3D ParsePointAttribute(XMLElement *element, const char *name) {
+  CPoint3D pt;
+  double x, y, z;
+  if (TryParseTriple(element->Attribute(name), x, y, z)) {
+    pt.x = x; pt.y = y; pt.z = z;
+  }
+  return pt;
+}
+
+CVector3D ParseVectorAttribute(XMLElement *element, const char *name) {
+  CVector3D vec;
+  double x, y, z;
+  if (TryParseTriple(element->Attribute(name), x, y, z)) {
+    vec.x = x; vec.y = y; vec.z = z;
+  }
+  return vec;
+}
+
+std::shared_ptr<CRefFeature> LoadFeatureReference(XMLElement *element, RefType refType) {
+  auto reference = std::make_shared<CRefFeature>(refType);
+  if (const char *tid = element->Attribute("TargetFeatureID"))
+    reference->targetFeatureID = tid;
+  return reference;
+}
+
+void SaveFeatureReference(XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+  if (auto feature = std::dynamic_pointer_cast<CRefFeature>(ref))
+    element->SetAttribute("TargetFeatureID", feature->targetFeatureID.c_str());
+}
+
+CVector3D ComputePlaneYAxis(const CVector3D &normal, const CVector3D &xDir) {
+  CVector3D yDir = Cross(normal, xDir);
+  yDir.Normalize();
+  return yDir;
+}
+
+// ConstraintType <-> string (human-readable; integer fallback for old files).
+const char *ConstraintTypeToString(CSketchConstraint::ConstraintType t) {
+  switch (t) {
+  case CSketchConstraint::ConstraintType::HORIZONTAL:    return "Horizontal";
+  case CSketchConstraint::ConstraintType::VERTICAL:      return "Vertical";
+  case CSketchConstraint::ConstraintType::COINCIDENT:    return "Coincident";
+  case CSketchConstraint::ConstraintType::CONCENTRIC:    return "Concentric";
+  case CSketchConstraint::ConstraintType::TANGENT:       return "Tangent";
+  case CSketchConstraint::ConstraintType::EQUAL:         return "Equal";
+  case CSketchConstraint::ConstraintType::PARALLEL:      return "Parallel";
+  case CSketchConstraint::ConstraintType::PERPENDICULAR: return "Perpendicular";
+  case CSketchConstraint::ConstraintType::DIMENSIONAL:   return "Dimensional";
+  default:                                               return "Unknown";
+  }
+}
+
+CSketchConstraint::ConstraintType ConstraintTypeFromString(const char *text) {
+  if (!text) return CSketchConstraint::ConstraintType::HORIZONTAL;
+  std::string v = ToLower(text);
+  if (v == "horizontal")    return CSketchConstraint::ConstraintType::HORIZONTAL;
+  if (v == "vertical")      return CSketchConstraint::ConstraintType::VERTICAL;
+  if (v == "coincident")    return CSketchConstraint::ConstraintType::COINCIDENT;
+  if (v == "concentric")    return CSketchConstraint::ConstraintType::CONCENTRIC;
+  if (v == "tangent")       return CSketchConstraint::ConstraintType::TANGENT;
+  if (v == "equal")         return CSketchConstraint::ConstraintType::EQUAL;
+  if (v == "parallel")      return CSketchConstraint::ConstraintType::PARALLEL;
+  if (v == "perpendicular") return CSketchConstraint::ConstraintType::PERPENDICULAR;
+  if (v == "dimensional")   return CSketchConstraint::ConstraintType::DIMENSIONAL;
+  // Backward-compat: integer fallback for files written by older versions.
+  try { return static_cast<CSketchConstraint::ConstraintType>(std::stoi(text)); }
+  catch (...) {}
+  return CSketchConstraint::ConstraintType::HORIZONTAL;
+}} // namespace
 
 // =================================================================================================
 // Save Implementation
@@ -261,56 +326,7 @@ void TinyXMLSerializer::SaveVector3D(XMLElement *element, const char *name,
   element->SetAttribute(name, value.c_str());
 }
 
-std::string FormatPoint(const CPoint3D &pt) {
-  return FormatTriple(pt.x, pt.y, pt.z);
-}
 
-std::string FormatVector(const CVector3D &vec) {
-  return FormatTriple(vec.x, vec.y, vec.z);
-}
-
-CPoint3D ParsePointAttribute(XMLElement *element, const char *name) {
-  CPoint3D pt;
-  double x, y, z;
-  if (TryParseTriple(element->Attribute(name), x, y, z)) {
-    pt.x = x;
-    pt.y = y;
-    pt.z = z;
-  }
-  return pt;
-}
-
-CVector3D ParseVectorAttribute(XMLElement *element, const char *name) {
-  CVector3D vec;
-  double x, y, z;
-  if (TryParseTriple(element->Attribute(name), x, y, z)) {
-    vec.x = x;
-    vec.y = y;
-    vec.z = z;
-  }
-  return vec;
-}
-
-std::shared_ptr<CRefFeature> LoadFeatureReference(XMLElement *element,
-                                                  RefType refType) {
-  auto reference = std::make_shared<CRefFeature>(refType);
-  if (const char *tid = element->Attribute("TargetFeatureID"))
-    reference->targetFeatureID = tid;
-  return reference;
-}
-
-void SaveFeatureReference(XMLElement *element,
-                          const std::shared_ptr<CRefEntityBase> &ref) {
-  if (auto feature = std::dynamic_pointer_cast<CRefFeature>(ref)) {
-    element->SetAttribute("TargetFeatureID", feature->targetFeatureID.c_str());
-  }
-}
-
-CVector3D ComputePlaneYAxis(const CVector3D &normal, const CVector3D &xDir) {
-  CVector3D yDir = Cross(normal, xDir);
-  yDir.Normalize();
-  return yDir;
-}
 
 struct RefSerializerEntry {
   using RefSaveFn = std::function<void(
@@ -515,6 +531,11 @@ void TinyXMLSerializer::SaveFeature(
   XMLElement *featElem = doc.NewElement("Feature");
   parent->InsertEndChild(featElem);
 
+  // Identity attrs first (matches XMLHelper::CreateFeatureNode convention).
+  featElem->SetAttribute("ID", feature->featureID.c_str());
+  featElem->SetAttribute("Name", feature->featureName.c_str());
+  featElem->SetAttribute("Suppressed", feature->isSuppressed);
+
   switch (feature->featureType) {
     case FeatureType::Sketch:
       featElem->SetAttribute("Type", "Sketch");
@@ -533,9 +554,6 @@ void TinyXMLSerializer::SaveFeature(
       break;
   }
 
-  featElem->SetAttribute("ID", feature->featureID.c_str());
-  featElem->SetAttribute("Name", feature->featureName.c_str());
-  featElem->SetAttribute("Suppressed", feature->isSuppressed);
 }
 
 void TinyXMLSerializer::SaveSketch(XMLDocument &doc, XMLElement *element,
@@ -597,7 +615,7 @@ void TinyXMLSerializer::SaveConstraint(XMLDocument &doc, XMLElement *parent,
                                        const CSketchConstraint &constraint) {
   XMLElement *conElem = doc.NewElement("Constraint");
   parent->InsertEndChild(conElem);
-  conElem->SetAttribute("Type", static_cast<int>(constraint.type));
+  conElem->SetAttribute("Type", ConstraintTypeToString(constraint.type));
   conElem->SetAttribute("Dimension", constraint.dimensionValue);
 
   std::string ids;
@@ -611,11 +629,8 @@ void TinyXMLSerializer::SaveConstraint(XMLDocument &doc, XMLElement *parent,
 
 void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
                                     const std::shared_ptr<CExtrude> &extrude) {
-  if (!extrude->profileSketchID.empty()) {
-    XMLElement *profileElem = doc.NewElement("ProfileSketchID");
-    profileElem->SetAttribute("Value", extrude->profileSketchID.c_str());
-    element->InsertEndChild(profileElem);
-  }
+  if (!extrude->profileSketchID.empty())
+    element->SetAttribute("ProfileSketchID", extrude->profileSketchID.c_str());
 
   XMLElement *directionElem = doc.NewElement("Direction");
   SaveVector3D(directionElem, "Value", extrude->direction);
@@ -912,9 +927,7 @@ TinyXMLSerializer::LoadSketchSeg(XMLElement *element) {
 
 CSketchConstraint TinyXMLSerializer::LoadConstraint(XMLElement *element) {
   CSketchConstraint con;
-  int typeVal = 0;
-  element->QueryIntAttribute("Type", &typeVal);
-  con.type = static_cast<CSketchConstraint::ConstraintType>(typeVal);
+  con.type = ConstraintTypeFromString(element->Attribute("Type"));
   element->QueryDoubleAttribute("Dimension", &con.dimensionValue);
 
   const char *ents = element->Attribute("Entities");
@@ -930,14 +943,9 @@ CSketchConstraint TinyXMLSerializer::LoadConstraint(XMLElement *element) {
 
 void TinyXMLSerializer::LoadExtrude(XMLElement *element,
                                     std::shared_ptr<CExtrude> &extrude) {
-  XMLElement *profileElem = element->FirstChildElement("ProfileSketchID");
-  // Note: In a real scenario, we might need to resolve this ID to a pointer,
-  // but CExtrude stores a shared_ptr.
-  // The current LoadModel logic in Cereal deserializes the pointer directly if
-  if (profileElem) {
-    if (const char *value = profileElem->Attribute("Value"))
-      extrude->profileSketchID = value;
-  }
+  // ProfileSketchID is now a direct attribute (changed from child element in P3).
+  if (const char *v = element->Attribute("ProfileSketchID"))
+    extrude->profileSketchID = v;
 
   XMLElement *directionElem = element->FirstChildElement("Direction");
   if (directionElem) {
@@ -948,51 +956,28 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
     extrude->operation = *opOpt;
   }
 
-  XMLElement *ec1 = element->FirstChildElement("EndCondition1");
-  if (ec1) {
-    if (auto typeOpt = ExtrudeEndConditionTypeFromString(ec1->Attribute("Type"))) {
-      extrude->endCondition1.type = *typeOpt;
-    } else {
+  // Unified EC loader -- symmetric with saveEC lambda in SaveExtrude. Eliminates EC1/EC2 duplication.
+  auto loadEC = [&](XMLElement *ec, const char *tag) -> ExtrudeEndCondition {
+    ExtrudeEndCondition cond;
+    if (auto t = ExtrudeEndConditionTypeFromString(ec->Attribute("Type")))
+      cond.type = *t;
+    else
       std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
-                << "' EC1 has missing or unknown Type attribute — "
-                   "defaulting to UNKNOWN.\n";
-    }
-    ec1->QueryDoubleAttribute("Depth", &extrude->endCondition1.depth);
-    ec1->QueryDoubleAttribute("Offset", &extrude->endCondition1.offset);
-    ec1->QueryBoolAttribute("HasOffset", &extrude->endCondition1.hasOffset);
-    ec1->QueryBoolAttribute("Flip", &extrude->endCondition1.isFlip);
-    ec1->QueryBoolAttribute("FlipMaterialSide", &extrude->endCondition1.isFlipMaterialSide);
-    
-    // 加载参考实体
-    XMLElement *refElem = ec1->FirstChildElement("ReferenceEntity");
-    if (refElem) {
-      extrude->endCondition1.referenceEntity = LoadRefEntity(refElem);
-    }
-  }
-  XMLElement *ec2 = element->FirstChildElement("EndCondition2");
-  if (ec2) {
-    ExtrudeEndCondition cond2;
-    if (auto typeOpt = ExtrudeEndConditionTypeFromString(ec2->Attribute("Type"))) {
-      cond2.type = *typeOpt;
-    } else {
-      std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
-                << "' EC2 has missing or unknown Type attribute — "
-                   "defaulting to UNKNOWN.\n";
-    }
-    ec2->QueryDoubleAttribute("Depth", &cond2.depth);
-    ec2->QueryDoubleAttribute("Offset", &cond2.offset);
-    ec2->QueryBoolAttribute("HasOffset", &cond2.hasOffset);
-    ec2->QueryBoolAttribute("Flip", &cond2.isFlip);
-    ec2->QueryBoolAttribute("FlipMaterialSide", &cond2.isFlipMaterialSide);
-    
-    // 加载参考实体
-    XMLElement *refElem = ec2->FirstChildElement("ReferenceEntity");
-    if (refElem) {
-      cond2.referenceEntity = LoadRefEntity(refElem);
-    }
-    
-    extrude->endCondition2 = cond2;
-  }
+                << "' " << tag << " has missing or unknown Type attribute.\n";
+    ec->QueryDoubleAttribute("Depth",            &cond.depth);
+    ec->QueryDoubleAttribute("Offset",           &cond.offset);
+    ec->QueryBoolAttribute  ("HasOffset",        &cond.hasOffset);
+    ec->QueryBoolAttribute  ("Flip",             &cond.isFlip);
+    ec->QueryBoolAttribute  ("FlipMaterialSide", &cond.isFlipMaterialSide);
+    if (auto *ref = ec->FirstChildElement("ReferenceEntity"))
+      cond.referenceEntity = LoadRefEntity(ref);
+    return cond;
+  };
+
+  if (auto *ec1 = element->FirstChildElement("EndCondition1"))
+    extrude->endCondition1 = loadEC(ec1, "EC1");
+  if (auto *ec2 = element->FirstChildElement("EndCondition2"))
+    extrude->endCondition2 = loadEC(ec2, "EC2");
 
   // 薄壁参数（可选）
   XMLElement *twElem = element->FirstChildElement("ThinWall");
@@ -1013,7 +998,11 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
 
 void TinyXMLSerializer::LoadRevolve(XMLElement *element,
                                     std::shared_ptr<CRevolve> &revolve) {
-  // Implementation similar to Extrude
+  // TODO: CRevolve schema not finalized -- see AGENTS.md.
+  // SaveRevolve is implemented; Load is intentionally deferred until schema confirmed.
+  (void)element;
+  std::cerr << "[TinyXMLSerializer][TODO] LoadRevolve not implemented "
+               "-- revolve data will be empty after loading.\n";
 }
 
 } // namespace CADExchange
