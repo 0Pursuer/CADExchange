@@ -22,21 +22,17 @@ enum class BooleanOp { BOSS, CUT, MERGE };
 /**
  * @brief 特征类型枚举
  */
-enum class FeatureType {
-    Unknown,
-    Extrude,
-    Revolve,
-    Sketch
-};
+enum class FeatureType { Unknown, Extrude, Revolve, Sketch, DatumPlane };
 
 /**
  * @brief 所有特征的基类。
  */
 struct CFeatureBase {
-  std::string featureID;             ///< 全局唯一标识符 (UUID)
-  std::string featureName;           ///< 用户可见名称
-  bool isSuppressed = false;         ///< 是否被抑制，不参与求解
-  FeatureType featureType = FeatureType::Unknown;  ///< 特征类型，避免 dynamic_cast
+  std::string featureID;     ///< 全局唯一标识符 (UUID)
+  std::string featureName;   ///< 用户可见名称
+  bool isSuppressed = false; ///< 是否被抑制，不参与求解
+  FeatureType featureType =
+      FeatureType::Unknown;          ///< 特征类型，避免 dynamic_cast
   virtual ~CFeatureBase() = default; ///< 虚析构函数，避免对象截断
 };
 
@@ -92,8 +88,9 @@ struct CRefSketch : public CRefFeature {
 
 struct CRefFace : public CRefSubTopo {
   CVector3D normal;
-  /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles) 第一个三角形的重心，
-  /// 保证该点落在面的几何表面内，用于 SelectByRay 选面。并非该面的几何质心。
+  /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles)
+  /// 第一个三角形的重心， 保证该点落在面的几何表面内，用于 SelectByRay
+  /// 选面。并非该面的几何质心。
   CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
@@ -174,8 +171,6 @@ struct CSketchPoint : public CSketchSeg {
   CSketchPoint() { type = SegType::POINT; }
 };
 
-
-
 /**
  * @brief 约束类型定义。
  */
@@ -197,7 +192,7 @@ struct CSketchConstraint {
 
 /**
  * @brief 草图局部坐标系
-*/
+ */
 struct CSketchCSys {
   CPoint3D origin;
   CVector3D xDir;
@@ -221,7 +216,7 @@ struct CSketch : public CFeatureBase {
   std::vector<std::shared_ptr<CSketchSeg>> segments;
   std::vector<CSketchConstraint> constraints;
   CSketchCSys sketchCSys;
-  
+
   CSketch() { featureType = FeatureType::Sketch; }
 };
 
@@ -235,9 +230,10 @@ struct DraftOption {
 
 struct ThinWallOption {
   double thickness = 0.0;
-  bool isOneSided = true;   ///< true=单向薄壁, false=双向（中间平面）
-  bool isOutward  = false;  ///< 仅 isOneSided=true 时有效: true=向外, false=向内（默认）
-  bool isCovered  = false;  ///< 薄壁端部是否有盖
+  bool isOneSided = true; ///< true=单向薄壁, false=双向（中间平面）
+  bool isOutward =
+      false; ///< 仅 isOneSided=true 时有效: true=向外, false=向内（默认）
+  bool isCovered = false; ///< 薄壁端部是否有盖
 };
 
 /**
@@ -245,12 +241,12 @@ struct ThinWallOption {
  */
 struct ExtrudeEndCondition {
   enum class Type {
-    BLIND,        // 盲孔
-    THROUGH_ALL,  // 贯穿
-    UP_TO_NEXT,   // 到下一面
-    UP_TO_FACE,   // 到指定面
-    UP_TO_VERTEX, // 到指定顶点
-    MID_PLANE,     // 中间平面
+    BLIND,                  // 盲孔
+    THROUGH_ALL,            // 贯穿
+    UP_TO_NEXT,             // 到下一面
+    UP_TO_FACE,             // 到指定面
+    UP_TO_VERTEX,           // 到指定顶点
+    MID_PLANE,              // 中间平面
     THROUGH_ALL_BOTH_SIDES, // 双向贯穿
 
     UNKNOWN
@@ -268,14 +264,14 @@ struct ExtrudeEndCondition {
  * @brief 拉伸特征。
  */
 struct CExtrude : public CFeatureBase {
-  std::string profileSketchID;          ///< 草图轮廓的特征 ID（引用，不嵌入）
+  std::string profileSketchID; ///< 草图轮廓的特征 ID（引用，不嵌入）
   CVector3D direction = {0, 0, 1};
   ExtrudeEndCondition endCondition1;
   std::optional<ExtrudeEndCondition> endCondition2;
   BooleanOp operation = BooleanOp::BOSS; ///< 默认新建实体
   std::optional<DraftOption> draft;
   std::optional<ThinWallOption> thinWall;
-  
+
   CExtrude() { featureType = FeatureType::Extrude; }
 };
 
@@ -302,8 +298,64 @@ struct CRevolve : public CFeatureBase {
   } angleKind = AngleKind::Single;
   double primaryAngle = 0.0;
   double secondaryAngle = 0.0;
-  
+
   CRevolve() { featureType = FeatureType::Revolve; }
+};
+
+enum class PlaneMethod {
+  UNKNOWN = 0,
+
+  // P0
+  OFFSET, // 偏置平面
+  FIXED,  // 点+法向 / 固定平面
+
+  // P1
+  ANGLE,         // 角度平面
+  PARALLEL,      // 平行平面
+  PERPENDICULAR, // 垂直相关
+  MID_PLANE,     // 中间面
+  THREE_POINTS,  // 三点面
+  TANGENT        // 相切面
+};
+
+enum class PlaneConstraintType {
+  UNKNOWN = 0,
+
+  PARALLEL,      // 平行
+  PERPENDICULAR, // 垂直
+  COINCIDENT,    // 重合
+  DISTANCE,      // 距离
+  ANGLE,         // 角度
+  SYMMETRIC,     // 对称
+  TANGENT,       // 相切
+  PROJECTION     // 投影
+};
+
+struct PlaneConstraint {
+  PlaneConstraintType type{PlaneConstraintType::UNKNOWN};
+
+  // 指向哪个引用实体
+  int ref{-1};
+
+  // 参数
+  double value{0.0}; // distance / angle
+
+  // 参数默认方向
+  std::optional<CVector3D> defaultDir;
+
+  // 是否反转（注意：是局部的）
+  bool reversed{false};
+};
+
+/**
+ * @brief 基准面特征。
+ */
+struct CDatumPlane : public CFeatureBase {
+  PlaneMethod method{PlaneMethod::UNKNOWN};
+  std::vector<PlaneConstraint> constraints;
+  std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
+
+  CDatumPlane() { featureType = FeatureType::DatumPlane; }
 };
 
 } // namespace CADExchange

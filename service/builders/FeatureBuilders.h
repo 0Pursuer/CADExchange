@@ -8,6 +8,7 @@
 #include "EndConditionBuilder.h"
 #include "ExtrudeBuilder.h"
 #include "RevolveBuilder.h"
+#include "DatumPlaneBuilder.h"
 
 // clang-format on
 
