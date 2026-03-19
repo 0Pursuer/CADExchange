@@ -19,6 +19,7 @@ namespace CADExchange {
  *   SKETCH_xxx — 草图特征规则
  *   EXTRUDE_xxx— 拉伸特征规则
  *   REVOLVE_xxx— 旋转特征规则
+ *   DATUM_xxx  — 基准面特征规则
  *   GEOM_xxx   — 几何合法性（向量/坐标系）
  *   REF_xxx    — 引用顺序/类型匹配
  *   SCALE_xxx  — 数值量级（单位一致性）
@@ -158,7 +159,7 @@ public:
    * service/validation/ModelValidator.cpp，规则说明见 ModelValidator.h。
    *
    * 检查分为 error（阻断）和 warning（提示）两级，每条均带 RuleID：
-   *   MODEL_xxx / SKETCH_xxx / EXTRUDE_xxx / REVOLVE_xxx
+   *   MODEL_xxx / SKETCH_xxx / EXTRUDE_xxx / REVOLVE_xxx / DATUM_xxx
    *   GEOM_xxx / REF_xxx / SCALE_xxx
    */
   ValidationReport Validate() const;

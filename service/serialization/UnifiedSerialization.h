@@ -273,6 +273,28 @@ template <class Archive> void serialize(Archive &ar, CRevolve &rev) {
      cereal::make_nvp("SecondaryAngle", rev.secondaryAngle));
 }
 
+/**
+ * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
+ */
+template <class Archive>
+void serialize(Archive &ar, PlaneConstraint &constraint) {
+  ar(cereal::make_nvp("Type", constraint.type),
+     cereal::make_nvp("Ref", constraint.ref),
+     cereal::make_nvp("Value", constraint.value),
+     cereal::make_nvp("DefaultDir", constraint.defaultDir),
+     cereal::make_nvp("Reversed", constraint.reversed));
+}
+
+/**
+ * @brief 序列化基准面特征。
+ */
+template <class Archive> void serialize(Archive &ar, CDatumPlane &datumPlane) {
+  ar(cereal::base_class<CFeatureBase>(&datumPlane),
+     cereal::make_nvp("Method", datumPlane.method),
+     cereal::make_nvp("Constraints", datumPlane.constraints),
+     cereal::make_nvp("ReferenceEntities", datumPlane.referenceEntities));
+}
+
 // ==========================================
 // 顶层模型序列化
 // ==========================================

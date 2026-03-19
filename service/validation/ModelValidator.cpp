@@ -42,6 +42,9 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
   auto isZeroVec = [](const CVector3D &v) -> bool {
     return std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z) < GeoUtils::EPSILON;
   };
+  auto vecLen = [](const CVector3D &v) -> double {
+    return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+  };
 
   auto addError = [&](const std::string &msg) {
     report.isValid = false;
@@ -146,9 +149,7 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         addError("[GEOM_001] Extrude '" + extrude->featureID +
                  "' direction is zero vector.");
       } else {
-        double len = std::sqrt(extrude->direction.x * extrude->direction.x +
-                               extrude->direction.y * extrude->direction.y +
-                               extrude->direction.z * extrude->direction.z);
+        double len = vecLen(extrude->direction);
         if (std::abs(len - 1.0) > 0.01) {
           addWarn("[GEOM_006] Extrude '" + extrude->featureID +
                   "' direction length=" + std::to_string(len) +
@@ -217,6 +218,105 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       if (isZeroVec(revolve->axis.direction)) {
         addError("[GEOM_004] Revolve '" + revolve->featureID +
                  "' axis direction is zero vector.");
+      }
+    }
+    // ---- CDatumPlane ----
+    else if (auto datumPlane = std::dynamic_pointer_cast<CDatumPlane>(feature)) {
+      if (datumPlane->method == PlaneMethod::UNKNOWN) {
+        addError("[DATUM_001] DatumPlane '" + datumPlane->featureID +
+                 "' method is UNKNOWN.");
+      }
+      if (datumPlane->referenceEntities.empty()) {
+        addError("[DATUM_002] DatumPlane '" + datumPlane->featureID +
+                 "' has no referenceEntities.");
+      }
+      if (datumPlane->constraints.empty()) {
+        addWarn("[DATUM_003] DatumPlane '" + datumPlane->featureID +
+                "' has no constraints.");
+      }
+
+      bool hasDistance = false;
+      bool hasAngle = false;
+      for (size_t i = 0; i < datumPlane->constraints.size(); ++i) {
+        const auto &constraint = datumPlane->constraints[i];
+        const std::string idx = std::to_string(i);
+
+        if (constraint.type == PlaneConstraintType::UNKNOWN) {
+          addError("[DATUM_004] DatumPlane '" + datumPlane->featureID +
+                   "' constraint[" + idx + "] type is UNKNOWN.");
+        }
+        if (constraint.ref < 0 ||
+            constraint.ref >= static_cast<int>(datumPlane->referenceEntities.size())) {
+          addError("[DATUM_005] DatumPlane '" + datumPlane->featureID +
+                   "' constraint[" + idx + "] ref=" + std::to_string(constraint.ref) +
+                   " is out of range [0, " +
+                   std::to_string(datumPlane->referenceEntities.empty()
+                                      ? 0
+                                      : datumPlane->referenceEntities.size() - 1) +
+                   "].");
+        }
+
+        if (constraint.type == PlaneConstraintType::DISTANCE) {
+          hasDistance = true;
+          if (std::abs(constraint.value) < GeoUtils::EPSILON) {
+            addWarn("[DATUM_006] DatumPlane '" + datumPlane->featureID +
+                    "' constraint[" + idx +
+                    "] DISTANCE value is near zero.");
+          }
+        }
+        if (constraint.type == PlaneConstraintType::ANGLE) {
+          hasAngle = true;
+          if (std::abs(constraint.value) < GeoUtils::EPSILON) {
+            addWarn("[DATUM_007] DatumPlane '" + datumPlane->featureID +
+                    "' constraint[" + idx + "] ANGLE value is near zero.");
+          }
+        }
+
+        if (constraint.defaultDir.has_value()) {
+          double len = vecLen(*constraint.defaultDir);
+          if (len < GeoUtils::EPSILON) {
+            addError("[GEOM_007] DatumPlane '" + datumPlane->featureID +
+                     "' constraint[" + idx + "] defaultDir is zero vector.");
+          } else if (std::abs(len - 1.0) > 0.01) {
+            addWarn("[GEOM_008] DatumPlane '" + datumPlane->featureID +
+                    "' constraint[" + idx + "] defaultDir length=" +
+                    std::to_string(len) + " is not normalized.");
+          }
+        }
+
+        if (constraint.ref >= 0 &&
+            constraint.ref < static_cast<int>(datumPlane->referenceEntities.size())) {
+          const auto &ref = datumPlane->referenceEntities[constraint.ref];
+          if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+            if (!subTopo->parentFeatureID.empty() &&
+                seen.find(subTopo->parentFeatureID) == seen.end()) {
+              addWarn("[REF_004] DatumPlane '" + datumPlane->featureID +
+                      "' constraint[" + idx + "] references parent feature '" +
+                      subTopo->parentFeatureID +
+                      "' which has not been defined yet.");
+            }
+          }
+        }
+      }
+
+      if (datumPlane->method == PlaneMethod::OFFSET && !hasDistance) {
+        addWarn("[DATUM_008] DatumPlane '" + datumPlane->featureID +
+                "' method=OFFSET but no DISTANCE constraint found.");
+      }
+      if (datumPlane->method == PlaneMethod::ANGLE && !hasAngle) {
+        addWarn("[DATUM_009] DatumPlane '" + datumPlane->featureID +
+                "' method=ANGLE but no ANGLE constraint found.");
+      }
+      if (datumPlane->method == PlaneMethod::THREE_POINTS &&
+          datumPlane->referenceEntities.size() != 3) {
+        addWarn("[DATUM_010] DatumPlane '" + datumPlane->featureID +
+                "' method=THREE_POINTS expects 3 references, actual=" +
+                std::to_string(datumPlane->referenceEntities.size()) + ".");
+      }
+      if (datumPlane->method == PlaneMethod::MID_PLANE &&
+          datumPlane->referenceEntities.size() < 2) {
+        addWarn("[DATUM_011] DatumPlane '" + datumPlane->featureID +
+                "' method=MID_PLANE typically requires at least 2 references.");
       }
     }
 

@@ -57,7 +57,7 @@ private:
    * @brief 将单个特征写入到父 XML 元素下（Feature 节点）。
    *
    * 此函数根据特征的运行时类型选择合适的子序列化函数（例如
-   * Sketch/Extrude/Revolve）。
+   * Sketch/Extrude/Revolve/DatumPlane）。
    * @param doc 当前 XML 文档对象（用于创建元素节点）。
    * @param parent 父 XML 元素，新的 Feature 元素将被插入到此节点下。
    * @param feature 要保存的特征指针。
@@ -89,6 +89,13 @@ private:
   static void SaveRevolve(tinyxml2::XMLDocument &doc,
                           tinyxml2::XMLElement *element,
                           const std::shared_ptr<CRevolve> &revolve);
+
+  /**
+   * @brief 将 `CDatumPlane` 类型的特征序列化到给定的元素下。
+   */
+  static void SaveDatumPlane(tinyxml2::XMLDocument &doc,
+                             tinyxml2::XMLElement *element,
+                             const std::shared_ptr<CDatumPlane> &datumPlane);
 
   /**
    * @brief 序列化草图的单个段（线、圆、点等）。
@@ -161,6 +168,12 @@ private:
    */
   static void LoadRevolve(tinyxml2::XMLElement *element,
                           std::shared_ptr<CRevolve> &revolve);
+
+  /**
+   * @brief 从 XML 元素恢复 `CDatumPlane`。
+   */
+  static void LoadDatumPlane(tinyxml2::XMLElement *element,
+                             std::shared_ptr<CDatumPlane> &datumPlane);
 
   /**
    * @brief 从 Segment 元素构建 `CSketchSeg`

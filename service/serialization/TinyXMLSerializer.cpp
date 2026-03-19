@@ -198,6 +198,101 @@ ExtrudeEndConditionTypeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string PlaneMethodToString(PlaneMethod method) {
+  switch (method) {
+  case PlaneMethod::OFFSET:
+    return "Offset";
+  case PlaneMethod::FIXED:
+    return "Fixed";
+  case PlaneMethod::ANGLE:
+    return "Angle";
+  case PlaneMethod::PARALLEL:
+    return "Parallel";
+  case PlaneMethod::PERPENDICULAR:
+    return "Perpendicular";
+  case PlaneMethod::MID_PLANE:
+    return "MidPlane";
+  case PlaneMethod::THREE_POINTS:
+    return "ThreePoints";
+  case PlaneMethod::TANGENT:
+    return "Tangent";
+  case PlaneMethod::UNKNOWN:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<PlaneMethod> PlaneMethodFromString(const char *text) {
+  if (!text)
+    return std::nullopt;
+  std::string value = ToLower(text);
+  if (value == "offset")
+    return PlaneMethod::OFFSET;
+  if (value == "fixed")
+    return PlaneMethod::FIXED;
+  if (value == "angle")
+    return PlaneMethod::ANGLE;
+  if (value == "parallel")
+    return PlaneMethod::PARALLEL;
+  if (value == "perpendicular")
+    return PlaneMethod::PERPENDICULAR;
+  if (value == "midplane")
+    return PlaneMethod::MID_PLANE;
+  if (value == "threepoints")
+    return PlaneMethod::THREE_POINTS;
+  if (value == "tangent")
+    return PlaneMethod::TANGENT;
+  return std::nullopt;
+}
+
+std::string PlaneConstraintTypeToString(PlaneConstraintType type) {
+  switch (type) {
+  case PlaneConstraintType::PARALLEL:
+    return "Parallel";
+  case PlaneConstraintType::PERPENDICULAR:
+    return "Perpendicular";
+  case PlaneConstraintType::COINCIDENT:
+    return "Coincident";
+  case PlaneConstraintType::DISTANCE:
+    return "Distance";
+  case PlaneConstraintType::ANGLE:
+    return "Angle";
+  case PlaneConstraintType::SYMMETRIC:
+    return "Symmetric";
+  case PlaneConstraintType::TANGENT:
+    return "Tangent";
+  case PlaneConstraintType::PROJECTION:
+    return "Projection";
+  case PlaneConstraintType::UNKNOWN:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<PlaneConstraintType>
+PlaneConstraintTypeFromString(const char *text) {
+  if (!text)
+    return std::nullopt;
+  std::string value = ToLower(text);
+  if (value == "parallel")
+    return PlaneConstraintType::PARALLEL;
+  if (value == "perpendicular")
+    return PlaneConstraintType::PERPENDICULAR;
+  if (value == "coincident")
+    return PlaneConstraintType::COINCIDENT;
+  if (value == "distance")
+    return PlaneConstraintType::DISTANCE;
+  if (value == "angle")
+    return PlaneConstraintType::ANGLE;
+  if (value == "symmetric")
+    return PlaneConstraintType::SYMMETRIC;
+  if (value == "tangent")
+    return PlaneConstraintType::TANGENT;
+  if (value == "projection")
+    return PlaneConstraintType::PROJECTION;
+  return std::nullopt;
+}
+
 // ─── Internal helpers moved into anon-ns; not exported ──────────────────────
 std::string FormatPoint(const CPoint3D &pt) {
   return FormatTriple(pt.x, pt.y, pt.z);
@@ -549,6 +644,11 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "Revolve");
       SaveRevolve(doc, featElem, std::static_pointer_cast<CRevolve>(feature));
       break;
+    case FeatureType::DatumPlane:
+      featElem->SetAttribute("Type", "DatumPlane");
+      SaveDatumPlane(doc, featElem,
+                     std::static_pointer_cast<CDatumPlane>(feature));
+      break;
     default:
       featElem->SetAttribute("Type", "Unknown");
       break;
@@ -684,6 +784,33 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
   SaveVector3D(axisElem, "Direction", revolve->axis.direction);
   SaveRefEntity(doc, axisElem, "ReferenceEntity",
                 revolve->axis.referenceEntity);
+}
+
+void TinyXMLSerializer::SaveDatumPlane(
+    XMLDocument &doc, XMLElement *element,
+    const std::shared_ptr<CDatumPlane> &datumPlane) {
+  element->SetAttribute("Method", PlaneMethodToString(datumPlane->method).c_str());
+
+  XMLElement *refsElem = doc.NewElement("ReferenceEntities");
+  element->InsertEndChild(refsElem);
+  for (const auto &ref : datumPlane->referenceEntities) {
+    SaveRefEntity(doc, refsElem, "ReferenceEntity", ref);
+  }
+
+  XMLElement *constraintsElem = doc.NewElement("Constraints");
+  element->InsertEndChild(constraintsElem);
+  for (const auto &constraint : datumPlane->constraints) {
+    XMLElement *constraintElem = doc.NewElement("Constraint");
+    constraintElem->SetAttribute(
+        "Type", PlaneConstraintTypeToString(constraint.type).c_str());
+    constraintElem->SetAttribute("Ref", constraint.ref);
+    constraintElem->SetAttribute("Value", constraint.value);
+    constraintElem->SetAttribute("Reversed", constraint.reversed);
+    if (constraint.defaultDir.has_value()) {
+      SaveVector3D(constraintElem, "DefaultDir", *constraint.defaultDir);
+    }
+    constraintsElem->InsertEndChild(constraintElem);
+  }
 }
 
 // =================================================================================================
@@ -822,6 +949,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto revolve = std::make_shared<CRevolve>();
     LoadRevolve(element, revolve);
     feature = revolve;
+  } else if (type == "DatumPlane") {
+    auto datumPlane = std::make_shared<CDatumPlane>();
+    LoadDatumPlane(element, datumPlane);
+    feature = datumPlane;
   } else {
     return nullptr; // 未知 Type，调用方会打印 warn
   }
@@ -1003,6 +1134,42 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
   (void)element;
   std::cerr << "[TinyXMLSerializer][TODO] LoadRevolve not implemented "
                "-- revolve data will be empty after loading.\n";
+}
+
+void TinyXMLSerializer::LoadDatumPlane(
+    XMLElement *element, std::shared_ptr<CDatumPlane> &datumPlane) {
+  if (auto method = PlaneMethodFromString(element->Attribute("Method"))) {
+    datumPlane->method = *method;
+  }
+
+  if (XMLElement *refsElem = element->FirstChildElement("ReferenceEntities")) {
+    XMLElement *refElem = refsElem->FirstChildElement("ReferenceEntity");
+    while (refElem) {
+      auto ref = LoadRefEntity(refElem);
+      if (ref) {
+        datumPlane->referenceEntities.push_back(ref);
+      }
+      refElem = refElem->NextSiblingElement("ReferenceEntity");
+    }
+  }
+
+  if (XMLElement *constraintsElem = element->FirstChildElement("Constraints")) {
+    XMLElement *constraintElem = constraintsElem->FirstChildElement("Constraint");
+    while (constraintElem) {
+      PlaneConstraint constraint{};
+      if (auto t = PlaneConstraintTypeFromString(constraintElem->Attribute("Type"))) {
+        constraint.type = *t;
+      }
+      constraintElem->QueryIntAttribute("Ref", &constraint.ref);
+      constraintElem->QueryDoubleAttribute("Value", &constraint.value);
+      constraintElem->QueryBoolAttribute("Reversed", &constraint.reversed);
+      if (constraintElem->Attribute("DefaultDir")) {
+        constraint.defaultDir = LoadVector3D(constraintElem, "DefaultDir");
+      }
+      datumPlane->constraints.push_back(constraint);
+      constraintElem = constraintElem->NextSiblingElement("Constraint");
+    }
+  }
 }
 
 } // namespace CADExchange
