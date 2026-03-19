@@ -318,6 +318,11 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         addWarn("[DATUM_011] DatumPlane '" + datumPlane->featureID +
                 "' method=MID_PLANE typically requires at least 2 references.");
       }
+      if (datumPlane->method == PlaneMethod::LINE &&
+          datumPlane->referenceEntities.size() < 1) {
+        addWarn("[DATUM_012] DatumPlane '" + datumPlane->featureID +
+                "' method=LINE typically requires one or more linear references.");
+      }
     }
 
     seen.insert(feature->featureID);

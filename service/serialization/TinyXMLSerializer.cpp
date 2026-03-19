@@ -214,6 +214,8 @@ std::string PlaneMethodToString(PlaneMethod method) {
     return "MidPlane";
   case PlaneMethod::THREE_POINTS:
     return "ThreePoints";
+  case PlaneMethod::LINE:
+    return "Line";
   case PlaneMethod::TANGENT:
     return "Tangent";
   case PlaneMethod::UNKNOWN:
@@ -240,6 +242,8 @@ std::optional<PlaneMethod> PlaneMethodFromString(const char *text) {
     return PlaneMethod::MID_PLANE;
   if (value == "threepoints")
     return PlaneMethod::THREE_POINTS;
+  if (value == "line")
+    return PlaneMethod::LINE;
   if (value == "tangent")
     return PlaneMethod::TANGENT;
   return std::nullopt;

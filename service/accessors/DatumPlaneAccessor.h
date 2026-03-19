@@ -42,6 +42,10 @@ public:
 
   ACCESSOR_GETTER(PlaneMethod, Method, method, PlaneMethod::UNKNOWN)
 
+  bool IsLineMethod() const {
+    return IsValid() && Data()->method == PlaneMethod::LINE;
+  }
+
   bool HasConstraints() const {
     return IsValid() && !Data()->constraints.empty();
   }

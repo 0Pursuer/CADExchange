@@ -315,6 +315,7 @@ enum class PlaneMethod {
   PERPENDICULAR, // 垂直相关
   MID_PLANE,     // 中间面
   THREE_POINTS,  // 三点面
+  LINE,          // 过线/两线定义
   TANGENT        // 相切面
 };
 

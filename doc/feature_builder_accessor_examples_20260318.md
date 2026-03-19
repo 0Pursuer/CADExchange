@@ -329,15 +329,16 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 `DatumPlaneBuilder` 主要方法：
 
 1. `SetMethod(PlaneMethod)`
-2. `AddReference(Ref::...)`
-3. `SetReferences(Ref::..., Ref::..., ...)`
-4. `AddReferenceAndGetIndex(Ref::...)`
-5. `AddConstraint(const PlaneConstraint&)`
-6. `AddConstraint(PlaneConstraintType, refIndex, value, defaultDir, reversed)`
-7. `AddConstraintByFactory(PlaneConstraintBuilder::...)`
-8. `AddReferenceWithConstraint(Ref::..., PlaneConstraintType, ...)`
-9. `ClearConstraints()` / `ClearReferences()`
-10. `Build()`
+2. `SetLineMethod()`
+3. `AddReference(Ref::...)`
+4. `SetReferences(Ref::..., Ref::..., ...)`
+5. `AddReferenceAndGetIndex(Ref::...)`
+6. `AddConstraint(const PlaneConstraint&)`
+7. `AddConstraint(PlaneConstraintType, refIndex, value, defaultDir, reversed)`
+8. `AddConstraintByFactory(PlaneConstraintBuilder::...)`
+9. `AddReferenceWithConstraint(Ref::..., PlaneConstraintType, ...)`
+10. `ClearConstraints()` / `ClearReferences()`
+11. `Build()`
 
 `PlaneMethod`（UnifiedFeatures.h）：
 
@@ -348,7 +349,8 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 5. `PERPENDICULAR`
 6. `MID_PLANE`
 7. `THREE_POINTS`
-8. `TANGENT`
+8. `LINE`
+9. `TANGENT`
 
 ### 5.2 PlaneConstraintBuilder 全方式
 
@@ -452,13 +454,29 @@ std::string dpTangent =
     .Build();
 ```
 
+#### G) LINE（通过两条线/两条边）
+
+```cpp
+// 典型场景：UG / NX 的 MethodTypeLine，可由两条线性边定义一个基准面。
+// 这里显式使用 SetLineMethod()，与 SetMethod(PlaneMethod::LINE) 等价。
+std::string dpLine =
+  Builder::DatumPlaneBuilder(model, "Datum_Line")
+    .SetLineMethod()
+    .AddReference(Builder::Ref::Edge("Boss_Extrude", 4))
+    .AddReference(Builder::Ref::Edge("Boss_Extrude", 7))
+    .AddConstraintByFactory(Builder::PlaneConstraintBuilder::Coincident(0))
+    .AddConstraintByFactory(Builder::PlaneConstraintBuilder::Coincident(1))
+    .Build();
+```
+
 ### 5.4 DatumPlaneAccessor 读取参考
 
 `DatumPlaneAccessor` 主要方法：
 
 1. `GetMethod()`
-2. `HasReferences()` `GetReferenceCount()` `GetReference(i)` `GetReferenceEntities()`
-3. `HasConstraints()` `GetConstraintCount()` `GetConstraint(i)` `GetConstraints()`
+2. `IsLineMethod()`
+3. `HasReferences()` `GetReferenceCount()` `GetReference(i)` `GetReferenceEntities()`
+4. `HasConstraints()` `GetConstraintCount()` `GetConstraint(i)` `GetConstraints()`
 
 ```cpp
 if (auto feat = ma.GetFeatureByID(dpOffset)) {
@@ -467,6 +485,7 @@ if (auto feat = ma.GetFeatureByID(dpOffset)) {
     auto dp = *dpOpt;
 
     PlaneMethod m = dp.GetMethod();
+    bool isLine = dp.IsLineMethod();
     int rn = dp.GetReferenceCount();
     int cn = dp.GetConstraintCount();
 

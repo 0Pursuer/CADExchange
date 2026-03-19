@@ -109,6 +109,18 @@ public:
   }
 
   /**
+   * @brief Convenience helper for line-based datum planes.
+   *
+   * Typical usage:
+   *   SetLineMethod()
+   *     .AddReference(Ref::Edge(...))
+   *     .AddReference(Ref::Edge(...))
+   *     .AddConstraintByFactory(PlaneConstraintBuilder::Coincident(0))
+   *     .AddConstraintByFactory(PlaneConstraintBuilder::Coincident(1))
+   */
+  DatumPlaneBuilder &SetLineMethod() { return SetMethod(PlaneMethod::LINE); }
+
+  /**
    * @brief Add one reference from ReferenceBuilder facade/builder objects.
    *
    * Example:
