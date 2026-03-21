@@ -520,22 +520,26 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        return face;
      }},
     {RefType::TOPO_EDGE, "Edge", "edge",
-     [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       if (auto edge = std::dynamic_pointer_cast<CRefEdge>(ref)) {
-         element->SetAttribute("ParentFeatureID",
-                               edge->parentFeatureID.c_str());
-         element->SetAttribute("TopologyIndex", edge->topologyIndex);
-         element->SetAttribute("MidPoint", FormatPoint(edge->midPoint).c_str());
-       }
-     },
-     [](XMLElement *element) {
-       auto edge = std::make_shared<CRefEdge>();
-       if (const char *parent = element->Attribute("ParentFeatureID"))
-         edge->parentFeatureID = parent;
-       element->QueryIntAttribute("TopologyIndex", &edge->topologyIndex);
-       edge->midPoint = ParsePointAttribute(element, "MidPoint");
-       return edge;
-     }},
+      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+        if (auto edge = std::dynamic_pointer_cast<CRefEdge>(ref)) {
+          element->SetAttribute("ParentFeatureID",
+                                edge->parentFeatureID.c_str());
+          element->SetAttribute("TopologyIndex", edge->topologyIndex);
+          element->SetAttribute("StartPoint", FormatPoint(edge->startPoint).c_str());
+          element->SetAttribute("EndPoint", FormatPoint(edge->endPoint).c_str());
+          element->SetAttribute("MidPoint", FormatPoint(edge->midPoint).c_str());
+        }
+      },
+      [](XMLElement *element) {
+        auto edge = std::make_shared<CRefEdge>();
+        if (const char *parent = element->Attribute("ParentFeatureID"))
+          edge->parentFeatureID = parent;
+        element->QueryIntAttribute("TopologyIndex", &edge->topologyIndex);
+        edge->startPoint = ParsePointAttribute(element, "StartPoint");
+        edge->endPoint = ParsePointAttribute(element, "EndPoint");
+        edge->midPoint = ParsePointAttribute(element, "MidPoint");
+        return edge;
+      }},
     {RefType::TOPO_VERTEX, "Vertex", "vertex",
      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
        if (auto vertex = std::dynamic_pointer_cast<CRefVertex>(ref)) {

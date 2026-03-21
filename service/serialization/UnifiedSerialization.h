@@ -91,10 +91,12 @@ template <class Archive> void serialize(Archive &ar, CRefFace &face) {
 }
 
 /**
- * @brief 序列化边界的中点。
+ * @brief 序列化边界的端点与中点。
  */
 template <class Archive> void serialize(Archive &ar, CRefEdge &edge) {
   ar(cereal::base_class<CRefSubTopo>(&edge),
+     cereal::make_nvp("StartPoint", edge.startPoint),
+     cereal::make_nvp("EndPoint", edge.endPoint),
      cereal::make_nvp("MidPoint", edge.midPoint));
 }
 
