@@ -68,6 +68,11 @@ struct CRefFeature : public CRefEntityBase {
 
 struct CRefSubTopo : public CRefEntityBase {
   std::string parentFeatureID;
+  /**
+   * @deprecated Legacy topology hint kept only for backward compatibility.
+   * New read/write logic should not rely on this value for reference matching.
+   */
+  [[deprecated("Legacy compatibility only; do not use TopologyIndex for new references.")]]
   int topologyIndex = -1;
 
   CRefSubTopo(RefType type = RefType::UNKNOWN) { refType = type; }
@@ -362,8 +367,10 @@ struct PlaneConstraint {
   // 指向哪个引用实体
   int ref{-1};
 
-  // 参数
-  double value{0.0}; // distance / angle
+  // 参数：
+  // - DISTANCE: 线性距离，随模型单位缩放后写入/读取
+  // - ANGLE: 角度，内部统一用弧度
+  double value{0.0};
 
   // 参数默认方向
   std::optional<CVector3D> defaultDir;

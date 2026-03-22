@@ -157,6 +157,17 @@ void ScaleRevolve(CRevolve &revolve, double factor, UnitScaleContext &ctx) {
   ScaleRefEntity(revolve.axis.referenceEntity, factor, ctx);
 }
 
+void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &ctx) {
+  for (auto &ref : datumPlane.referenceEntities) {
+    ScaleRefEntity(ref, factor, ctx);
+  }
+  for (auto &constraint : datumPlane.constraints) {
+    if (constraint.type == PlaneConstraintType::DISTANCE) {
+      constraint.value *= factor;
+    }
+  }
+}
+
 } // namespace
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
@@ -204,6 +215,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Revolve:
         ScaleRevolve(*std::static_pointer_cast<CRevolve>(feature), factor, ctx);
+        break;
+      case FeatureType::DatumPlane:
+        ScaleDatumPlane(*std::static_pointer_cast<CDatumPlane>(feature), factor, ctx);
         break;
       default:
         break;

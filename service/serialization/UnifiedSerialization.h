@@ -57,6 +57,8 @@ template <class Archive> void serialize(Archive &ar, CRefFeature &ref) {
 
 /**
  * @brief 序列化子拓扑引用，持有父特征 ID 与索引。
+ *
+ * TopologyIndex 仅作为历史兼容字段保留，不应再作为新的引用判定键。
  */
 template <class Archive> void serialize(Archive &ar, CRefSubTopo &ref) {
   ar(cereal::base_class<CRefEntityBase>(&ref),

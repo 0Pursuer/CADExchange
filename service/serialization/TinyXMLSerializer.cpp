@@ -497,11 +497,13 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        return sketch;
      }},
     {RefType::TOPO_FACE, "Face", "face",
-     [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
-         element->SetAttribute("ParentFeatureID",
-                               face->parentFeatureID.c_str());
-         element->SetAttribute("TopologyIndex", face->topologyIndex);
+      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+        if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+          // Legacy compatibility only: TopologyIndex is preserved for old data
+          // streams, but new matching logic should rely on geometry and owner IDs.
+          element->SetAttribute("ParentFeatureID",
+                                face->parentFeatureID.c_str());
+          element->SetAttribute("TopologyIndex", face->topologyIndex);
          element->SetAttribute("U", FormatVector(face->uDir).c_str());
          element->SetAttribute("V", FormatVector(face->vDir).c_str());
          element->SetAttribute("Normal", FormatVector(face->normal).c_str());
@@ -522,6 +524,8 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
     {RefType::TOPO_EDGE, "Edge", "edge",
       [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
         if (auto edge = std::dynamic_pointer_cast<CRefEdge>(ref)) {
+          // Legacy compatibility only: TopologyIndex is preserved for old data
+          // streams, but new matching logic should rely on geometry and owner IDs.
           element->SetAttribute("ParentFeatureID",
                                 edge->parentFeatureID.c_str());
           element->SetAttribute("TopologyIndex", edge->topologyIndex);
@@ -541,11 +545,13 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
         return edge;
       }},
     {RefType::TOPO_VERTEX, "Vertex", "vertex",
-     [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       if (auto vertex = std::dynamic_pointer_cast<CRefVertex>(ref)) {
-         element->SetAttribute("ParentFeatureID",
-                               vertex->parentFeatureID.c_str());
-         element->SetAttribute("TopologyIndex", vertex->topologyIndex);
+      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+        if (auto vertex = std::dynamic_pointer_cast<CRefVertex>(ref)) {
+          // Legacy compatibility only: TopologyIndex is preserved for old data
+          // streams, but new matching logic should rely on geometry and owner IDs.
+          element->SetAttribute("ParentFeatureID",
+                                vertex->parentFeatureID.c_str());
+          element->SetAttribute("TopologyIndex", vertex->topologyIndex);
          element->SetAttribute("Position", FormatPoint(vertex->pos).c_str());
        }
      },
@@ -558,10 +564,12 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        return vertex;
      }},
     {RefType::TOPO_SKETCH_SEG, "SketchSeg", "sketchseg",
-     [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       if (auto seg = std::dynamic_pointer_cast<CRefSketchSeg>(ref)) {
-         element->SetAttribute("ParentFeatureID", seg->parentFeatureID.c_str());
-         element->SetAttribute("TopologyIndex", seg->topologyIndex);
+      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+        if (auto seg = std::dynamic_pointer_cast<CRefSketchSeg>(ref)) {
+          // Legacy compatibility only: TopologyIndex is preserved for old data
+          // streams, but new matching logic should rely on geometry and owner IDs.
+          element->SetAttribute("ParentFeatureID", seg->parentFeatureID.c_str());
+          element->SetAttribute("TopologyIndex", seg->topologyIndex);
          if (!seg->segmentLocalID.empty())
            element->SetAttribute("SegmentLocalID", seg->segmentLocalID.c_str());
        }
