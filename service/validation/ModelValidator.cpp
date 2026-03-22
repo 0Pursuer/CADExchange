@@ -8,6 +8,16 @@
 
 namespace CADExchange {
 
+namespace {
+
+bool IsBuiltinStandardDatumID(const std::string& id) {
+  return id == StandardID::PLANE_XY ||
+         id == StandardID::PLANE_YZ ||
+         id == StandardID::PLANE_ZX;
+}
+
+} // namespace
+
 // One-liner delegation defined here to avoid including ModelValidator.h
 // from UnifiedModel.h (which would create a circular dependency).
 ValidationReport UnifiedModel::Validate() const {
@@ -186,6 +196,7 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(
                 sketch->referencePlane)) {
           if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
               seen.find(subTopo->parentFeatureID) == seen.end()) {
             addWarn("[REF_003] Sketch '" + sketch->featureID +
                     "' referencePlane parent '" + subTopo->parentFeatureID +

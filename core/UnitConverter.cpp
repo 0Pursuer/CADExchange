@@ -6,8 +6,9 @@ namespace CADExchange {
 namespace {
 
 bool IsSupportedUnitForConversion(UnitType unit) {
-  return unit == UnitType::METER || unit == UnitType::MILLIMETER ||
-         unit == UnitType::INCH;
+  return unit == UnitType::METER || unit == UnitType::CENTIMETER ||
+         unit == UnitType::MILLIMETER || unit == UnitType::INCH ||
+         unit == UnitType::FOOT;
 }
 
 const char *UnitTypeToString(UnitType unit) {
@@ -32,11 +33,17 @@ bool TryGetMeterScale(UnitType unit, double &scaleToMeter) {
   case UnitType::METER:
     scaleToMeter = 1.0;
     return true;
+  case UnitType::CENTIMETER:
+    scaleToMeter = 1e-2;
+    return true;
   case UnitType::MILLIMETER:
     scaleToMeter = 1e-3;
     return true;
   case UnitType::INCH:
     scaleToMeter = 0.0254;
+    return true;
+  case UnitType::FOOT:
+    scaleToMeter = 0.3048;
     return true;
   default:
     return false;
@@ -164,7 +171,7 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
   if (!IsSupportedUnitForConversion(model.unit) ||
       !IsSupportedUnitForConversion(targetUnit)) {
     if (errorMessage) {
-      *errorMessage = "ConvertModelUnit only supports METER/MILLIMETER/INCH "
+      *errorMessage = "ConvertModelUnit only supports METER/CENTIMETER/MILLIMETER/INCH/FOOT "
                       "(source=" +
                       std::string(UnitTypeToString(model.unit)) + ", target=" +
                       std::string(UnitTypeToString(targetUnit)) + ")";
