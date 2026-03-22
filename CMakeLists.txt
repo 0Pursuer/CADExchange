@@ -1,4 +1,9 @@
-﻿cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10)
+
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(CADExchange LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -11,7 +16,10 @@ endif()
 
 if(MSVC)
     add_compile_options(/bigobj)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
+
+option(CADEXCHANGE_BUILD_EXAMPLES "Build CADExchange example executables" ON)
 
 # Include directories
 include_directories(
@@ -42,29 +50,30 @@ target_include_directories(cadexchange PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-
-# Demo Application
-add_executable(PartReconstructionDemo examples/PartReconstructionDemo.cpp)
-target_include_directories(PartReconstructionDemo PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/core 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/builders 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization 
-    ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
-    ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+set_target_properties(cadexchange PROPERTIES
+    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>"
 )
-target_link_libraries(PartReconstructionDemo PRIVATE cadexchange)
 
+if(CADEXCHANGE_BUILD_EXAMPLES)
+    # Demo Application
+    add_executable(PartReconstructionDemo examples/PartReconstructionDemo.cpp)
+    target_include_directories(PartReconstructionDemo PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/builders
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+    )
+    target_link_libraries(PartReconstructionDemo PRIVATE cadexchange)
 
+    # Recommended Approach Demo (Individual Builders)
+    add_executable(RecommendedApproach examples/RecommendedApproach.cpp)
+    target_link_libraries(RecommendedApproach PRIVATE cadexchange)
 
+    # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
+    # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
 
-
-
-# Recommended Approach Demo (Individual Builders)
-add_executable(RecommendedApproach examples/RecommendedApproach.cpp)
-target_link_libraries(RecommendedApproach PRIVATE cadexchange)
-
-# add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
-# target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
-
-# add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
-# target_link_libraries(DirectModelDemo PRIVATE cadexchange)
+    # add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
+    # target_link_libraries(DirectModelDemo PRIVATE cadexchange)
+endif()
