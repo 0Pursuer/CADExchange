@@ -106,6 +106,30 @@ struct CRefEdge : public CRefSubTopo {
   CRefEdge() : CRefSubTopo(RefType::TOPO_EDGE) {}
 };
 
+/**
+ * @brief 边的几何属性扩展：在拓扑边基础上附加曲线类型。
+ *
+ * 用于几何调试输出和可视化，避免边在 JSON 中只剩下三个点而丢失
+ * 原始曲线语义。
+ */
+enum class CGeoCurveType {
+  UNKNOWN = 0,
+  LINE = 3001,
+  CIRCLE = 3002,
+  ELLIPSE = 3003,
+  INTERSECTION = 3004,
+  BCURVE = 3005,
+  SPCURVE = 3006,
+  CONSTPARAM = 3008,
+  TRIMMED = 3009
+};
+
+struct CGeoEdge : public CRefEdge {
+  CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
+
+  CGeoEdge() = default;
+};
+
 struct CRefVertex : public CRefSubTopo {
   CPoint3D pos;
 
