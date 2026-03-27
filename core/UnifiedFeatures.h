@@ -238,6 +238,17 @@ struct CSketchCSys {
 };
 
 /**
+ * @brief 几何调试输出中的辅助基准面记录。
+ *
+ * 只保存位置与局部坐标系，不承载完整的基准面约束/引用树。
+ */
+struct CGeoDatumPlane {
+  std::string targetFeatureID;
+  CSketchCSys localCSys;
+  std::string type = "Plane";
+};
+
+/**
  * @brief 草图特征。
  */
 struct CSketch : public CFeatureBase {

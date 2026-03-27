@@ -187,6 +187,15 @@ template <class Archive> void serialize(Archive &ar, CSketchCSys &csys) {
      cereal::make_nvp("ZDir", csys.zDir));
 }
 
+/**
+ * @brief 序列化几何调试输出中的辅助基准面记录。
+ */
+template <class Archive> void serialize(Archive &ar, CGeoDatumPlane &plane) {
+  ar(cereal::make_nvp("TargetFeatureID", plane.targetFeatureID),
+     cereal::make_nvp("Type", plane.type),
+     cereal::make_nvp("LocalCSys", plane.localCSys));
+}
+
 // ==========================================
 // 特征系统序列化
 // ==========================================
