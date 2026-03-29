@@ -5,7 +5,7 @@
 > 注：自 `2026-03-29` 起，`Extrude / Revolve` 已统一到共享的 `SweepExtent` 结构。
 > 旧的 `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 已被 `extent1/extent2` 取代。
 > `ExtrudeBuilder::SetEndCondition1/2(...)` 当前仍是主入口，但参数类型已经是 `SweepExtent`；
-> `Builder::EndCondition::*` 只是构造 `SweepExtent` 的便捷工厂，不再对应旧的 `ExtrudeEndCondition` 结构体。
+> `Builder::EndCondition::*` 和 `Builder::Extent::*` 都只是在构造 `SweepExtent`，不再对应旧的 `ExtrudeEndCondition` 结构体。
 > 对 `RevolveAccessor` 而言，访问接口已经直接切换到 `GetExtentType1/2`、`GetExtentValue1/2`，
 > 不再保留旧的角度语法糖接口。
 
@@ -154,20 +154,61 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 
 1. `ExtrudeBuilder` 当前统一写入 `extent1 / extent2`。
 2. `SetEndCondition1/2` 这个命名仍保留，但参数已经是 `SweepExtent`。
-3. `Builder::EndCondition::*` 只是便捷工厂，返回值本质也是 `SweepExtent`。
+3. `Builder::EndCondition::*` 和 `Builder::Extent::*` 都只是便捷工厂，返回值本质也是 `SweepExtent`。
 
-### 4.2 推荐写法：通过 EndCondition / EndConditionHelper 获取 SweepExtent
+### 4.2 推荐写法：通过 Extent / EndCondition / EndConditionHelper 获取 SweepExtent
 
 当前没有独立的 `SweepExtentBuilder`。在调用侧，**不建议手工修改 `SweepExtent` 底层字段**，
 否则会破坏 Builder 模式“链式调用 + 屏蔽底层结构细节”的设计目标。
 
 因此，推荐做法是：
 
-1. 通过 `Builder::EndCondition::*` 获取常见范围
-2. 需要引用实体时，通过 `Builder::Ref::*` 或 `EndConditionHelper::*` 先构造引用
+1. 优先通过 `Builder::Extent::*` 获取通用范围
+2. `Extrude` 场景下也可以继续使用 `Builder::EndCondition::*`
+3. 需要引用实体时，通过 `Builder::Ref::*` 或 `EndConditionHelper::*` 先构造引用
 3. 再把结果传给 `SetEndCondition1/2`
 
-### 4.3 便捷工厂：EndCondition / EndConditionHelper
+#### A) 通用 VALUE
+
+```cpp
+std::string extBlind =
+  Builder::ExtrudeBuilder(model, "Ext_Blind")
+    .SetProfile(sketchID)
+    .SetDirection(CVector3D{0, 0, 1})
+    .SetOperation(BooleanOp::BOSS)
+    .SetEndCondition1(Builder::Extent::Value(0.015))
+    .Build();
+```
+
+#### B) 通用 UP_TO_ENTITY（到面）
+
+```cpp
+auto faceRef = Builder::Ref::Face("SomeFeatureID", 0)
+                 .Centroid(CPoint3D{0.01, 0.01, 0.0})
+                 .Normal(CVector3D{0, 0, 1})
+                 .Build();
+
+std::string extUpToFace =
+  Builder::ExtrudeBuilder(model, "Ext_UpToFace")
+    .SetProfile(sketchID)
+    .SetOperation(BooleanOp::BOSS)
+    .SetEndCondition1(Builder::Extent::UpToEntity(faceRef, 0.001))
+    .Build();
+```
+
+#### C) 通用双向范围
+
+```cpp
+std::string extTwoDir =
+  Builder::ExtrudeBuilder(model, "Ext_TwoDir")
+    .SetProfile(sketchID)
+    .SetDirection(CVector3D{0, 0, 1})
+    .SetEndCondition1(Builder::Extent::Value(0.01))
+    .SetEndCondition2(Builder::Extent::Value(0.005))
+    .Build();
+```
+
+### 4.3 兼容工厂：EndCondition / EndConditionHelper
 
 `Builder::EndCondition` 当前支持：
 
@@ -372,6 +413,7 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 1. `Revolve` 已不再使用 `AngleKind / PrimaryAngle / SecondaryAngle` 作为模型层字段。
 2. 推荐优先使用 `SetExtent1/2`，这样与 `Extrude` 的共享语义完全一致。
 3. `SetAngle / SetTwoWayAngle / SetSymmetricAngle` 仍可用，但只是对 `extent1 / extent2` 的语法糖。
+4. 若想保持和旧 `EndCondition` 类似的调用风格，优先使用 `Builder::Extent::*`。
 
 ### 5.2 典型示例
 
@@ -399,7 +441,7 @@ std::string revTwoWay =
     .Build();
 ```
 
-#### C) 通过 Axis + EndCondition 保持链式风格
+#### C) 通过 Axis + Extent 保持链式风格
 
 ```cpp
 std::string revExtent =
@@ -407,7 +449,7 @@ std::string revExtent =
     .SetProfile(sketchID)
     .SetAxisRef(Builder::Ref::Axis("DatumAxis_001"))
     .SetOperation(BooleanOp::BOSS)
-    .SetAngle(270.0)
+    .SetExtent1(Builder::Extent::Angle(270.0))
     .Build();
 ```
 
@@ -418,7 +460,7 @@ std::string revSym =
   Builder::RevolveBuilder(model, "Rev_Symmetric")
     .SetProfile(sketchID)
     .SetAxisFromSketchLine("CenterLine_1")
-    .SetSymmetricAngle(180.0)
+    .SetExtent1(Builder::Extent::Symmetric(180.0))
     .Build();
 ```
 

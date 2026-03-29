@@ -10,26 +10,38 @@
 namespace CADExchange {
 namespace Builder {
 
-class EndCondition {
+class Extent {
 public:
-  // 盲孔 (给定深度)
-  static SweepExtent Blind(double depth) {
+  static SweepExtent Value(double value) {
     SweepExtent c;
     c.type = SweepExtent::Type::VALUE;
-    c.value = depth;
+    c.value = value;
     return c;
   }
 
-  // 贯穿
+  static SweepExtent Angle(double value) { return Value(value); }
+
+  static SweepExtent Symmetric(double value) {
+    SweepExtent c;
+    c.type = SweepExtent::Type::SYMMETRIC;
+    c.value = value;
+    return c;
+  }
+
   static SweepExtent ThroughAll() {
     SweepExtent c;
     c.type = SweepExtent::Type::THROUGH_ALL;
     return c;
   }
 
-  // 拉伸到面，实体面
+  static SweepExtent ThroughAllBothSides() {
+    SweepExtent c;
+    c.type = SweepExtent::Type::THROUGH_ALL_BOTH_SIDES;
+    return c;
+  }
+
   static SweepExtent
-  UpToFace(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
+  UpToEntity(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
     SweepExtent c;
     c.type = SweepExtent::Type::UP_TO_ENTITY;
     c.referenceEntity = ref;
@@ -38,58 +50,84 @@ public:
     return c;
   }
 
-  // 拉伸到基准面
+  static SweepExtent UpToFace(const std::shared_ptr<CRefEntityBase> &ref,
+                              double offset = 0.0) {
+    return UpToEntity(ref, offset);
+  }
+
   static SweepExtent UpToRefPlane(const std::shared_ptr<CRefPlane> &ref,
                                   double offset = 0.0) {
-    SweepExtent c;
-    c.type = SweepExtent::Type::UP_TO_ENTITY;
-    c.referenceEntity = ref;
-    c.offset = offset;
-    c.hasOffset = (std::abs(offset) > 1e-9);
-    return c;
+    return UpToEntity(ref, offset);
   }
 
-  // 拉伸到顶点, 实体顶点
-  static SweepExtent
-  UpToVertex(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
-    SweepExtent c;
-    c.type = SweepExtent::Type::UP_TO_ENTITY;
-    c.referenceEntity = ref;
-    c.offset = offset;
-    c.hasOffset = (std::abs(offset) > 1e-9);
-    return c;
-  }
-  // 拉伸到顶点, 基准点
-  static SweepExtent
-  UpToRefPoint(const std::shared_ptr<CRefPoint> &ref, double offset = 0.0) {
-    SweepExtent c;
-    c.type = SweepExtent::Type::UP_TO_ENTITY;
-    c.referenceEntity = ref;
-    c.offset = offset;
-    c.hasOffset = (std::abs(offset) > 1e-9);
-    return c;
+  static SweepExtent UpToVertex(const std::shared_ptr<CRefEntityBase> &ref,
+                                double offset = 0.0) {
+    return UpToEntity(ref, offset);
   }
 
-  // 拉伸到下一面
+  static SweepExtent UpToRefPoint(const std::shared_ptr<CRefPoint> &ref,
+                                  double offset = 0.0) {
+    return UpToEntity(ref, offset);
+  }
+
   static SweepExtent UpToNext() {
     SweepExtent c;
     c.type = SweepExtent::Type::UP_TO_NEXT;
     return c;
   }
 
-  // 拉伸到中间面
-  static SweepExtent MidPlane(double depth = 0.0) {
+  static SweepExtent MidPlane(double value = 0.0) {
     SweepExtent c;
     c.type = SweepExtent::Type::MID_PLANE;
-    c.value = depth;
+    c.value = value;
     return c;
+  }
+};
+
+class EndCondition {
+public:
+  // 盲孔 (给定深度)
+  static SweepExtent Blind(double depth) {
+    return Extent::Value(depth);
+  }
+
+  // 贯穿
+  static SweepExtent ThroughAll() { return Extent::ThroughAll(); }
+
+  // 拉伸到面，实体面
+  static SweepExtent
+  UpToFace(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
+    return Extent::UpToFace(ref, offset);
+  }
+
+  // 拉伸到基准面
+  static SweepExtent UpToRefPlane(const std::shared_ptr<CRefPlane> &ref,
+                                  double offset = 0.0) {
+    return Extent::UpToRefPlane(ref, offset);
+  }
+
+  // 拉伸到顶点, 实体顶点
+  static SweepExtent
+  UpToVertex(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
+    return Extent::UpToVertex(ref, offset);
+  }
+  // 拉伸到顶点, 基准点
+  static SweepExtent
+  UpToRefPoint(const std::shared_ptr<CRefPoint> &ref, double offset = 0.0) {
+    return Extent::UpToRefPoint(ref, offset);
+  }
+
+  // 拉伸到下一面
+  static SweepExtent UpToNext() { return Extent::UpToNext(); }
+
+  // 拉伸到中间面
+  static SweepExtent MidPlane(double depth = 0.0) {
+    return Extent::MidPlane(depth);
   }
 
   // 双向贯穿
   static SweepExtent ThroughAllBothSides() {
-    SweepExtent c;
-    c.type = SweepExtent::Type::THROUGH_ALL_BOTH_SIDES;
-    return c;
+    return Extent::ThroughAllBothSides();
   }
 
 };
