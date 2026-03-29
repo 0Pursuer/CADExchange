@@ -156,75 +156,18 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 2. `SetEndCondition1/2` 这个命名仍保留，但参数已经是 `SweepExtent`。
 3. `Builder::EndCondition::*` 只是便捷工厂，返回值本质也是 `SweepExtent`。
 
-### 4.2 推荐写法：直接构造 SweepExtent
+### 4.2 推荐写法：通过 EndCondition / EndConditionHelper 获取 SweepExtent
 
-推荐思路：
+当前没有独立的 `SweepExtentBuilder`。在调用侧，**不建议手工修改 `SweepExtent` 底层字段**，
+否则会破坏 Builder 模式“链式调用 + 屏蔽底层结构细节”的设计目标。
 
-1. 先明确 `SweepExtent::Type`
-2. 再填 `value / offset / referenceEntity / helperPoint`
-3. 最后传给 `SetEndCondition1/2`
+因此，推荐做法是：
 
-#### A) VALUE / Blind
-
-```cpp
-SweepExtent e1;
-e1.type = SweepExtent::Type::VALUE;
-e1.value = 0.015;
-
-std::string extBlind =
-  Builder::ExtrudeBuilder(model, "Ext_Blind")
-    .SetProfile(sketchID)
-    .SetDirection(CVector3D{0, 0, 1})
-    .SetOperation(BooleanOp::BOSS)
-    .SetEndCondition1(e1)
-    .Build();
-```
-
-#### B) UP_TO_ENTITY（到面）
-
-```cpp
-auto faceRef = Builder::Ref::Face("SomeFeatureID", 0)
-                 .Centroid(CPoint3D{0.01, 0.01, 0.0})
-                 .Normal(CVector3D{0, 0, 1})
-                 .Build();
-
-SweepExtent eFace;
-eFace.type = SweepExtent::Type::UP_TO_ENTITY;
-eFace.referenceEntity = faceRef;
-eFace.offset = 0.001;
-eFace.hasOffset = true;
-
-std::string extUpToFace =
-  Builder::ExtrudeBuilder(model, "Ext_UpToFace")
-    .SetProfile(sketchID)
-    .SetOperation(BooleanOp::BOSS)
-    .SetEndCondition1(eFace)
-    .Build();
-```
-
-#### C) 双向范围
-
-```cpp
-SweepExtent eForward;
-eForward.type = SweepExtent::Type::VALUE;
-eForward.value = 0.01;
-
-SweepExtent eReverse;
-eReverse.type = SweepExtent::Type::VALUE;
-eReverse.value = 0.005;
-
-std::string extTwoDir =
-  Builder::ExtrudeBuilder(model, "Ext_TwoDir")
-    .SetProfile(sketchID)
-    .SetDirection(CVector3D{0, 0, 1})
-    .SetEndCondition1(eForward)
-    .SetEndCondition2(eReverse)
-    .Build();
-```
+1. 通过 `Builder::EndCondition::*` 获取常见范围
+2. 需要引用实体时，通过 `Builder::Ref::*` 或 `EndConditionHelper::*` 先构造引用
+3. 再把结果传给 `SetEndCondition1/2`
 
 ### 4.3 便捷工厂：EndCondition / EndConditionHelper
-
-当你只需要常见范围时，可以继续使用便捷工厂；它们最终返回的仍然是 `SweepExtent`。
 
 `Builder::EndCondition` 当前支持：
 
@@ -456,19 +399,15 @@ std::string revTwoWay =
     .Build();
 ```
 
-#### C) 直接使用 SweepExtent
+#### C) 通过 Axis + EndCondition 保持链式风格
 
 ```cpp
-SweepExtent e1;
-e1.type = SweepExtent::Type::VALUE;
-e1.value = 270.0;
-
 std::string revExtent =
   Builder::RevolveBuilder(model, "Rev_ByExtent")
     .SetProfile(sketchID)
     .SetAxisRef(Builder::Ref::Axis("DatumAxis_001"))
     .SetOperation(BooleanOp::BOSS)
-    .SetExtent1(e1)
+    .SetAngle(270.0)
     .Build();
 ```
 
