@@ -38,7 +38,7 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         referencedSketchIDs.insert(rv->profileSketchID);
   }
 
-  // depth magnitude threshold (convert to meters)
+  // length magnitude threshold (convert to meters)
   auto toMeter = [&](double v) -> double {
     switch (model.unit) {
       case UnitType::MILLIMETER:  return v * 1e-3;
@@ -64,62 +64,51 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
     report.warnings.push_back(msg);
   };
 
-  auto checkEC = [&](const ExtrudeEndCondition &ec,
-                     const std::string &extrudeID,
-                     const std::string &side,
-                     const std::unordered_set<std::string> &seen) {
-    using ECType = ExtrudeEndCondition::Type;
+  auto checkExtent = [&](const SweepExtent &extent,
+                         const std::string &featureID,
+                         const std::string &side,
+                         const std::unordered_set<std::string> &seen,
+                         const char *kind,
+                         bool valueIsLength) {
+    if (extent.type == SweepExtent::Type::UNKNOWN) {
+      addError(std::string("[") + kind + "_002] " + kind + " '" + featureID +
+               "' " + side + " extent type is UNKNOWN.");
+      return;
+    }
 
-    if (ec.type == ECType::BLIND && ec.depth <= 0.0) {
-      addError("[EXTRUDE_002] Extrude '" + extrudeID + "' " + side +
-               " type=BLIND but depth=" + std::to_string(ec.depth) + " (must be > 0).");
+    if ((extent.type == SweepExtent::Type::VALUE ||
+         extent.type == SweepExtent::Type::MID_PLANE ||
+         extent.type == SweepExtent::Type::SYMMETRIC) &&
+        extent.value <= 0.0) {
+      addError(std::string("[") + kind + "_003] " + kind + " '" + featureID +
+               "' " + side + " extent value=" + std::to_string(extent.value) +
+               " (must be > 0).");
     }
-    if ((ec.type == ECType::UP_TO_FACE || ec.type == ECType::UP_TO_VERTEX) &&
-        !ec.referenceEntity) {
-      addError("[EXTRUDE_003] Extrude '" + extrudeID + "' " + side +
-               " type=" + (ec.type == ECType::UP_TO_FACE ? "UP_TO_FACE" : "UP_TO_VERTEX") +
-               " but referenceEntity is null.");
+
+    if (extent.type == SweepExtent::Type::UP_TO_ENTITY &&
+        !extent.referenceEntity) {
+      addError(std::string("[") + kind + "_004] " + kind + " '" + featureID +
+               "' " + side + " extent requires referenceEntity.");
     }
-    if (ec.type == ECType::UP_TO_FACE && ec.referenceEntity) {
-      if (!std::dynamic_pointer_cast<CRefFace>(ec.referenceEntity)) {
-        addError("[EXTRUDE_004] Extrude '" + extrudeID + "' " + side +
-                 " type=UP_TO_FACE but referenceEntity is not CRefFace.");
-      } else {
-        auto face = std::dynamic_pointer_cast<CRefFace>(ec.referenceEntity);
-        if (isZeroVec(face->normal)) {
-          addError("[GEOM_002] Extrude '" + extrudeID + "' " + side +
-                   " CRefFace normal is zero vector.");
-        }
-        CPoint3D zero{};
-        if (face->centroid == zero) {
-          addWarn("[GEOM_005] Extrude '" + extrudeID + "' " + side +
-                  " CRefFace centroid is (0,0,0) -- may be unset.");
-        }
-      }
-    }
-    if (ec.type == ECType::UP_TO_VERTEX && ec.referenceEntity) {
-      if (!std::dynamic_pointer_cast<CRefVertex>(ec.referenceEntity)) {
-        addError("[EXTRUDE_005] Extrude '" + extrudeID + "' " + side +
-                 " type=UP_TO_VERTEX but referenceEntity is not CRefVertex.");
-      }
-    }
-    if (ec.type == ECType::BLIND) {
-      double depthM = toMeter(ec.depth);
-      if (depthM > 0.0 && (depthM < 1e-6 || depthM > 100.0)) {
-        addWarn("[SCALE_001] Extrude '" + extrudeID + "' " + side +
-                " BLIND depth=" + std::to_string(ec.depth) +
-                " (~" + std::to_string(depthM * 1000.0) + "mm) is out of normal range -- "
-                "check unit system.");
-      }
-    }
-    if (ec.referenceEntity) {
-      if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ec.referenceEntity)) {
+
+    if (extent.referenceEntity) {
+      if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(extent.referenceEntity)) {
         if (!subTopo->parentFeatureID.empty() &&
             seen.find(subTopo->parentFeatureID) == seen.end()) {
-          addWarn("[REF_002] Extrude '" + extrudeID + "' " + side +
+          addWarn(std::string("[REF_002] ") + kind + " '" + featureID + "' " + side +
                   " references feature '" + subTopo->parentFeatureID +
                   "' which has not been defined yet.");
         }
+      }
+    }
+
+    if (valueIsLength) {
+      double valueM = toMeter(extent.value);
+      if (valueM > 0.0 && (valueM < 1e-6 || valueM > 100.0)) {
+        addWarn(std::string("[SCALE_001] ") + kind + " '" + featureID + "' " + side +
+                " extent value=" + std::to_string(extent.value) +
+                " (~" + std::to_string(valueM * 1000.0) + "mm) is out of normal range -- "
+                "check unit system.");
       }
     }
   };
@@ -166,10 +155,9 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                   " is not normalized (expected ~1.0).");
         }
       }
-      checkEC(extrude->endCondition1, extrude->featureID, "EC1", seen);
-      if (extrude->endCondition2)
-        checkEC(*extrude->endCondition2, extrude->featureID, "EC2", seen);
-      // EXTRUDE_006
+      checkExtent(extrude->extent1, extrude->featureID, "Extent1", seen, "EXTRUDE", true);
+      if (extrude->extent2)
+        checkExtent(*extrude->extent2, extrude->featureID, "Extent2", seen, "EXTRUDE", true);
       if (extrude->thinWall.has_value() && extrude->thinWall->thickness <= 0.0) {
         addError("[EXTRUDE_006] Extrude '" + extrude->featureID +
                  "' has ThinWall but Thickness=" +
@@ -219,16 +207,18 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                  "' references sketch '" + revolve->profileSketchID +
                  "' which has not been defined yet.");
       }
-      // REVOLVE_002
-      if (revolve->primaryAngle <= 0.0) {
-        addError("[REVOLVE_002] Revolve '" + revolve->featureID +
-                 "' primaryAngle=" + std::to_string(revolve->primaryAngle) +
-                 " (must be > 0).");
-      }
       // GEOM_004
       if (isZeroVec(revolve->axis.direction)) {
         addError("[GEOM_004] Revolve '" + revolve->featureID +
                  "' axis direction is zero vector.");
+      }
+      checkExtent(revolve->extent1, revolve->featureID, "Extent1", seen, "REVOLVE", false);
+      if (revolve->extent2)
+        checkExtent(*revolve->extent2, revolve->featureID, "Extent2", seen, "REVOLVE", false);
+      if (revolve->thinWall.has_value() && revolve->thinWall->thickness <= 0.0) {
+        addError("[REVOLVE_006] Revolve '" + revolve->featureID +
+                 "' has ThinWall but Thickness=" +
+                 std::to_string(revolve->thinWall->thickness) + " (must be > 0).");
       }
     }
     // ---- CDatumPlane ----

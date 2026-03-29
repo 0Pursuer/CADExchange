@@ -64,84 +64,75 @@ public:
   }
 
   // --- 拉伸方向 1（主方向） ---
-  // Note: m_extrude->endCondition1 is a struct, not a pointer, so we access
-  // fields directly via . But our macro expects m_data->MemberName. My macro:
-  // return IsValid() ? Data()->MemberName : DefaultValue; For endCondition1
-  // which is a struct member of CExtrude, we can't use the simple macro
-  // directly for its sub-fields unless we treat EndCondition1 as the member.
-  // Let's manually refactor these to use Data() to show the pattern A mixed
-  // with B where possible.
-
-  ExtrudeEndCondition::Type GetEndType1() const {
-    return IsValid() ? Data()->endCondition1.type
-                     : ExtrudeEndCondition::Type::BLIND;
+  SweepExtent::Type GetEndType1() const {
+    return IsValid() ? Data()->extent1.type : SweepExtent::Type::VALUE;
   }
 
   double GetDepth1() const {
-    return IsValid() ? Data()->endCondition1.depth : 0.0;
+    return IsValid() ? Data()->extent1.value : 0.0;
   }
 
   double GetOffset1() const {
-    return IsValid() ? Data()->endCondition1.offset : 0.0;
+    return IsValid() ? Data()->extent1.offset : 0.0;
   }
 
   bool HasOffset1() const {
-    return IsValid() && Data()->endCondition1.hasOffset;
+    return IsValid() && Data()->extent1.hasOffset;
   }
 
-  bool IsFlip1() const { return IsValid() && Data()->endCondition1.isFlip; }
+  bool IsFlip1() const { return IsValid() && Data()->extent1.isFlip; }
 
   bool IsFlipMaterialSide1() const {
-    return IsValid() && Data()->endCondition1.isFlipMaterialSide;
+    return IsValid() && Data()->extent1.isFlipMaterialSide;
   }
 
   ReferenceAccessor GetReference1() const {
     if (IsValid()) {
-      return ReferenceAccessor(Data()->endCondition1.referenceEntity);
+      return ReferenceAccessor(Data()->extent1.referenceEntity);
     }
     return ReferenceAccessor(nullptr);
   }
 
   // --- 拉伸方向 2（可选） ---
-  // endCondition2 is std::optional<ExtrudeEndCondition>
+  // extent2 is std::optional<SweepExtent>
 
   bool HasDirection2() const {
-    return IsValid() && Data()->endCondition2.has_value();
+    return IsValid() && Data()->extent2.has_value();
   }
 
-  ExtrudeEndCondition::Type GetEndType2() const {
+  SweepExtent::Type GetEndType2() const {
     if (!HasDirection2())
-      return ExtrudeEndCondition::Type::BLIND;
-    return Data()->endCondition2->type;
+      return SweepExtent::Type::VALUE;
+    return Data()->extent2->type;
   }
 
   double GetDepth2() const {
     if (!HasDirection2())
       return 0.0;
-    return Data()->endCondition2->depth;
+    return Data()->extent2->value;
   }
 
   double GetOffset2() const {
     if (!HasDirection2())
       return 0.0;
-    return Data()->endCondition2->offset;
+    return Data()->extent2->offset;
   }
 
   bool HasOffset2() const {
-    return HasDirection2() && Data()->endCondition2->hasOffset;
+    return HasDirection2() && Data()->extent2->hasOffset;
   }
 
   bool IsFlip2() const {
-    return HasDirection2() && Data()->endCondition2->isFlip;
+    return HasDirection2() && Data()->extent2->isFlip;
   }
 
   bool IsFlipMaterialSide2() const {
-    return HasDirection2() && Data()->endCondition2->isFlipMaterialSide;
+    return HasDirection2() && Data()->extent2->isFlipMaterialSide;
   }
 
   ReferenceAccessor GetReference2() const {
     if (HasDirection2()) {
-      return ReferenceAccessor(Data()->endCondition2->referenceEntity);
+      return ReferenceAccessor(Data()->extent2->referenceEntity);
     }
     return ReferenceAccessor(nullptr);
   }

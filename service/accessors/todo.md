@@ -410,3 +410,8 @@ Accessor 的设计哲学就是 **“安全地拆包”**：
 3.  **SketchAccessor**: 像翻书一样，通过 `Index` 获取每一页（Segment），每页再看是直线还是圆。
 
 这套设计与你的 Builder 层完美对称，确保了“写进去的数据”都能“方便地读出来”。
+> 迁移说明（2026-03-29）
+>
+> 本文仍保留大量早期设计草稿，尤其包含 `ExtrudeEndCondition`、`endCondition1/2`、
+> `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 等旧术语。当前实现已迁移到共享的
+> `SweepExtent` 与 `extent1/extent2`，阅读本文件时应以现行头文件和示例代码为准。

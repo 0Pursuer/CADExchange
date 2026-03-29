@@ -13,25 +13,25 @@ namespace Builder {
 class EndCondition {
 public:
   // 盲孔 (给定深度)
-  static ExtrudeEndCondition Blind(double depth) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::BLIND;
-    c.depth = depth;
+  static SweepExtent Blind(double depth) {
+    SweepExtent c;
+    c.type = SweepExtent::Type::VALUE;
+    c.value = depth;
     return c;
   }
 
   // 贯穿
-  static ExtrudeEndCondition ThroughAll() {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::THROUGH_ALL;
+  static SweepExtent ThroughAll() {
+    SweepExtent c;
+    c.type = SweepExtent::Type::THROUGH_ALL;
     return c;
   }
 
   // 拉伸到面，实体面
-  static ExtrudeEndCondition
+  static SweepExtent
   UpToFace(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::UP_TO_FACE;
+    SweepExtent c;
+    c.type = SweepExtent::Type::UP_TO_ENTITY;
     c.referenceEntity = ref;
     c.offset = offset;
     c.hasOffset = (std::abs(offset) > 1e-9);
@@ -39,10 +39,10 @@ public:
   }
 
   // 拉伸到基准面
-  static ExtrudeEndCondition UpToRefPlane(const std::shared_ptr<CRefPlane> &ref,
-                                         double offset = 0.0) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::UP_TO_FACE;
+  static SweepExtent UpToRefPlane(const std::shared_ptr<CRefPlane> &ref,
+                                  double offset = 0.0) {
+    SweepExtent c;
+    c.type = SweepExtent::Type::UP_TO_ENTITY;
     c.referenceEntity = ref;
     c.offset = offset;
     c.hasOffset = (std::abs(offset) > 1e-9);
@@ -50,20 +50,20 @@ public:
   }
 
   // 拉伸到顶点, 实体顶点
-  static ExtrudeEndCondition
+  static SweepExtent
   UpToVertex(const std::shared_ptr<CRefEntityBase> &ref, double offset = 0.0) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::UP_TO_VERTEX;
+    SweepExtent c;
+    c.type = SweepExtent::Type::UP_TO_ENTITY;
     c.referenceEntity = ref;
     c.offset = offset;
     c.hasOffset = (std::abs(offset) > 1e-9);
     return c;
   }
   // 拉伸到顶点, 基准点
-  static ExtrudeEndCondition
+  static SweepExtent
   UpToRefPoint(const std::shared_ptr<CRefPoint> &ref, double offset = 0.0) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::UP_TO_VERTEX;
+    SweepExtent c;
+    c.type = SweepExtent::Type::UP_TO_ENTITY;
     c.referenceEntity = ref;
     c.offset = offset;
     c.hasOffset = (std::abs(offset) > 1e-9);
@@ -71,24 +71,24 @@ public:
   }
 
   // 拉伸到下一面
-  static ExtrudeEndCondition UpToNext() {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::UP_TO_NEXT;
+  static SweepExtent UpToNext() {
+    SweepExtent c;
+    c.type = SweepExtent::Type::UP_TO_NEXT;
     return c;
   }
 
   // 拉伸到中间面
-  static ExtrudeEndCondition MidPlane(double depth = 0.0) {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::MID_PLANE;
-    c.depth = depth;
+  static SweepExtent MidPlane(double depth = 0.0) {
+    SweepExtent c;
+    c.type = SweepExtent::Type::MID_PLANE;
+    c.value = depth;
     return c;
   }
 
   // 双向贯穿
-  static ExtrudeEndCondition ThroughAllBothSides() {
-    ExtrudeEndCondition c;
-    c.type = ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES;
+  static SweepExtent ThroughAllBothSides() {
+    SweepExtent c;
+    c.type = SweepExtent::Type::THROUGH_ALL_BOTH_SIDES;
     return c;
   }
 
@@ -119,9 +119,9 @@ public:
    * @param vertexPoint 顶点的坐标
    * @param topologyIndex 顶点的拓扑索引（默认 0）
    * @param offset 偏移量（默认 0）
-   * @return 构造好的 ExtrudeEndCondition
+   * @return 构造好的 SweepExtent
    */
-  static ExtrudeEndCondition UpToVertex(
+  static SweepExtent UpToVertex(
       UnifiedModel &model,
       const std::string &parentFeatureId,
       const CPoint3D &vertexPoint,
@@ -141,9 +141,9 @@ public:
    * @param parentFeatureId 面所属特征的 ID
    * @param topologyIndex 面的拓扑索引（默认 0）
    * @param offset 偏移量（默认 0）
-   * @return 构造好的 ExtrudeEndCondition
+   * @return 构造好的 SweepExtent
    */
-  static ExtrudeEndCondition UpToFace(
+  static SweepExtent UpToFace(
       const std::string &parentFeatureId,
       int topologyIndex = 0,
       double offset = 0.0) {
@@ -163,9 +163,9 @@ public:
    * @param normal 基准面法向量
    * @param xDir 基准面 X 方向
    * @param offset 偏移量（默认 0）
-   * @return 构造好的 ExtrudeEndCondition
+   * @return 构造好的 SweepExtent
    */
-  static ExtrudeEndCondition UpToRefPlane(
+  static SweepExtent UpToRefPlane(
       UnifiedModel &model,
       const std::string &planeFeatureId,
       const CPoint3D &origin,
@@ -188,9 +188,9 @@ public:
    * @param source 源终止条件
    * @return 转换后的条件，如果无法转换则返回 std::nullopt
    */
-  static std::optional<ExtrudeEndCondition> 
-  SafeConvert(const ExtrudeEndCondition &source) {
-    if (source.type == ExtrudeEndCondition::Type::UNKNOWN) {
+  static std::optional<SweepExtent>
+  SafeConvert(const SweepExtent &source) {
+    if (source.type == SweepExtent::Type::UNKNOWN) {
       return std::nullopt;
     }
     return source;

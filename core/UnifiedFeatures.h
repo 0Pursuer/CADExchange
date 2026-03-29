@@ -277,40 +277,50 @@ struct ThinWallOption {
 };
 
 /**
- * @brief 拉伸结束条件。
+ * @brief 共享扫掠终止条件。
+ *
+ * 用于统一 Extrude / Revolve 的单向、双向、对称以及参考终止表达。
  */
-struct ExtrudeEndCondition {
+struct SweepExtent {
   enum class Type {
-    BLIND,                  // 盲孔
+    VALUE,                  // 数值（Extrude: 深度 / Revolve: 角度）
+    SYMMETRIC,              // 对称
     THROUGH_ALL,            // 贯穿
+    THROUGH_ALL_BOTH_SIDES, // 双向贯穿（保留给 Extrude 兼容）
     UP_TO_NEXT,             // 到下一面
-    UP_TO_FACE,             // 到指定面
-    UP_TO_VERTEX,           // 到指定顶点
-    MID_PLANE,              // 中间平面
-    THROUGH_ALL_BOTH_SIDES, // 双向贯穿
-
+    UP_TO_ENTITY,           // 到指定参考实体
+    UP_TO_EXTENDED,         // 延伸到参考实体
+    THRU_POINT,             // 过点
+    MID_PLANE,              // 中间平面（保留给 Extrude 兼容）
     UNKNOWN
-
   } type = Type::UNKNOWN;
-  double depth = 0.0;
+
+  double value = 0.0;
   double offset = 0.0;
   bool hasOffset = false;                          ///< 是否启用偏移
   std::shared_ptr<CRefEntityBase> referenceEntity; ///< 参考实体
   bool isFlip = false;                             ///< 是否反转方向
   bool isFlipMaterialSide = false;                 ///< 是否反转材料侧
+  std::optional<CPoint3D> helperPoint;             ///< 多解时用于消歧
+};
+
+/**
+ * @brief 轮廓驱动特征的共享基类。
+ */
+struct CProfiledFeatureBase : public CFeatureBase {
+  std::string profileSketchID; ///< 草图轮廓的特征 ID（引用，不嵌入）
+  BooleanOp operation = BooleanOp::BOSS;
+  std::optional<ThinWallOption> thinWall;
 };
 
 /**
  * @brief 拉伸特征。
  */
-struct CExtrude : public CFeatureBase {
-  std::string profileSketchID; ///< 草图轮廓的特征 ID（引用，不嵌入）
+struct CExtrude : public CProfiledFeatureBase {
   CVector3D direction = {0, 0, 1};
-  ExtrudeEndCondition endCondition1;
-  std::optional<ExtrudeEndCondition> endCondition2;
-  BooleanOp operation = BooleanOp::BOSS; ///< 默认新建实体
+  SweepExtent extent1;
+  std::optional<SweepExtent> extent2;
   std::optional<DraftOption> draft;
-  std::optional<ThinWallOption> thinWall;
 
   CExtrude() { featureType = FeatureType::Extrude; }
 };
@@ -328,16 +338,10 @@ struct CRevolveAxis {
 /**
  * @brief 旋转特征。
  */
-struct CRevolve : public CFeatureBase {
-  std::string profileSketchID;
+struct CRevolve : public CProfiledFeatureBase {
   CRevolveAxis axis;
-  enum class AngleKind {
-    Single,
-    TwoWay,
-    Symmetric
-  } angleKind = AngleKind::Single;
-  double primaryAngle = 0.0;
-  double secondaryAngle = 0.0;
+  SweepExtent extent1;
+  std::optional<SweepExtent> extent2;
 
   CRevolve() { featureType = FeatureType::Revolve; }
 };

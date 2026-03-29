@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <sstream>
 #include <set>
 
 using namespace CADExchange;
@@ -31,6 +32,96 @@ void PrintSubseparator(const std::string &title = "") {
   if (!title.empty()) {
     std::cout << "  " << title << std::endl;
     std::cout << std::string(80, '-') << std::endl;
+  }
+}
+
+std::string FormatNumber(double value) {
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(3) << value;
+  return oss.str();
+}
+
+std::string SweepExtentTypeLabel(SweepExtent::Type type) {
+  switch (type) {
+  case SweepExtent::Type::VALUE:
+    return "VALUE";
+  case SweepExtent::Type::SYMMETRIC:
+    return "SYMMETRIC";
+  case SweepExtent::Type::THROUGH_ALL:
+    return "THROUGH_ALL";
+  case SweepExtent::Type::THROUGH_ALL_BOTH_SIDES:
+    return "THROUGH_ALL_BOTH_SIDES";
+  case SweepExtent::Type::UP_TO_NEXT:
+    return "UP_TO_NEXT";
+  case SweepExtent::Type::UP_TO_ENTITY:
+    return "UP_TO_ENTITY";
+  case SweepExtent::Type::UP_TO_EXTENDED:
+    return "UP_TO_EXTENDED";
+  case SweepExtent::Type::THRU_POINT:
+    return "THRU_POINT";
+  case SweepExtent::Type::MID_PLANE:
+    return "MID_PLANE";
+  default:
+    return "UNKNOWN";
+  }
+}
+
+std::string DescribeExtentSummary(const SweepExtent &extent, bool angular) {
+  std::ostringstream oss;
+  oss << SweepExtentTypeLabel(extent.type);
+  if (extent.type == SweepExtent::Type::VALUE ||
+      extent.type == SweepExtent::Type::SYMMETRIC ||
+      extent.type == SweepExtent::Type::MID_PLANE) {
+    oss << "(" << FormatNumber(extent.value) << (angular ? " deg" : " mm") << ")";
+  }
+  if (extent.hasOffset) {
+    oss << ", offset=" << FormatNumber(extent.offset) << " mm";
+  }
+  if (extent.referenceEntity) {
+    oss << ", ref";
+  }
+  if (extent.helperPoint) {
+    oss << ", helper";
+  }
+  if (extent.isFlip) {
+    oss << ", flip";
+  }
+  if (extent.isFlipMaterialSide) {
+    oss << ", flip-material";
+  }
+  return oss.str();
+}
+
+void PrintExtentDetails(const std::string &prefix, const SweepExtent &extent,
+                        bool angular) {
+  std::cout << prefix << "类型: " << SweepExtentTypeLabel(extent.type) << std::endl;
+
+  if (extent.type == SweepExtent::Type::VALUE ||
+      extent.type == SweepExtent::Type::SYMMETRIC ||
+      extent.type == SweepExtent::Type::MID_PLANE) {
+    std::cout << prefix << (angular ? "角度: " : "深度: ")
+              << FormatNumber(extent.value) << (angular ? " deg" : " mm")
+              << std::endl;
+  }
+
+  if (extent.hasOffset) {
+    std::cout << prefix << "偏移: " << FormatNumber(extent.offset) << " mm"
+              << std::endl;
+  }
+
+  if (extent.helperPoint) {
+    std::cout << prefix << "辅助点: (" << extent.helperPoint->x << ", "
+              << extent.helperPoint->y << ", " << extent.helperPoint->z << ")"
+              << std::endl;
+  }
+
+  if (extent.isFlip) {
+    std::cout << prefix << (angular ? "反转角度方向: 是" : "反转方向: 是")
+              << std::endl;
+  }
+
+  if (extent.isFlipMaterialSide) {
+    std::cout << prefix << "反转材料侧: 是" << std::endl;
   }
 }
 
@@ -104,14 +195,18 @@ void TraverseAndDisplayFeatures(const std::string &xmlPath) {
       extraInfo = std::to_string(sketch->GetSegmentCount()) + " segs";
     } else if (auto extrude = feat->As<ExtrudeAccessor>()) {
       typeStr = "Extrude";
-      // 演示：使用新的直接访问方式 (Data()->...)
-      // 旧方式: extrude->GetDepth1()
-      // 新方式: extrude->Data()->endCondition1.depth
-      extraInfo = "D=" + std::to_string(extrude->Data()->endCondition1.depth);
+      extraInfo = "Extent1=" + DescribeExtentSummary(extrude->Data()->extent1, false);
+      if (extrude->Data()->extent2) {
+        extraInfo += ", Extent2=" +
+                     DescribeExtentSummary(*extrude->Data()->extent2, false);
+      }
     } else if (auto revolve = feat->As<RevolveAccessor>()) {
       typeStr = "Revolve";
-      // 演示：使用 Data() 显式访问底层数据
-      extraInfo = "Angle=" + std::to_string(revolve->Data()->primaryAngle);
+      extraInfo = "Extent1=" + DescribeExtentSummary(revolve->Data()->extent1, true);
+      if (revolve->Data()->extent2) {
+        extraInfo += ", Extent2=" +
+                     DescribeExtentSummary(*revolve->Data()->extent2, true);
+      }
     } else {
       typeStr = "Other";
     }
@@ -322,54 +417,12 @@ void ExtractExtrudeData(const std::string &xmlPath) {
       std::cout << "\n第一方向参数:" << std::endl;
 
       auto endType1 = extrude->GetEndType1();
-      std::cout << "  端面类型: ";
-      switch (endType1) {
-      case ExtrudeEndCondition::Type::BLIND:
-        std::cout << "BLIND (指定深度)";
-        break;
-      case ExtrudeEndCondition::Type::THROUGH_ALL:
-        std::cout << "THROUGH_ALL (穿透全部)";
-        break;
-      case ExtrudeEndCondition::Type::UP_TO_FACE:
-        std::cout << "UP_TO_FACE (至面)";
-        break;
-      case ExtrudeEndCondition::Type::UP_TO_VERTEX:
-        std::cout << "UP_TO_VERTEX (至顶点)";
-        break;
-      case ExtrudeEndCondition::Type::UP_TO_NEXT:
-        std::cout << "UP_TO_NEXT (至下一面)";
-        break;
-      case ExtrudeEndCondition::Type::MID_PLANE:
-        std::cout << "MID_PLANE (中间平面)";
-        break;
-      default:
-        std::cout << "Unknown";
-      }
-      std::cout << std::endl;
-
-      // 根据端面类型显示相关参数
-      if (endType1 == ExtrudeEndCondition::Type::BLIND ||
-          endType1 == ExtrudeEndCondition::Type::MID_PLANE) {
-        std::cout << "  深度: " << extrude->GetDepth1() << " mm" << std::endl;
-      }
-
-      if (extrude->HasOffset1()) {
-        std::cout << "  偏移: " << extrude->GetOffset1() << " mm" << std::endl;
-      }
-
-      if (extrude->IsFlip1()) {
-        std::cout << "  反转方向: 是" << std::endl;
-      }
-
-      if (extrude->IsFlipMaterialSide1()) {
-        std::cout << "  反转材料侧: 是" << std::endl;
-      }
+      PrintExtentDetails("  ", extrude->Data()->extent1, false);
 
       // 检查第一方向的参考
       auto ref1 = extrude->GetReference1();
-      if (endType1 == ExtrudeEndCondition::Type::UP_TO_FACE ||
-          endType1 == ExtrudeEndCondition::Type::UP_TO_VERTEX ||
-          endType1 == ExtrudeEndCondition::Type::UP_TO_NEXT) {
+      if (endType1 == SweepExtent::Type::UP_TO_ENTITY ||
+          endType1 == SweepExtent::Type::UP_TO_NEXT) {
 
         if (ref1.IsValid()) {
           std::cout << "  参考实体: 存在" << std::endl;
@@ -434,55 +487,12 @@ void ExtractExtrudeData(const std::string &xmlPath) {
         std::cout << "\n第二方向参数:" << std::endl;
 
         auto endType2 = extrude->GetEndType2();
-        std::cout << "  端面类型: ";
-        switch (endType2) {
-        case ExtrudeEndCondition::Type::BLIND:
-          std::cout << "BLIND (指定深度)";
-          break;
-        case ExtrudeEndCondition::Type::THROUGH_ALL:
-          std::cout << "THROUGH_ALL (穿透全部)";
-          break;
-        case ExtrudeEndCondition::Type::UP_TO_FACE:
-          std::cout << "UP_TO_FACE (至面)";
-          break;
-        case ExtrudeEndCondition::Type::UP_TO_VERTEX:
-          std::cout << "UP_TO_VERTEX (至顶点)";
-          break;
-        case ExtrudeEndCondition::Type::UP_TO_NEXT:
-          std::cout << "UP_TO_NEXT (至下一面)";
-          break;
-        case ExtrudeEndCondition::Type::MID_PLANE:
-          std::cout << "MID_PLANE (中间平面)";
-          break;
-        default:
-          std::cout << "Other";
-        }
-        std::cout << std::endl;
-
-        // 根据端面类型显示相关参数
-        if (endType2 == ExtrudeEndCondition::Type::BLIND ||
-            endType2 == ExtrudeEndCondition::Type::MID_PLANE) {
-          std::cout << "  深度: " << extrude->GetDepth2() << " mm" << std::endl;
-        }
-
-        if (extrude->HasOffset2()) {
-          std::cout << "  偏移: " << extrude->GetOffset2() << " mm"
-                    << std::endl;
-        }
-
-        if (extrude->IsFlip2()) {
-          std::cout << "  反转方向: 是" << std::endl;
-        }
-
-        if (extrude->IsFlipMaterialSide2()) {
-          std::cout << "  反转材料侧: 是" << std::endl;
-        }
+        PrintExtentDetails("  ", *extrude->Data()->extent2, false);
 
         // 检查第二方向的参考
         auto ref2 = extrude->GetReference2();
-        if (endType2 == ExtrudeEndCondition::Type::UP_TO_FACE ||
-            endType2 == ExtrudeEndCondition::Type::UP_TO_VERTEX ||
-            endType2 == ExtrudeEndCondition::Type::UP_TO_NEXT) {
+        if (endType2 == SweepExtent::Type::UP_TO_ENTITY ||
+            endType2 == SweepExtent::Type::UP_TO_NEXT) {
 
           if (ref2.IsValid()) {
             std::cout << "  参考实体: 存在" << std::endl;
@@ -556,6 +566,14 @@ void AnalyzeDependencies(const std::string &xmlPath) {
 
   // 构建依赖图
   std::map<std::string, std::vector<std::string>> dependencies;
+  auto addDependencyIfFeatureExists = [&](const std::string &featID,
+                                          const std::string &depID) {
+    if (depID.empty())
+      return;
+    if (!modelAccessor.GetFeatureByID(depID))
+      return;
+    dependencies[featID].push_back(depID);
+  };
 
   for (int i = 0; i < modelAccessor.GetFeatureCount(); ++i) {
     auto feat = modelAccessor.GetFeature(i);
@@ -582,18 +600,14 @@ void AnalyzeDependencies(const std::string &xmlPath) {
           depID = refPlane.GetParentFeatureID();
         }
 
-        if (!depID.empty()) {
-          dependencies[featID].push_back(depID);
-        }
+        addDependencyIfFeatureExists(featID, depID);
       }
     }
     // 拉伸依赖分析
     else if (auto extrude = feat->As<ExtrudeAccessor>()) {
       // 依赖于轮廓草图
       std::string profileID = extrude->GetProfileSketchID();
-      if (!profileID.empty()) {
-        dependencies[featID].push_back(profileID);
-      }
+      addDependencyIfFeatureExists(featID, profileID);
 
       // 检查 EndCondition1 的参考实体
       auto ref1 = extrude->GetReference1();
@@ -602,9 +616,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
         if (depID.empty()) {
           depID = ref1.GetParentFeatureID();
         }
-        if (!depID.empty()) {
-          dependencies[featID].push_back(depID);
-        }
+        addDependencyIfFeatureExists(featID, depID);
       }
 
       // 检查 EndCondition2 的参考实体
@@ -615,9 +627,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
           if (depID.empty()) {
             depID = ref2.GetParentFeatureID();
           }
-          if (!depID.empty()) {
-            dependencies[featID].push_back(depID);
-          }
+          addDependencyIfFeatureExists(featID, depID);
         }
       }
     }
@@ -625,9 +635,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
     else if (auto revolve = feat->As<RevolveAccessor>()) {
       // 依赖于轮廓草图 (直接访问)
       std::string profileID = revolve->Data()->profileSketchID;
-      if (!profileID.empty()) {
-        dependencies[featID].push_back(profileID);
-      }
+      addDependencyIfFeatureExists(featID, profileID);
 
       // 检查轴的参考实体
       auto axisRef = revolve->GetAxisReference();
@@ -636,9 +644,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
         if (depID.empty()) {
           depID = axisRef.GetParentFeatureID();
         }
-        if (!depID.empty()) {
-          dependencies[featID].push_back(depID);
-        }
+        addDependencyIfFeatureExists(featID, depID);
       }
     }
   }
@@ -823,8 +829,14 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
       auto dir = extrude->GetDirectionAs<std::array<double, 3>>();
       std::cout << "      - 方向: (" << dir[0] << ", " << dir[1] << ", "
                 << dir[2] << ")" << std::endl;
-      std::cout << "      - 深度: " << extrude->GetDepth1() << " mm"
+      std::cout << "      - 第一方向: "
+                << DescribeExtentSummary(extrude->Data()->extent1, false)
                 << std::endl;
+      if (extrude->Data()->extent2) {
+        std::cout << "      - 第二方向: "
+                  << DescribeExtentSummary(*extrude->Data()->extent2, false)
+                  << std::endl;
+      }
 
       std::cout << "  ✓ 应用布尔运算: ";
       switch (extrude->GetOperation()) {
@@ -853,6 +865,41 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
 
     } else if (auto revolve = feat->As<RevolveAccessor>()) {
       std::cout << "  ✓ 识别为旋转特征" << std::endl;
+      auto profileFeat =
+          modelAccessor.GetFeatureByID(revolve->GetProfileSketchID());
+      if (profileFeat) {
+        std::cout << "  ✓ 选择轮廓: " << profileFeat->GetName() << std::endl;
+      }
+
+      auto axisOrigin = revolve->GetAxisOrigin();
+      auto axisDir = revolve->GetAxisDirection();
+      std::cout << "  ✓ 设置参数:" << std::endl;
+      std::cout << "      - 轴原点: (" << axisOrigin.x << ", " << axisOrigin.y
+                << ", " << axisOrigin.z << ")" << std::endl;
+      std::cout << "      - 轴方向: (" << axisDir.x << ", " << axisDir.y << ", "
+                << axisDir.z << ")" << std::endl;
+      std::cout << "      - 第一范围: "
+                << DescribeExtentSummary(revolve->Data()->extent1, true)
+                << std::endl;
+      if (revolve->Data()->extent2) {
+        std::cout << "      - 第二范围: "
+                  << DescribeExtentSummary(*revolve->Data()->extent2, true)
+                  << std::endl;
+      }
+      std::cout << "  ✓ 应用布尔运算: ";
+      switch (revolve->GetOperation()) {
+      case BooleanOp::BOSS:
+        std::cout << "BOSS (凸出)" << std::endl;
+        break;
+      case BooleanOp::CUT:
+        std::cout << "CUT (凹陷)" << std::endl;
+        break;
+      case BooleanOp::MERGE:
+        std::cout << "MERGE (合并)" << std::endl;
+        break;
+      default:
+        std::cout << "其他" << std::endl;
+      }
       std::cout << "  ✓ 完成旋转操作" << std::endl;
     }
 

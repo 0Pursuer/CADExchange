@@ -135,17 +135,22 @@ void ScaleSketch(CSketch &sketch, double factor, UnitScaleContext &ctx) {
   }
 }
 
-void ScaleExtrudeEndCondition(ExtrudeEndCondition &endCondition, double factor,
-                              UnitScaleContext &ctx) {
-  endCondition.depth *= factor;
-  endCondition.offset *= factor;
-  ScaleRefEntity(endCondition.referenceEntity, factor, ctx);
+void ScaleSweepExtent(SweepExtent &extent, double factor,
+                      UnitScaleContext &ctx, bool scaleValue) {
+  if (scaleValue) {
+    extent.value *= factor;
+  }
+  extent.offset *= factor;
+  ScaleRefEntity(extent.referenceEntity, factor, ctx);
+  if (extent.helperPoint.has_value()) {
+    ScalePoint(*extent.helperPoint, factor);
+  }
 }
 
 void ScaleExtrude(CExtrude &extrude, double factor, UnitScaleContext &ctx) {
-  ScaleExtrudeEndCondition(extrude.endCondition1, factor, ctx);
-  if (extrude.endCondition2.has_value()) {
-    ScaleExtrudeEndCondition(*extrude.endCondition2, factor, ctx);
+  ScaleSweepExtent(extrude.extent1, factor, ctx, true);
+  if (extrude.extent2.has_value()) {
+    ScaleSweepExtent(*extrude.extent2, factor, ctx, true);
   }
   if (extrude.thinWall.has_value()) {
     extrude.thinWall->thickness *= factor;
@@ -155,6 +160,14 @@ void ScaleExtrude(CExtrude &extrude, double factor, UnitScaleContext &ctx) {
 void ScaleRevolve(CRevolve &revolve, double factor, UnitScaleContext &ctx) {
   ScalePoint(revolve.axis.origin, factor);
   ScaleRefEntity(revolve.axis.referenceEntity, factor, ctx);
+  // Revolve extent.value expresses angles and must not be unit-scaled.
+  ScaleSweepExtent(revolve.extent1, factor, ctx, false);
+  if (revolve.extent2.has_value()) {
+    ScaleSweepExtent(*revolve.extent2, factor, ctx, false);
+  }
+  if (revolve.thinWall.has_value()) {
+    revolve.thinWall->thickness *= factor;
+  }
 }
 
 void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &ctx) {

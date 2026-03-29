@@ -34,7 +34,7 @@ public:
    *
    * 使用示例:
    * if (auto extrude = feat->As<ExtrudeAccessor>()) {
-   *     extrude->GetDepth1();
+   *     extrude->GetEndType1();
    * }
    */
   template <typename AccessorT> std::optional<AccessorT> As() const {

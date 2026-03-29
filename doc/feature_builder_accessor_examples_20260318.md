@@ -1,6 +1,13 @@
-# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / DatumPlane）
+# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / Revolve / DatumPlane）
 
-更新时间：2026-03-18
+更新时间：2026-03-29
+
+> 注：自 `2026-03-29` 起，`Extrude / Revolve` 已统一到共享的 `SweepExtent` 结构。
+> 旧的 `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 已被 `extent1/extent2` 取代。
+> `ExtrudeBuilder::SetEndCondition1/2(...)` 当前仍是主入口，但参数类型已经是 `SweepExtent`；
+> `Builder::EndCondition::*` 只是构造 `SweepExtent` 的便捷工厂，不再对应旧的 `ExtrudeEndCondition` 结构体。
+> 对 `RevolveAccessor` 而言，访问接口已经直接切换到 `GetExtentType1/2`、`GetExtentValue1/2`，
+> 不再保留旧的角度语法糖接口。
 
 ## 1. 文档定位
 
@@ -8,7 +15,8 @@
 
 1. 覆盖主要 Builder / Accessor 的可用调用方式。
 2. 以链式调用为主，补充必须用局部变量（如 sketch localID）的场景。
-3. 给出 UG / Creo 参数提取后如何映射到 CADExchange 的落地示例。
+3. 优先记录当前推荐接口，对仍保留的兼容命名明确标注。
+4. 给出 UG / Creo 参数提取后如何映射到 CADExchange 的落地示例。
 
 ## 2. 推荐包含头文件
 
@@ -136,15 +144,89 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 1. `SetProfile(sketchID)` / `SetProfileByName(sketchName)`
 2. `SetDirection(...)`（自动归一化）
 3. `SetOperation(BooleanOp::BOSS/CUT/MERGE)`
-4. `SetEndCondition1(...)`
-5. `SetEndCondition2(...)`
+4. `SetEndCondition1(const SweepExtent&)`
+5. `SetEndCondition2(const SweepExtent&)`
 6. `SetDraft(angle, outward)`
 7. `SetThinWall(thickness, isOneSided, isOutward, isCovered)`
 8. `Build()`
 
-### 4.2 EndCondition 工厂全部方式
+说明：
 
-`EndCondition` 支持：
+1. `ExtrudeBuilder` 当前统一写入 `extent1 / extent2`。
+2. `SetEndCondition1/2` 这个命名仍保留，但参数已经是 `SweepExtent`。
+3. `Builder::EndCondition::*` 只是便捷工厂，返回值本质也是 `SweepExtent`。
+
+### 4.2 推荐写法：直接构造 SweepExtent
+
+推荐思路：
+
+1. 先明确 `SweepExtent::Type`
+2. 再填 `value / offset / referenceEntity / helperPoint`
+3. 最后传给 `SetEndCondition1/2`
+
+#### A) VALUE / Blind
+
+```cpp
+SweepExtent e1;
+e1.type = SweepExtent::Type::VALUE;
+e1.value = 0.015;
+
+std::string extBlind =
+  Builder::ExtrudeBuilder(model, "Ext_Blind")
+    .SetProfile(sketchID)
+    .SetDirection(CVector3D{0, 0, 1})
+    .SetOperation(BooleanOp::BOSS)
+    .SetEndCondition1(e1)
+    .Build();
+```
+
+#### B) UP_TO_ENTITY（到面）
+
+```cpp
+auto faceRef = Builder::Ref::Face("SomeFeatureID", 0)
+                 .Centroid(CPoint3D{0.01, 0.01, 0.0})
+                 .Normal(CVector3D{0, 0, 1})
+                 .Build();
+
+SweepExtent eFace;
+eFace.type = SweepExtent::Type::UP_TO_ENTITY;
+eFace.referenceEntity = faceRef;
+eFace.offset = 0.001;
+eFace.hasOffset = true;
+
+std::string extUpToFace =
+  Builder::ExtrudeBuilder(model, "Ext_UpToFace")
+    .SetProfile(sketchID)
+    .SetOperation(BooleanOp::BOSS)
+    .SetEndCondition1(eFace)
+    .Build();
+```
+
+#### C) 双向范围
+
+```cpp
+SweepExtent eForward;
+eForward.type = SweepExtent::Type::VALUE;
+eForward.value = 0.01;
+
+SweepExtent eReverse;
+eReverse.type = SweepExtent::Type::VALUE;
+eReverse.value = 0.005;
+
+std::string extTwoDir =
+  Builder::ExtrudeBuilder(model, "Ext_TwoDir")
+    .SetProfile(sketchID)
+    .SetDirection(CVector3D{0, 0, 1})
+    .SetEndCondition1(eForward)
+    .SetEndCondition2(eReverse)
+    .Build();
+```
+
+### 4.3 便捷工厂：EndCondition / EndConditionHelper
+
+当你只需要常见范围时，可以继续使用便捷工厂；它们最终返回的仍然是 `SweepExtent`。
+
+`Builder::EndCondition` 当前支持：
 
 1. `Blind(depth)`
 2. `ThroughAll()`
@@ -282,15 +364,16 @@ std::string extWithOptions =
     .Build();
 ```
 
-### 4.3 ExtrudeAccessor 读取参考
+### 4.4 ExtrudeAccessor 读取参考
 
 `ExtrudeAccessor` 主要方法：
 
 1. 基础：`GetProfileSketchID()` `GetDirection()` `GetOperation()`
-2. 方向1：`GetEndType1()` `GetDepth1()` `GetOffset1()` `HasOffset1()` `IsFlip1()` `IsFlipMaterialSide1()` `GetReference1()`
-3. 方向2：`HasDirection2()` `GetEndType2()` `GetDepth2()` `GetOffset2()` `HasOffset2()` `IsFlip2()` `IsFlipMaterialSide2()` `GetReference2()`
-4. 拔模：`HasDraft()` `GetDraftAngle()` `IsDraftOutward()`
-5. 薄壁：`HasThinWall()` `GetThinWallThickness()` `IsThinWallOneSided()` `IsThinWallOutward()` `IsThinWallCovered()`
+2. 推荐直接访问：`Data()->extent1` / `Data()->extent2`
+3. 第一方向兼容读取：`GetEndType1()` `GetDepth1()` `GetOffset1()` `HasOffset1()` `IsFlip1()` `IsFlipMaterialSide1()` `GetReference1()`
+4. 第二方向兼容读取：`HasDirection2()` `GetEndType2()` `GetDepth2()` `GetOffset2()` `HasOffset2()` `IsFlip2()` `IsFlipMaterialSide2()` `GetReference2()`
+5. 拔模：`HasDraft()` `GetDraftAngle()` `IsDraftOutward()`
+6. 薄壁：`HasThinWall()` `GetThinWallThickness()` `IsThinWallOneSided()` `IsThinWallOutward()` `IsThinWallCovered()`
 
 ```cpp
 if (auto feat = ma.GetFeatureByID(extWithOptions)) {
@@ -301,11 +384,9 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
     auto dir = ext.GetDirection();
     auto op = ext.GetOperation();
 
-    auto end1 = ext.GetEndType1();
-    double d1 = ext.GetDepth1();
-
+    SweepExtent e1 = ext.Data()->extent1;
     bool hasDir2 = ext.HasDirection2();
-    double d2 = ext.GetDepth2();
+    std::optional<SweepExtent> e2 = ext.Data()->extent2;
 
     bool hasDraft = ext.HasDraft();
     double draftA = ext.GetDraftAngle();
@@ -313,8 +394,12 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
     bool hasThin = ext.HasThinWall();
     double thinT = ext.GetThinWallThickness();
 
-    (void)dir; (void)op; (void)end1; (void)d1;
-    (void)hasDir2; (void)d2; (void)hasDraft; (void)draftA;
+    // 兼容命名接口仍可用，但推荐优先读取 e1/e2：
+    auto compatType1 = ext.GetEndType1();
+    double compatValue1 = ext.GetDepth1();
+
+    (void)dir; (void)op; (void)e1; (void)hasDir2; (void)e2;
+    (void)hasDraft; (void)draftA; (void)compatType1; (void)compatValue1;
     (void)hasThin; (void)thinT;
   }
 }
@@ -322,9 +407,124 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 
 ---
 
-## 5. DatumPlaneBuilder 详细用法
+## 5. RevolveBuilder 详细用法
 
 ### 5.1 Builder 主接口
+
+`RevolveBuilder` 主要方法：
+
+1. `SetProfile(sketchID)`
+2. `SetAxisFromSketchLine(localSketchLineID)`
+3. `SetAxisExplicit(origin, direction)`
+4. `SetAxisRef(refEntity)`
+5. `SetOperation(BooleanOp::BOSS/CUT/MERGE)`
+6. `SetExtent1(const SweepExtent&)`
+7. `SetExtent2(const SweepExtent&)`
+8. `SetAngle(angle)` / `SetTwoWayAngle(angle1, angle2)` / `SetSymmetricAngle(totalAngle)`
+9. `SetThinWall(thickness, isOneSided, isOutward, isCovered)`
+10. `Build()`
+
+说明：
+
+1. `Revolve` 已不再使用 `AngleKind / PrimaryAngle / SecondaryAngle` 作为模型层字段。
+2. 推荐优先使用 `SetExtent1/2`，这样与 `Extrude` 的共享语义完全一致。
+3. `SetAngle / SetTwoWayAngle / SetSymmetricAngle` 仍可用，但只是对 `extent1 / extent2` 的语法糖。
+
+### 5.2 典型示例
+
+#### A) 单向角度
+
+```cpp
+std::string revSingle =
+  Builder::RevolveBuilder(model, "Rev_Single")
+    .SetProfile(sketchID)
+    .SetAxisExplicit(CPoint3D{0, 0, 0}, CVector3D{0, 0, 1})
+    .SetOperation(BooleanOp::BOSS)
+    .SetAngle(360.0)
+    .Build();
+```
+
+#### B) 双向角度
+
+```cpp
+std::string revTwoWay =
+  Builder::RevolveBuilder(model, "Rev_TwoWay")
+    .SetProfile(sketchID)
+    .SetAxisExplicit(CPoint3D{0, 0, 0}, CVector3D{0, 1, 0})
+    .SetOperation(BooleanOp::CUT)
+    .SetTwoWayAngle(120.0, 30.0)
+    .Build();
+```
+
+#### C) 直接使用 SweepExtent
+
+```cpp
+SweepExtent e1;
+e1.type = SweepExtent::Type::VALUE;
+e1.value = 270.0;
+
+std::string revExtent =
+  Builder::RevolveBuilder(model, "Rev_ByExtent")
+    .SetProfile(sketchID)
+    .SetAxisRef(Builder::Ref::Axis("DatumAxis_001"))
+    .SetOperation(BooleanOp::BOSS)
+    .SetExtent1(e1)
+    .Build();
+```
+
+#### D) 对称旋转
+
+```cpp
+std::string revSym =
+  Builder::RevolveBuilder(model, "Rev_Symmetric")
+    .SetProfile(sketchID)
+    .SetAxisFromSketchLine("CenterLine_1")
+    .SetSymmetricAngle(180.0)
+    .Build();
+```
+
+### 5.3 RevolveAccessor 读取参考
+
+`RevolveAccessor` 主要方法：
+
+1. 基础：`GetProfileSketchID()` `GetOperation()`
+2. 旋转轴：`GetAxisOrigin()` `GetAxisDirection()` `GetAxisReference()`
+3. 范围1：`GetExtentType1()` `GetExtentValue1()` `GetExtentOffset1()`
+4. 范围2：`HasExtent2()` `GetExtentType2()` `GetExtentValue2()`
+5. 薄壁：`HasThinWall()` `GetThinWallThickness()` `IsThinWallOneSided()` `IsThinWallOutward()` `IsThinWallCovered()`
+6. 推荐直接访问：`Data()->extent1` / `Data()->extent2`
+
+```cpp
+if (auto feat = ma.GetFeatureByID(revSingle)) {
+  auto revOpt = feat->As<Accessor::RevolveAccessor>();
+  if (revOpt.has_value()) {
+    auto rev = *revOpt;
+
+    std::string profile = rev.GetProfileSketchID();
+    auto op = rev.GetOperation();
+
+    CPoint3D axisOrigin = rev.GetAxisOrigin();
+    CVector3D axisDir = rev.GetAxisDirection();
+    auto axisRef = rev.GetAxisReference();
+
+    SweepExtent e1 = rev.Data()->extent1;
+    auto t1 = rev.GetExtentType1();
+    double v1 = rev.GetExtentValue1();
+
+    bool hasE2 = rev.HasExtent2();
+    double v2 = rev.GetExtentValue2();
+
+    (void)profile; (void)op; (void)axisOrigin; (void)axisDir;
+    (void)axisRef; (void)e1; (void)t1; (void)v1; (void)hasE2; (void)v2;
+  }
+}
+```
+
+---
+
+## 6. DatumPlaneBuilder 详细用法
+
+### 6.1 Builder 主接口
 
 `DatumPlaneBuilder` 主要方法：
 
@@ -352,7 +552,7 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 8. `LINE`
 9. `TANGENT`
 
-### 5.2 PlaneConstraintBuilder 全方式
+### 6.2 PlaneConstraintBuilder 全方式
 
 1. `Parallel(ref, reversed)`
 2. `Perpendicular(ref, reversed)`
@@ -363,7 +563,7 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 7. `Tangent(ref, reversed)`
 8. `Projection(ref, reversed)`
 
-### 5.3 典型示例
+### 6.3 典型示例
 
 #### A) OFFSET
 
@@ -469,7 +669,7 @@ std::string dpLine =
     .Build();
 ```
 
-### 5.4 DatumPlaneAccessor 读取参考
+### 6.4 DatumPlaneAccessor 读取参考
 
 `DatumPlaneAccessor` 主要方法：
 
@@ -501,11 +701,11 @@ if (auto feat = ma.GetFeatureByID(dpOffset)) {
 
 ---
 
-## 6. UG 提取参数 -> Builder 映射参考
+## 7. UG 提取参数 -> Builder 映射参考
 
 来源：`UgLibs/doc/ug_datum_plane_read_create_research_20260318.md`
 
-### 6.1 UG fixed_dplane
+### 7.1 UG fixed_dplane
 
 UG 读取到：
 
@@ -525,7 +725,7 @@ std::string fromUgFixed =
 
 如果后续 `CDatumPlane` 增加 point/normal 直存字段，应优先改成直接写 point/normal。
 
-### 6.2 UG relative_dplane
+### 7.2 UG relative_dplane
 
 UG 读取到：
 
@@ -563,11 +763,11 @@ std::string fromUgAngle =
 
 ---
 
-## 7. Creo 提取参数 -> Builder 映射参考
+## 8. Creo 提取参数 -> Builder 映射参考
 
 来源：`CreoLibs/doc/creo_datum_plane_read_create_research_20260318.md`
 
-### 7.1 PRO_DTMPLN_OFFS
+### 8.1 PRO_DTMPLN_OFFS
 
 Creo 读取到：
 
@@ -588,7 +788,7 @@ std::string fromCreoOffs =
     .Build();
 ```
 
-### 7.2 PRO_DTMPLN_ANG
+### 8.2 PRO_DTMPLN_ANG
 
 Creo 读取到：
 
@@ -610,7 +810,7 @@ std::string fromCreoAng =
     .Build();
 ```
 
-### 7.3 PRO_DTMPLN_PRL / MIDPLN / TANG（建议映射）
+### 8.3 PRO_DTMPLN_PRL / MIDPLN / TANG（建议映射）
 
 1. `PRO_DTMPLN_PRL` -> `PlaneMethod::PARALLEL` + `PlaneConstraintType::PARALLEL`
 2. `PRO_DTMPLN_MIDPLN` -> `PlaneMethod::MID_PLANE` + 双引用 + `SYMMETRIC`
@@ -618,18 +818,20 @@ std::string fromCreoAng =
 
 ---
 
-## 8. 常见调用建议
+## 9. 常见调用建议
 
 1. 草图先 `Build` 再拉伸，优先用 `SetProfile(sketchID)`。
-2. 终止面/点/顶点尽量使用 `Ref::*` 包装，避免直接操作底层引用结构。
-3. 基准面约束里 `ref` 是“referenceEntities 下标”，建议用 `AddReferenceAndGetIndex(...)` 获取，避免硬编码。
-4. Accessor 回读时优先检查 `IsValid()/Has*()` 再取值。
+2. 对 `Extrude / Revolve`，优先把终止范围理解为 `SweepExtent`，而不是旧的 “depth / angle” 专有结构。
+3. 终止面/点/顶点尽量使用 `Ref::*` 包装，避免直接操作底层引用结构。
+4. 基准面约束里 `ref` 是“referenceEntities 下标”，建议用 `AddReferenceAndGetIndex(...)` 获取，避免硬编码。
+5. Accessor 回读时优先检查 `IsValid()/Has*()`，复杂字段优先看 `Data()->extent1/extent2`。
 
-## 9. 最小验收建议
+## 10. 最小验收建议
 
 1. Builder 创建后调用 `UnifiedModel::Validate()`。
 2. 通过 Accessor 回读关键字段：
    1. Sketch: segment/constraint 数量和类型。
-   2. Extrude: endCondition 类型、深度、引用。
-   3. DatumPlane: method、referenceCount、constraint(type/ref/value/reversed)。
+   2. Extrude: extent 类型、value/offset、引用。
+   3. Revolve: axis、extent 类型、value、operation。
+   4. DatumPlane: method、referenceCount、constraint(type/ref/value/reversed)。
 3. 对桥接模块执行你现有的 round-trip 五步校验链路。

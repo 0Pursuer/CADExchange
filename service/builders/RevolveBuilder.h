@@ -31,7 +31,12 @@ public:
 
   RevolveBuilder &SetAxisExplicit(const CPoint3D &origin,
                                   const CVector3D &direction) {
-
+    double axisLength = std::sqrt(direction.x * direction.x +
+                                  direction.y * direction.y +
+                                  direction.z * direction.z);
+    if (axisLength < 1e-9) {
+      throw std::runtime_error("Axis direction vector is too small (near zero).");
+    }
     m_feature->axis.origin = origin;
     m_feature->axis.direction = direction;
     m_feature->axis.direction.Normalize();
@@ -46,24 +51,53 @@ public:
     return *this;
   }
 
+  RevolveBuilder &SetOperation(BooleanOp op) {
+    m_feature->operation = op;
+    return *this;
+  }
+
+  RevolveBuilder &SetThinWall(double thickness, bool isOneSided = true,
+                              bool isOutward = false, bool isCovered = false) {
+    if (thickness <= 0) {
+      throw std::runtime_error("Thickness must be positive.");
+    }
+    m_feature->thinWall =
+        ThinWallOption{thickness, isOneSided, isOutward, isCovered};
+    return *this;
+  }
+
   RevolveBuilder &SetAngle(double angle) {
-    m_feature->angleKind = CRevolve::AngleKind::Single;
-    m_feature->primaryAngle = angle;
-    m_feature->secondaryAngle = 0.0;
+    m_feature->extent1.type = SweepExtent::Type::VALUE;
+    m_feature->extent1.value = angle;
+    m_feature->extent2.reset();
     return *this;
   }
 
   RevolveBuilder &SetTwoWayAngle(double angle1, double angle2) {
-    m_feature->angleKind = CRevolve::AngleKind::TwoWay;
-    m_feature->primaryAngle = angle1;
-    m_feature->secondaryAngle = angle2;
+    m_feature->extent1.type = SweepExtent::Type::VALUE;
+    m_feature->extent1.value = angle1;
+    m_feature->extent2 = SweepExtent{};
+    m_feature->extent2->type = SweepExtent::Type::VALUE;
+    m_feature->extent2->value = angle2;
     return *this;
   }
 
   RevolveBuilder &SetSymmetricAngle(double totalAngle) {
-    m_feature->angleKind = CRevolve::AngleKind::Symmetric;
-    m_feature->primaryAngle = totalAngle;
-    m_feature->secondaryAngle = totalAngle;
+    m_feature->extent1.type = SweepExtent::Type::SYMMETRIC;
+    m_feature->extent1.value = totalAngle;
+    m_feature->extent2.reset();
+    return *this;
+  }
+
+  RevolveBuilder &SetExtent1(const SweepExtent &extent) {
+    ValidateReference(extent.referenceEntity);
+    m_feature->extent1 = extent;
+    return *this;
+  }
+
+  RevolveBuilder &SetExtent2(const SweepExtent &extent) {
+    ValidateReference(extent.referenceEntity);
+    m_feature->extent2 = extent;
     return *this;
   }
 };

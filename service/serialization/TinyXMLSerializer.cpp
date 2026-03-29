@@ -154,47 +154,55 @@ CSketchSeg::SegType SegTypeFromString(const char *text) {
   return CSketchSeg::SegType::LINE; // Default
 }
 
-std::string ExtrudeEndConditionTypeToString(ExtrudeEndCondition::Type type) {
+std::string SweepExtentTypeToString(SweepExtent::Type type) {
   switch (type) {
-  case ExtrudeEndCondition::Type::BLIND:
-    return "Blind";
-  case ExtrudeEndCondition::Type::THROUGH_ALL:
+  case SweepExtent::Type::VALUE:
+    return "Value";
+  case SweepExtent::Type::SYMMETRIC:
+    return "Symmetric";
+  case SweepExtent::Type::THROUGH_ALL:
     return "ThroughAll";
-  case ExtrudeEndCondition::Type::UP_TO_NEXT:
-    return "UpToNext";
-  case ExtrudeEndCondition::Type::UP_TO_FACE:
-    return "UpToFace";
-  case ExtrudeEndCondition::Type::UP_TO_VERTEX:
-    return "UpToVertex";
-  case ExtrudeEndCondition::Type::MID_PLANE:
-    return "MidPlane";
-  case ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES:
+  case SweepExtent::Type::THROUGH_ALL_BOTH_SIDES:
     return "ThroughAllBothSides";
-  case ExtrudeEndCondition::Type::UNKNOWN:
+  case SweepExtent::Type::UP_TO_NEXT:
+    return "UpToNext";
+  case SweepExtent::Type::UP_TO_ENTITY:
+    return "UpToEntity";
+  case SweepExtent::Type::UP_TO_EXTENDED:
+    return "UpToExtended";
+  case SweepExtent::Type::THRU_POINT:
+    return "ThruPoint";
+  case SweepExtent::Type::MID_PLANE:
+    return "MidPlane";
+  case SweepExtent::Type::UNKNOWN:
     return "Unknown";
   }
   return "Unknown";
 }
 
-std::optional<ExtrudeEndCondition::Type>
-ExtrudeEndConditionTypeFromString(const char *text) {
+std::optional<SweepExtent::Type>
+SweepExtentTypeFromString(const char *text) {
   if (!text)
     return std::nullopt;
   std::string value = ToLower(text);
-  if (value == "blind")
-    return ExtrudeEndCondition::Type::BLIND;
+  if (value == "value" || value == "blind")
+    return SweepExtent::Type::VALUE;
+  if (value == "symmetric")
+    return SweepExtent::Type::SYMMETRIC;
   if (value == "throughall")
-    return ExtrudeEndCondition::Type::THROUGH_ALL;
-  if (value == "uptonext")
-    return ExtrudeEndCondition::Type::UP_TO_NEXT;
-  if (value == "uptoface")
-    return ExtrudeEndCondition::Type::UP_TO_FACE;
-  if (value == "uptovertex")
-    return ExtrudeEndCondition::Type::UP_TO_VERTEX;
-  if (value == "midplane")
-    return ExtrudeEndCondition::Type::MID_PLANE;
+    return SweepExtent::Type::THROUGH_ALL;
   if (value == "throughallbothsides")
-    return ExtrudeEndCondition::Type::THROUGH_ALL_BOTH_SIDES;
+    return SweepExtent::Type::THROUGH_ALL_BOTH_SIDES;
+  if (value == "uptonext")
+    return SweepExtent::Type::UP_TO_NEXT;
+  if (value == "uptoentity" || value == "uptoface" || value == "uptovertex")
+    return SweepExtent::Type::UP_TO_ENTITY;
+  if (value == "uptoextended")
+    return SweepExtent::Type::UP_TO_EXTENDED;
+  if (value == "thrupoint")
+    return SweepExtent::Type::THRU_POINT;
+  if (value == "midplane")
+    return SweepExtent::Type::MID_PLANE;
   return std::nullopt;
 }
 
@@ -755,24 +763,27 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
   element->SetAttribute("Operation",
                         BooleanOpToString(extrude->operation).c_str());
 
-  // 内部辅助函数：将 EndCondition 序列化为 XML 子元素，EC1/EC2 统一使用同一逻辑，
-  // 避免字段不对称导致的静默数据丢失（如 ReferenceEntity 漏写）。
-  auto saveEC = [&](const char *tag, const ExtrudeEndCondition &ec) {
+  // 统一写 extent 结构，保持 Extrude/Revolve 的共享语义。
+  auto saveExtent = [&](const char *tag, const SweepExtent &extent) {
     XMLElement *elem = doc.NewElement(tag);
-    elem->SetAttribute("Type",
-                       ExtrudeEndConditionTypeToString(ec.type).c_str());
-    elem->SetAttribute("Depth", ec.depth);
-    elem->SetAttribute("Offset", ec.offset);
-    elem->SetAttribute("HasOffset", ec.hasOffset);
-    elem->SetAttribute("Flip", ec.isFlip);
-    elem->SetAttribute("FlipMaterialSide", ec.isFlipMaterialSide);
-    SaveRefEntity(doc, elem, "ReferenceEntity", ec.referenceEntity);
+    elem->SetAttribute("Type", SweepExtentTypeToString(extent.type).c_str());
+    elem->SetAttribute("Value", extent.value);
+    elem->SetAttribute("Offset", extent.offset);
+    elem->SetAttribute("HasOffset", extent.hasOffset);
+    elem->SetAttribute("Flip", extent.isFlip);
+    elem->SetAttribute("FlipMaterialSide", extent.isFlipMaterialSide);
+    if (extent.helperPoint) {
+      XMLElement *helperElem = doc.NewElement("HelperPoint");
+      SavePoint3D(helperElem, "Value", *extent.helperPoint);
+      elem->InsertEndChild(helperElem);
+    }
+    SaveRefEntity(doc, elem, "ReferenceEntity", extent.referenceEntity);
     element->InsertEndChild(elem);
   };
 
-  saveEC("EndCondition1", extrude->endCondition1);
-  if (extrude->endCondition2) {
-    saveEC("EndCondition2", *extrude->endCondition2);
+  saveExtent("Extent1", extrude->extent1);
+  if (extrude->extent2) {
+    saveExtent("Extent2", *extrude->extent2);
   }
 
   // 薄壁参数（可选）——若未设置则不写节点，保持旧 XML 兼容
@@ -788,10 +799,32 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
 
 void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
                                     const std::shared_ptr<CRevolve> &revolve) {
-  element->SetAttribute("ProfileSketchID", revolve->profileSketchID.c_str());
-  element->SetAttribute("AngleKind", static_cast<int>(revolve->angleKind));
-  element->SetAttribute("PrimaryAngle", revolve->primaryAngle);
-  element->SetAttribute("SecondaryAngle", revolve->secondaryAngle);
+  if (!revolve->profileSketchID.empty())
+    element->SetAttribute("ProfileSketchID", revolve->profileSketchID.c_str());
+  element->SetAttribute("Operation",
+                        BooleanOpToString(revolve->operation).c_str());
+
+  auto saveExtent = [&](const char *tag, const SweepExtent &extent) {
+    XMLElement *elem = doc.NewElement(tag);
+    elem->SetAttribute("Type", SweepExtentTypeToString(extent.type).c_str());
+    elem->SetAttribute("Value", extent.value);
+    elem->SetAttribute("Offset", extent.offset);
+    elem->SetAttribute("HasOffset", extent.hasOffset);
+    elem->SetAttribute("Flip", extent.isFlip);
+    elem->SetAttribute("FlipMaterialSide", extent.isFlipMaterialSide);
+    if (extent.helperPoint) {
+      XMLElement *helperElem = doc.NewElement("HelperPoint");
+      SavePoint3D(helperElem, "Value", *extent.helperPoint);
+      elem->InsertEndChild(helperElem);
+    }
+    SaveRefEntity(doc, elem, "ReferenceEntity", extent.referenceEntity);
+    element->InsertEndChild(elem);
+  };
+
+  saveExtent("Extent1", revolve->extent1);
+  if (revolve->extent2) {
+    saveExtent("Extent2", *revolve->extent2);
+  }
 
   XMLElement *axisElem = doc.NewElement("Axis");
   element->InsertEndChild(axisElem);
@@ -800,6 +833,15 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
   SaveVector3D(axisElem, "Direction", revolve->axis.direction);
   SaveRefEntity(doc, axisElem, "ReferenceEntity",
                 revolve->axis.referenceEntity);
+
+  if (revolve->thinWall.has_value()) {
+    XMLElement *twElem = doc.NewElement("ThinWall");
+    twElem->SetAttribute("Thickness", revolve->thinWall->thickness);
+    twElem->SetAttribute("OneSided",  revolve->thinWall->isOneSided);
+    twElem->SetAttribute("Outward",   revolve->thinWall->isOutward);
+    twElem->SetAttribute("Covered",   revolve->thinWall->isCovered);
+    element->InsertEndChild(twElem);
+  }
 }
 
 void TinyXMLSerializer::SaveDatumPlane(
@@ -1103,28 +1145,38 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
     extrude->operation = *opOpt;
   }
 
-  // Unified EC loader -- symmetric with saveEC lambda in SaveExtrude. Eliminates EC1/EC2 duplication.
-  auto loadEC = [&](XMLElement *ec, const char *tag) -> ExtrudeEndCondition {
-    ExtrudeEndCondition cond;
-    if (auto t = ExtrudeEndConditionTypeFromString(ec->Attribute("Type")))
-      cond.type = *t;
+  auto loadExtent = [&](XMLElement *ec, const char *tag) -> SweepExtent {
+    SweepExtent extent;
+    if (auto t = SweepExtentTypeFromString(ec->Attribute("Type")))
+      extent.type = *t;
     else
       std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
                 << "' " << tag << " has missing or unknown Type attribute.\n";
-    ec->QueryDoubleAttribute("Depth",            &cond.depth);
-    ec->QueryDoubleAttribute("Offset",           &cond.offset);
-    ec->QueryBoolAttribute  ("HasOffset",        &cond.hasOffset);
-    ec->QueryBoolAttribute  ("Flip",             &cond.isFlip);
-    ec->QueryBoolAttribute  ("FlipMaterialSide", &cond.isFlipMaterialSide);
+    ec->QueryDoubleAttribute("Value", &extent.value);
+    if (extent.value == 0.0) {
+      ec->QueryDoubleAttribute("Depth", &extent.value);
+    }
+    ec->QueryDoubleAttribute("Offset",           &extent.offset);
+    ec->QueryBoolAttribute  ("HasOffset",        &extent.hasOffset);
+    ec->QueryBoolAttribute  ("Flip",             &extent.isFlip);
+    ec->QueryBoolAttribute  ("FlipMaterialSide", &extent.isFlipMaterialSide);
+    if (auto *helper = ec->FirstChildElement("HelperPoint")) {
+      extent.helperPoint = LoadPoint3D(helper, "Value");
+    }
     if (auto *ref = ec->FirstChildElement("ReferenceEntity"))
-      cond.referenceEntity = LoadRefEntity(ref);
-    return cond;
+      extent.referenceEntity = LoadRefEntity(ref);
+    return extent;
   };
 
-  if (auto *ec1 = element->FirstChildElement("EndCondition1"))
-    extrude->endCondition1 = loadEC(ec1, "EC1");
-  if (auto *ec2 = element->FirstChildElement("EndCondition2"))
-    extrude->endCondition2 = loadEC(ec2, "EC2");
+  if (auto *ec1 = element->FirstChildElement("Extent1"))
+    extrude->extent1 = loadExtent(ec1, "Extent1");
+  else if (auto *ec1 = element->FirstChildElement("EndCondition1"))
+    extrude->extent1 = loadExtent(ec1, "EndCondition1");
+
+  if (auto *ec2 = element->FirstChildElement("Extent2"))
+    extrude->extent2 = loadExtent(ec2, "Extent2");
+  else if (auto *ec2 = element->FirstChildElement("EndCondition2"))
+    extrude->extent2 = loadExtent(ec2, "EndCondition2");
 
   // 薄壁参数（可选）
   XMLElement *twElem = element->FirstChildElement("ThinWall");
@@ -1145,11 +1197,84 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
 
 void TinyXMLSerializer::LoadRevolve(XMLElement *element,
                                     std::shared_ptr<CRevolve> &revolve) {
-  // TODO: CRevolve schema not finalized -- see AGENTS.md.
-  // SaveRevolve is implemented; Load is intentionally deferred until schema confirmed.
-  (void)element;
-  std::cerr << "[TinyXMLSerializer][TODO] LoadRevolve not implemented "
-               "-- revolve data will be empty after loading.\n";
+  if (const char *v = element->Attribute("ProfileSketchID"))
+    revolve->profileSketchID = v;
+
+  if (auto opOpt = BooleanOpFromString(element->Attribute("Operation"))) {
+    revolve->operation = *opOpt;
+  }
+
+  auto loadExtent = [&](XMLElement *ec, const char *tag) -> SweepExtent {
+    SweepExtent extent;
+    if (auto t = SweepExtentTypeFromString(ec->Attribute("Type")))
+      extent.type = *t;
+    else
+      std::cerr << "[TinyXMLSerializer][WARN] Revolve '" << revolve->featureID
+                << "' " << tag << " has missing or unknown Type attribute.\n";
+    ec->QueryDoubleAttribute("Value", &extent.value);
+    ec->QueryDoubleAttribute("Offset",           &extent.offset);
+    ec->QueryBoolAttribute  ("HasOffset",        &extent.hasOffset);
+    ec->QueryBoolAttribute  ("Flip",             &extent.isFlip);
+    ec->QueryBoolAttribute  ("FlipMaterialSide", &extent.isFlipMaterialSide);
+    if (auto *helper = ec->FirstChildElement("HelperPoint")) {
+      extent.helperPoint = LoadPoint3D(helper, "Value");
+    }
+    if (auto *ref = ec->FirstChildElement("ReferenceEntity"))
+      extent.referenceEntity = LoadRefEntity(ref);
+    return extent;
+  };
+
+  if (auto *e1 = element->FirstChildElement("Extent1")) {
+    revolve->extent1 = loadExtent(e1, "Extent1");
+  } else if (element->Attribute("AngleKind")) {
+    int kind = 0;
+    element->QueryIntAttribute("AngleKind", &kind);
+    revolve->extent1.type = (kind == 2) ? SweepExtent::Type::SYMMETRIC
+                                        : SweepExtent::Type::VALUE;
+    element->QueryDoubleAttribute("PrimaryAngle", &revolve->extent1.value);
+  }
+
+  if (auto *e2 = element->FirstChildElement("Extent2")) {
+    revolve->extent2 = loadExtent(e2, "Extent2");
+  } else {
+    double secondary = 0.0;
+    if (element->QueryDoubleAttribute("SecondaryAngle", &secondary) == tinyxml2::XML_SUCCESS &&
+        std::abs(secondary) > 1e-9 &&
+        revolve->extent1.type != SweepExtent::Type::SYMMETRIC) {
+      SweepExtent extent;
+      extent.type = SweepExtent::Type::VALUE;
+      extent.value = secondary;
+      revolve->extent2 = extent;
+      if (revolve->extent1.type == SweepExtent::Type::UNKNOWN) {
+        revolve->extent1.type = SweepExtent::Type::VALUE;
+      }
+    }
+  }
+
+  XMLElement *axisElem = element->FirstChildElement("Axis");
+  if (axisElem) {
+    if (const char *id = axisElem->Attribute("RefLocalID"))
+      revolve->axis.referenceLocalID = id;
+    revolve->axis.origin = LoadPoint3D(axisElem, "Origin");
+    revolve->axis.direction = LoadVector3D(axisElem, "Direction");
+    if (auto *ref = axisElem->FirstChildElement("ReferenceEntity"))
+      revolve->axis.referenceEntity = LoadRefEntity(ref);
+  }
+
+  XMLElement *twElem = element->FirstChildElement("ThinWall");
+  if (twElem) {
+    ThinWallOption tw;
+    twElem->QueryDoubleAttribute("Thickness", &tw.thickness);
+    twElem->QueryBoolAttribute("OneSided",    &tw.isOneSided);
+    twElem->QueryBoolAttribute("Outward",     &tw.isOutward);
+    twElem->QueryBoolAttribute("Covered",     &tw.isCovered);
+    if (tw.thickness > 1e-9) {
+      revolve->thinWall = tw;
+    } else {
+      std::cerr << "[TinyXMLSerializer][WARN] Revolve '" << revolve->featureID
+                << "' ThinWall.Thickness is zero or missing — skipping.\n";
+    }
+  }
 }
 
 void TinyXMLSerializer::LoadDatumPlane(

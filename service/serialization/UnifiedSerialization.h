@@ -218,16 +218,28 @@ template <class Archive> void serialize(Archive &ar, ThinWallOption &thinWall) {
 }
 
 /**
- * @brief 序列化挤出端条件，包括深度、偏移及参照。
+ * @brief 序列化共享轮廓特征基类的公共字段。
  */
 template <class Archive>
-void serialize(Archive &ar, ExtrudeEndCondition &cond) {
-  ar(cereal::make_nvp("Type", cond.type), cereal::make_nvp("Depth", cond.depth),
-     cereal::make_nvp("Offset", cond.offset),
-     cereal::make_nvp("HasOffset", cond.hasOffset),
-     cereal::make_nvp("Reference", cond.referenceEntity),
-     cereal::make_nvp("Flip", cond.isFlip),
-     cereal::make_nvp("FlipMaterialSide", cond.isFlipMaterialSide));
+void serialize(Archive &ar, CProfiledFeatureBase &feat) {
+  ar(cereal::base_class<CFeatureBase>(&feat),
+     cereal::make_nvp("ProfileSketchID", feat.profileSketchID),
+     cereal::make_nvp("Operation", feat.operation),
+     cereal::make_nvp("ThinWall", feat.thinWall));
+}
+
+/**
+ * @brief 序列化共享扫掠终止条件。
+ */
+template <class Archive> void serialize(Archive &ar, SweepExtent &extent) {
+  ar(cereal::make_nvp("Type", extent.type),
+     cereal::make_nvp("Value", extent.value),
+     cereal::make_nvp("Offset", extent.offset),
+     cereal::make_nvp("HasOffset", extent.hasOffset),
+     cereal::make_nvp("Reference", extent.referenceEntity),
+     cereal::make_nvp("Flip", extent.isFlip),
+     cereal::make_nvp("FlipMaterialSide", extent.isFlipMaterialSide),
+     cereal::make_nvp("HelperPoint", extent.helperPoint));
 }
 
 /**
@@ -254,14 +266,11 @@ template <class Archive> void serialize(Archive &ar, CSketch &sk) {
  * @brief 序列化挤出特征，包括草图侧面、方向、操作与附加选项。
  */
 template <class Archive> void serialize(Archive &ar, CExtrude &ext) {
-  ar(cereal::base_class<CFeatureBase>(&ext),
-     cereal::make_nvp("ProfileSketchID", ext.profileSketchID),
+  ar(cereal::base_class<CProfiledFeatureBase>(&ext),
      cereal::make_nvp("Direction", ext.direction),
-     cereal::make_nvp("Operation", ext.operation),
-     cereal::make_nvp("EndCondition1", ext.endCondition1),
-     cereal::make_nvp("EndCondition2", ext.endCondition2),
-     cereal::make_nvp("Draft", ext.draft),
-     cereal::make_nvp("ThinWall", ext.thinWall));
+     cereal::make_nvp("Extent1", ext.extent1),
+     cereal::make_nvp("Extent2", ext.extent2),
+     cereal::make_nvp("Draft", ext.draft));
 }
 
 /**
@@ -278,12 +287,10 @@ template <class Archive> void serialize(Archive &ar, CRevolveAxis &axis) {
  * @brief 序列化旋转特征的轮廓、角度与轴信息。
  */
 template <class Archive> void serialize(Archive &ar, CRevolve &rev) {
-  ar(cereal::base_class<CFeatureBase>(&rev),
-     cereal::make_nvp("ProfileSketchID", rev.profileSketchID),
+  ar(cereal::base_class<CProfiledFeatureBase>(&rev),
      cereal::make_nvp("Axis", rev.axis),
-     cereal::make_nvp("AngleKind", rev.angleKind),
-     cereal::make_nvp("PrimaryAngle", rev.primaryAngle),
-     cereal::make_nvp("SecondaryAngle", rev.secondaryAngle));
+     cereal::make_nvp("Extent1", rev.extent1),
+     cereal::make_nvp("Extent2", rev.extent2));
 }
 
 /**

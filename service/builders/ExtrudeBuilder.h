@@ -102,14 +102,12 @@ public:
    * @param cond 结束条件
    * @return 返回 *this 以支持链式调用
    */
-  ExtrudeBuilder &SetEndCondition1(const ExtrudeEndCondition &cond) {
-    if (cond.type == ExtrudeEndCondition::Type::UNKNOWN) {
+  ExtrudeBuilder &SetEndCondition1(const SweepExtent &cond) {
+    if (cond.type == SweepExtent::Type::UNKNOWN) {
       return *this;
     }
-    // 验证引用实体的合法性
     ValidateReference(cond.referenceEntity);
-
-    m_feature->endCondition1 = cond;
+    m_feature->extent1 = cond;
     return *this;
   }
 
@@ -121,14 +119,12 @@ public:
    * @param cond 结束条件
    * @return 返回 *this 以支持链式调用
    */
-  ExtrudeBuilder &SetEndCondition2(const ExtrudeEndCondition &cond) {
-    if (cond.type == ExtrudeEndCondition::Type::UNKNOWN) {
+  ExtrudeBuilder &SetEndCondition2(const SweepExtent &cond) {
+    if (cond.type == SweepExtent::Type::UNKNOWN) {
       return *this;
     }
-    // 验证引用实体的合法性
     ValidateReference(cond.referenceEntity);
-
-    m_feature->endCondition2 = cond;
+    m_feature->extent2 = cond;
     return *this;
   }
 

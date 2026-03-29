@@ -86,7 +86,7 @@ std::string DemoImprovedExtrudeBuilder(UnifiedModel& model) {
             .SetOperation(BooleanOp::BOSS)
             .SetDirection(CVector3D{0, 0, 1})
             .SetEndCondition1(EndCondition::Blind(10.0))    // 第一方向：盲孔 10mm
-            .SetEndCondition2(EndCondition::Blind(-5.0))    // 第二方向：向下 5mm
+            .SetEndCondition2(EndCondition::Blind(5.0))     // 第二方向：反向 5mm（第二侧数值保持为正）
             .SetDraft(2.0, true)                            // 拔模 2 度
             .Build();
         PrintResult("BiDirectionalExtrude", extrudeId3);
@@ -160,7 +160,7 @@ std::string BuildExtrudeFeature(UnifiedModel& model,
                                 const std::string& featureName,
                                 const std::string& sketchID,
                                 BooleanOp op,
-                                const ExtrudeEndCondition& condition) {
+                                const SweepExtent& condition) {
     ExtrudeBuilder builder(model, featureName);
     builder.SetProfile(sketchID)
     .SetOperation(op)
@@ -229,9 +229,7 @@ int main() {
             {
                 RevolveBuilder revolve(model, "RevolveFeature");
                 revolve.SetProfile(profileID);
-                revolve.SetAxisRef(Ref::Axis(StandardID::AXIS_Z)
-                                       .Origin(StandardID::kOrigin)
-                                       .Direction(StandardID::kAxisZ));
+                revolve.SetAxisExplicit(StandardID::kOrigin, StandardID::kAxisZ);
                 revolve.SetAngle(360.0);      // Full 360 degree revolution
                 
                 std::string revolveID = revolve.Build();

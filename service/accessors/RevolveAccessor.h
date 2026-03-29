@@ -12,7 +12,7 @@ namespace Accessor {
  * @brief 旋转特征访问器。
  *
  * 对应 Builder 层的 RevolveBuilder，提供对旋转特征的只读访问。
- * 包括轮廓草图、旋转轴和角度配置。
+ * 包括轮廓草图、旋转轴和 SweepExtent 配置。
  */
 class RevolveAccessor : public FeatureAccessorBase {
 private:
@@ -43,6 +43,7 @@ public:
 
   // --- 基本属性 ---
   ACCESSOR_GETTER(std::string, ProfileSketchID, profileSketchID, "")
+  ACCESSOR_GETTER(BooleanOp, Operation, operation, BooleanOp::BOSS)
 
   // --- 旋转轴 ---
   // Axis structure
@@ -61,11 +62,53 @@ public:
     return ReferenceAccessor(nullptr);
   }
 
-  // --- 角度配置 ---
-  ACCESSOR_GETTER(CRevolve::AngleKind, AngleKind, angleKind,
-                  CRevolve::AngleKind::Single)
-  ACCESSOR_GETTER(double, PrimaryAngle, primaryAngle, 0.0)
-  ACCESSOR_GETTER(double, SecondaryAngle, secondaryAngle, 0.0)
+  // --- 扫掠终止 ---
+  SweepExtent::Type GetExtentType1() const {
+    return IsValid() ? Data()->extent1.type : SweepExtent::Type::VALUE;
+  }
+
+  double GetExtentValue1() const {
+    return IsValid() ? Data()->extent1.value : 0.0;
+  }
+
+  double GetExtentOffset1() const {
+    return IsValid() ? Data()->extent1.offset : 0.0;
+  }
+
+  bool HasExtent2() const { return IsValid() && Data()->extent2.has_value(); }
+
+  SweepExtent::Type GetExtentType2() const {
+    if (!HasExtent2())
+      return SweepExtent::Type::VALUE;
+    return Data()->extent2->type;
+  }
+
+  double GetExtentValue2() const {
+    if (!HasExtent2())
+      return 0.0;
+    return Data()->extent2->value;
+  }
+
+  bool HasThinWall() const {
+    return IsValid() && Data()->thinWall.has_value();
+  }
+
+  double GetThinWallThickness() const {
+    return HasThinWall() ? Data()->thinWall->thickness : 0.0;
+  }
+
+  bool IsThinWallOneSided() const {
+    return HasThinWall() ? Data()->thinWall->isOneSided : true;
+  }
+
+  bool IsThinWallOutward() const {
+    return HasThinWall() && Data()->thinWall->isOutward;
+  }
+
+  bool IsThinWallCovered() const {
+    return HasThinWall() && Data()->thinWall->isCovered;
+  }
+
 };
 
 } // namespace Accessor
