@@ -138,18 +138,18 @@ void LoadAndDisplayModelInfo(const std::string &xmlPath) {
       LoadModel(model, xmlPath, &errorMsg, SerializationFormat::TINYXML);
 
   if (!loaded) {
-    std::cerr << "❌ 加载失败: " << errorMsg << std::endl;
+    std::cerr << "[ERROR] 加载失败: " << errorMsg << std::endl;
     return;
   }
 
-  std::cout << "✅ 加载成功!" << std::endl;
+  std::cout << "[OK] 加载成功!" << std::endl;
 
   // 创建访问器
   ModelAccessor modelAccessor;
   modelAccessor.SetModel(model);
 
   if (!modelAccessor.IsValid()) {
-    std::cerr << "❌ 模型无效" << std::endl;
+    std::cerr << "[ERROR] 模型无效" << std::endl;
     return;
   }
 
@@ -533,7 +533,7 @@ void ExtractExtrudeData(const std::string &xmlPath) {
       // 可选参数：拔模
       if (extrude->HasDraft()) {
         std::cout << "\n拔模参数:" << std::endl;
-        std::cout << "  拔模角: " << extrude->GetDraftAngle() << "°"
+        std::cout << "  拔模角: " << extrude->GetDraftAngle() << " deg"
                   << std::endl;
       }
 
@@ -675,8 +675,8 @@ void AnalyzeDependencies(const std::string &xmlPath) {
 
   std::set<std::string> processed;
   int order = 1;
-  int maxIterations = dependencies.size() * dependencies.size();
-  int iterations = 0;
+  size_t maxIterations = dependencies.size() * dependencies.size();
+  size_t iterations = 0;
 
   while (processed.size() < dependencies.size() && iterations < maxIterations) {
     size_t previousSize = processed.size();
@@ -706,7 +706,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
 
     // 检测死锁：如果这一轮没有处理任何新特征，说明有循环依赖或未识别的依赖
     if (processed.size() == previousSize) {
-      std::cout << "\n⚠️ 警告：检测到循环依赖或未识别的依赖关系" << std::endl;
+      std::cout << "\n[WARN] 检测到循环依赖或未识别的依赖关系" << std::endl;
       std::cout << "未能排序的特征:" << std::endl;
       for (const auto &[featID, deps] : dependencies) {
         if (!processed.count(featID)) {
@@ -765,11 +765,11 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
 
     if (auto sketch = feat->As<SketchAccessor>()) {
       // 重建草图
-      std::cout << "  ✓ 识别为草图" << std::endl;
+      std::cout << "  [OK] 识别为草图" << std::endl;
       
       std::array<double, 3> csysOrigin{}, dummyX{}, dummyY{}, dummyZ{};
       sketch->GetCSys(csysOrigin, dummyX, dummyY, dummyZ);
-      std::cout << "  ✓ 建立坐标系: Origin(" << csysOrigin[0] << "," 
+      std::cout << "  [OK] 建立坐标系: Origin(" << csysOrigin[0] << ","
                 << csysOrigin[1] << "," << csysOrigin[2] << ")...";
 
       if (sketch->HasReferencePlane()) {
@@ -778,7 +778,7 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
         std::cout << " (默认XY平面)" << std::endl;
       }
 
-      std::cout << "  ✓ 添加几何段...";
+      std::cout << "  [OK] 添加几何段...";
       int segCount = sketch->GetSegmentCount();
       std::cout << " 添加 " << segCount << " 条几何" << std::endl;
 
@@ -806,21 +806,21 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
         }
       }
 
-      std::cout << "  ✓ 完成草图定义" << std::endl;
+      std::cout << "  [OK] 完成草图定义" << std::endl;
 
     } else if (auto extrude = feat->As<ExtrudeAccessor>()) {
       // 重建拉伸
-      std::cout << "  ✓ 识别为拉伸特征" << std::endl;
+      std::cout << "  [OK] 识别为拉伸特征" << std::endl;
 
       // 查找轮廓草图
       std::string profileID = extrude->GetProfileSketchID();
       auto profileFeat = modelAccessor.GetFeatureByID(profileID);
       if (profileFeat) {
-        std::cout << "  ✓ 选择轮廓: " << profileFeat->GetName() << std::endl;
+        std::cout << "  [OK] 选择轮廓: " << profileFeat->GetName() << std::endl;
       }
 
       // 获取拉伸参数
-      std::cout << "  ✓ 设置参数:" << std::endl;
+      std::cout << "  [OK] 设置参数:" << std::endl;
 
       auto dir = extrude->GetDirectionAs<std::array<double, 3>>();
       std::cout << "      - 方向: (" << dir[0] << ", " << dir[1] << ", "
@@ -834,7 +834,7 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
                   << std::endl;
       }
 
-      std::cout << "  ✓ 应用布尔运算: ";
+      std::cout << "  [OK] 应用布尔运算: ";
       switch (extrude->GetOperation()) {
       case BooleanOp::BOSS:
         std::cout << "BOSS (凸出)" << std::endl;
@@ -848,28 +848,28 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
 
       // 应用可选参数
       if (extrude->HasDraft()) {
-        std::cout << "  ✓ 应用拔模: " << extrude->GetDraftAngle() << "°"
+        std::cout << "  [OK] 应用拔模: " << extrude->GetDraftAngle() << " deg"
                   << std::endl;
       }
 
       if (extrude->HasThinWall()) {
-        std::cout << "  ✓ 应用薄壁: " << extrude->GetThinWallThickness()
+        std::cout << "  [OK] 应用薄壁: " << extrude->GetThinWallThickness()
                   << " mm" << std::endl;
       }
 
-      std::cout << "  ✓ 完成拉伸操作" << std::endl;
+      std::cout << "  [OK] 完成拉伸操作" << std::endl;
 
     } else if (auto revolve = feat->As<RevolveAccessor>()) {
-      std::cout << "  ✓ 识别为旋转特征" << std::endl;
+      std::cout << "  [OK] 识别为旋转特征" << std::endl;
       auto profileFeat =
           modelAccessor.GetFeatureByID(revolve->GetProfileSketchID());
       if (profileFeat) {
-        std::cout << "  ✓ 选择轮廓: " << profileFeat->GetName() << std::endl;
+        std::cout << "  [OK] 选择轮廓: " << profileFeat->GetName() << std::endl;
       }
 
       auto axisOrigin = revolve->GetAxisOrigin();
       auto axisDir = revolve->GetAxisDirection();
-      std::cout << "  ✓ 设置参数:" << std::endl;
+      std::cout << "  [OK] 设置参数:" << std::endl;
       std::cout << "      - 轴原点: (" << axisOrigin.x << ", " << axisOrigin.y
                 << ", " << axisOrigin.z << ")" << std::endl;
       std::cout << "      - 轴方向: (" << axisDir.x << ", " << axisDir.y << ", "
@@ -882,7 +882,7 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
                   << DescribeExtentSummary(*revolve->Data()->extent2, true)
                   << std::endl;
       }
-      std::cout << "  ✓ 应用布尔运算: ";
+      std::cout << "  [OK] 应用布尔运算: ";
       switch (revolve->GetOperation()) {
       case BooleanOp::BOSS:
         std::cout << "BOSS (凸出)" << std::endl;
@@ -896,20 +896,20 @@ void SimulatePartReconstruction(const std::string &xmlPath) {
       default:
         std::cout << "其他" << std::endl;
       }
-      std::cout << "  ✓ 完成旋转操作" << std::endl;
+      std::cout << "  [OK] 完成旋转操作" << std::endl;
     }
 
     // 检查抑制状态
     if (feat->IsSuppressed()) {
-      std::cout << "  ⚠ 特征已被抑制 (不会参与重建)" << std::endl;
+      std::cout << "  [WARN] 特征已被抑制 (不会参与重建)" << std::endl;
     }
 
-    std::cout << "  ✓ 特征完成" << std::endl;
+    std::cout << "  [OK] 特征完成" << std::endl;
     stepNum++;
   }
 
   std::cout << "\n" << std::string(80, '-') << std::endl;
-  std::cout << "✅ 零件重建完成！" << std::endl;
+  std::cout << "[OK] 零件重建完成！" << std::endl;
   std::cout << "   总特征数: " << modelAccessor.GetFeatureCount() << std::endl;
 }
 
@@ -969,7 +969,7 @@ int main(int argc, char *argv[]) {
     return 0;
 
   } catch (const std::exception &ex) {
-    std::cerr << "\n❌ 错误: " << ex.what() << std::endl;
+    std::cerr << "\n[ERROR] 错误: " << ex.what() << std::endl;
     return 1;
   }
 }

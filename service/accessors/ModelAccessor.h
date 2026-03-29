@@ -53,7 +53,9 @@ public:
   /**
    * @brief 获取模型中的特征数量。
    */
-  int GetFeatureCount() const { return Data()->GetFeatures().size(); }
+  int GetFeatureCount() const {
+    return static_cast<int>(Data()->GetFeatures().size());
+  }
 
   /**
    * @brief 按索引获取通用特征访问器。

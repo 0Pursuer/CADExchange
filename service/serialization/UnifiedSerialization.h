@@ -11,6 +11,11 @@
 #include "../../core/UnifiedFeatures.h"
 #include "../../core/UnifiedModel.h"
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 /**
  * @file UnifiedSerialization.h
  * @brief 通过 Cereal 提供 CAD 统一模型的 XML 序列化规则。
@@ -61,9 +66,16 @@ template <class Archive> void serialize(Archive &ar, CRefFeature &ref) {
  * TopologyIndex 仅作为历史兼容字段保留，不应再作为新的引用判定键。
  */
 template <class Archive> void serialize(Archive &ar, CRefSubTopo &ref) {
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
   ar(cereal::base_class<CRefEntityBase>(&ref),
      cereal::make_nvp("ParentFeature", ref.parentFeatureID),
      cereal::make_nvp("TopologyIndex", ref.topologyIndex));
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 }
 
 /**
@@ -355,3 +367,7 @@ template <class Archive> void load(Archive &ar, UnifiedModel &model) {
 }
 
 } // namespace CADExchange
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

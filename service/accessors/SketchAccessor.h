@@ -212,7 +212,7 @@ public:
   int GetSegmentCount() const {
     if (!IsValid())
       return 0;
-    return m_sketch->segments.size();
+    return static_cast<int>(m_sketch->segments.size());
   }
 
   SketchSegmentAccessor GetSegment(int index) const {
@@ -237,7 +237,7 @@ public:
   int GetConstraintCount() const {
     if (!IsValid())
       return 0;
-    return m_sketch->constraints.size();
+    return static_cast<int>(m_sketch->constraints.size());
   }
 
   const CSketchConstraint *GetConstraint(int index) const {

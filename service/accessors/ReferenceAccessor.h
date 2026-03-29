@@ -4,6 +4,11 @@
 #include <memory>
 #include <string>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 namespace CADExchange {
 namespace Accessor {
 
@@ -78,6 +83,9 @@ public:
    */
   int GetTopologyIndex() const {
     if (auto topo = std::dynamic_pointer_cast<const CRefSubTopo>(m_ref)) {
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
       return topo->topologyIndex;
     }
     return -1;
@@ -388,3 +396,7 @@ public:
 
 } // namespace Accessor
 } // namespace CADExchange
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

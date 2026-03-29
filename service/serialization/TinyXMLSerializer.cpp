@@ -7,6 +7,11 @@
 #include <sstream>
 #include <cmath>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 namespace CADExchange {
 
 using namespace tinyxml2;
@@ -507,6 +512,9 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           // streams, but new matching logic should rely on geometry and owner IDs.
           element->SetAttribute("ParentFeatureID",
                                 face->parentFeatureID.c_str());
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
           element->SetAttribute("TopologyIndex", face->topologyIndex);
          element->SetAttribute("U", FormatVector(face->uDir).c_str());
          element->SetAttribute("V", FormatVector(face->vDir).c_str());
@@ -515,10 +523,13 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        }
      },
      [](XMLElement *element) {
-       auto face = std::make_shared<CRefFace>();
-       if (const char *parent = element->Attribute("ParentFeatureID"))
-         face->parentFeatureID = parent;
-       element->QueryIntAttribute("TopologyIndex", &face->topologyIndex);
+        auto face = std::make_shared<CRefFace>();
+        if (const char *parent = element->Attribute("ParentFeatureID"))
+          face->parentFeatureID = parent;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
+        element->QueryIntAttribute("TopologyIndex", &face->topologyIndex);
        face->uDir = ParseVectorAttribute(element, "U");
        face->vDir = ParseVectorAttribute(element, "V");
        face->normal = ParseVectorAttribute(element, "Normal");
@@ -532,6 +543,9 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           // streams, but new matching logic should rely on geometry and owner IDs.
           element->SetAttribute("ParentFeatureID",
                                 edge->parentFeatureID.c_str());
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
           element->SetAttribute("TopologyIndex", edge->topologyIndex);
           element->SetAttribute("StartPoint", FormatPoint(edge->startPoint).c_str());
           element->SetAttribute("EndPoint", FormatPoint(edge->endPoint).c_str());
@@ -542,6 +556,9 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
         auto edge = std::make_shared<CRefEdge>();
         if (const char *parent = element->Attribute("ParentFeatureID"))
           edge->parentFeatureID = parent;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
         element->QueryIntAttribute("TopologyIndex", &edge->topologyIndex);
         edge->startPoint = ParsePointAttribute(element, "StartPoint");
         edge->endPoint = ParsePointAttribute(element, "EndPoint");
@@ -555,15 +572,21 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           // streams, but new matching logic should rely on geometry and owner IDs.
           element->SetAttribute("ParentFeatureID",
                                 vertex->parentFeatureID.c_str());
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
           element->SetAttribute("TopologyIndex", vertex->topologyIndex);
          element->SetAttribute("Position", FormatPoint(vertex->pos).c_str());
        }
      },
      [](XMLElement *element) {
-       auto vertex = std::make_shared<CRefVertex>();
-       if (const char *parent = element->Attribute("ParentFeatureID"))
-         vertex->parentFeatureID = parent;
-       element->QueryIntAttribute("TopologyIndex", &vertex->topologyIndex);
+        auto vertex = std::make_shared<CRefVertex>();
+        if (const char *parent = element->Attribute("ParentFeatureID"))
+          vertex->parentFeatureID = parent;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
+        element->QueryIntAttribute("TopologyIndex", &vertex->topologyIndex);
        vertex->pos = ParsePointAttribute(element, "Position");
        return vertex;
      }},
@@ -573,16 +596,22 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           // Legacy compatibility only: TopologyIndex is preserved for old data
           // streams, but new matching logic should rely on geometry and owner IDs.
           element->SetAttribute("ParentFeatureID", seg->parentFeatureID.c_str());
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
           element->SetAttribute("TopologyIndex", seg->topologyIndex);
          if (!seg->segmentLocalID.empty())
            element->SetAttribute("SegmentLocalID", seg->segmentLocalID.c_str());
        }
      },
      [](XMLElement *element) {
-       auto seg = std::make_shared<CRefSketchSeg>();
-       if (const char *parent = element->Attribute("ParentFeatureID"))
-         seg->parentFeatureID = parent;
-       element->QueryIntAttribute("TopologyIndex", &seg->topologyIndex);
+        auto seg = std::make_shared<CRefSketchSeg>();
+        if (const char *parent = element->Attribute("ParentFeatureID"))
+          seg->parentFeatureID = parent;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
+        element->QueryIntAttribute("TopologyIndex", &seg->topologyIndex);
        if (const char *lid = element->Attribute("SegmentLocalID"))
          seg->segmentLocalID = lid;
        return seg;
@@ -1291,3 +1320,7 @@ void TinyXMLSerializer::LoadDatumPlane(
 }
 
 } // namespace CADExchange
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif

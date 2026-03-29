@@ -28,9 +28,9 @@ using namespace CADExchange;
 
 void PrintResult(const std::string& featureName, const std::string& id) {
     if (!id.empty()) {
-        std::cout << "✓ Created " << featureName << " (ID: " << id << ")\n";
+        std::cout << "[OK] Created " << featureName << " (ID: " << id << ")\n";
     } else {
-        std::cout << "✗ Failed to create " << featureName << "\n";
+        std::cout << "[FAIL] Failed to create " << featureName << "\n";
     }
 }
 
@@ -108,11 +108,11 @@ std::string DemoImprovedExtrudeBuilder(UnifiedModel& model) {
             .Build();
         PrintResult("ExtrudeToPlane", extrudeId4);
 
-        std::cout << "\n✓ All improved extrude examples completed successfully!\n";
+        std::cout << "\n[OK] All improved extrude examples completed successfully!\n";
         return extrudeId1;
 
     } catch (const std::exception& e) {
-        std::cerr << "✗ Error in improved extrude demo: " << e.what() << "\n";
+        std::cerr << "[FAIL] Error in improved extrude demo: " << e.what() << "\n";
         return "";
     }
 }
@@ -251,12 +251,12 @@ int main() {
             std::string errorMsg;
             bool saveOk = SaveModel(model, "RecommendedApproach_Output.xml", &errorMsg, SerializationFormat::TINYXML);
             if (saveOk) {
-                std::cout << "✓ Model saved to RecommendedApproach_Output.xml\n";
+                std::cout << "[OK] Model saved to RecommendedApproach_Output.xml\n";
             } else {
-                std::cout << "✗ Failed to save model: " << errorMsg << "\n";
+                std::cout << "[FAIL] Failed to save model: " << errorMsg << "\n";
             }
         } catch (const std::exception& e) {
-            std::cout << "✗ Failed to save model: " << e.what() << "\n";
+            std::cout << "[FAIL] Failed to save model: " << e.what() << "\n";
         }
 
         std::cout << "\n" << std::string(70, '=') << "\n";

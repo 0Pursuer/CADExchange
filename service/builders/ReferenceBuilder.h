@@ -8,6 +8,12 @@
 
 #include <stdexcept>
 // clang-format on
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+
 namespace CADExchange {
 namespace Builder {
 
@@ -29,6 +35,9 @@ public:
   RefFaceBuilder(const std::string &parentID, int index = 0) {
     m_ptr = std::make_shared<CRefFace>();
     m_ptr->parentFeatureID = parentID;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
     m_ptr->topologyIndex = index;
   }
   /**
@@ -68,6 +77,9 @@ public:
   RefVertexBuilder(const std::string &parentID, int index = 0) {
     m_ptr = std::make_shared<CRefVertex>();
     m_ptr->parentFeatureID = parentID;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
     m_ptr->topologyIndex = index;
   }
   
@@ -93,6 +105,9 @@ public:
   RefEdgeBuilder(const std::string &parentID, int index = 0) {
     m_ptr = std::make_shared<CRefEdge>();
     m_ptr->parentFeatureID = parentID;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
     m_ptr->topologyIndex = index;
   }
   
@@ -254,6 +269,9 @@ public:
     m_ptr = std::make_shared<CRefSketchSeg>();
     m_ptr->parentFeatureID = parentSketchID;
     m_ptr->segmentLocalID = segmentLocalID;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
     m_ptr->topologyIndex = index;
   }
   
@@ -433,3 +451,7 @@ public:
 
 } // namespace Builder
 } // namespace CADExchange
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
