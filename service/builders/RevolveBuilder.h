@@ -90,12 +90,18 @@ public:
   }
 
   RevolveBuilder &SetExtent1(const SweepExtent &extent) {
+    if (extent.type == SweepExtent::Type::UNKNOWN) {
+      return *this;
+    }
     ValidateReference(extent.referenceEntity);
     m_feature->extent1 = extent;
     return *this;
   }
 
   RevolveBuilder &SetExtent2(const SweepExtent &extent) {
+    if (extent.type == SweepExtent::Type::UNKNOWN) {
+      return *this;
+    }
     ValidateReference(extent.referenceEntity);
     m_feature->extent2 = extent;
     return *this;

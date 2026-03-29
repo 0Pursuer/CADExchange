@@ -3,7 +3,7 @@
 更新时间：2026-03-29
 
 > 注：自 `2026-03-29` 起，`Extrude / Revolve` 已统一到共享的 `SweepExtent` 结构。
-> 旧的 `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 已被 `extent1/extent2` 取代。
+> 旧的 `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 已被 `extent1/extent2` 取代，旧 XML 也不再兼容这些字段。
 > `ExtrudeBuilder::SetEndCondition1/2(...)` 当前仍是主入口，但参数类型已经是 `SweepExtent`；
 > `Builder::EndCondition::*` 和 `Builder::Extent::*` 都只是在构造 `SweepExtent`，不再对应旧的 `ExtrudeEndCondition` 结构体。
 > 对 `RevolveAccessor` 而言，访问接口已经直接切换到 `GetExtentType1/2`、`GetExtentValue1/2`，
@@ -219,8 +219,7 @@ std::string extTwoDir =
 5. `UpToVertex(ref, offset)`
 6. `UpToRefPoint(refPoint, offset)`
 7. `UpToNext()`
-8. `MidPlane(depth)`（兼容工厂名，内部映射为 `SYMMETRIC`）
-9. `ThroughAllBothSides()`
+8. `ThroughAllBothSides()`
 
 #### A) Blind
 
@@ -302,19 +301,13 @@ std::string extToPoint =
     .Build();
 ```
 
-#### F) UpToNext / MidPlane(alias of Symmetric) / ThroughAllBothSides
+#### F) UpToNext / ThroughAllBothSides
 
 ```cpp
 std::string extUpToNext =
   Builder::ExtrudeBuilder(model, "Ext_UpToNext")
     .SetProfile(sketchID)
     .SetEndCondition1(Builder::EndCondition::UpToNext())
-    .Build();
-
-std::string extMidPlane =
-  Builder::ExtrudeBuilder(model, "Ext_MidPlane")
-    .SetProfile(sketchID)
-    .SetEndCondition1(Builder::EndCondition::MidPlane(0.02))
     .Build();
 
 std::string extBothSides =

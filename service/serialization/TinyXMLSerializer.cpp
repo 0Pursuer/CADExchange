@@ -199,8 +199,6 @@ SweepExtentTypeFromString(const char *text) {
     return SweepExtent::Type::UP_TO_EXTENDED;
   if (value == "thrupoint")
     return SweepExtent::Type::THRU_POINT;
-  if (value == "midplane")
-    return SweepExtent::Type::SYMMETRIC;
   return std::nullopt;
 }
 
@@ -784,7 +782,7 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
     saveExtent("Extent2", *extrude->extent2);
   }
 
-  // 薄壁参数（可选）——若未设置则不写节点，保持旧 XML 兼容
+  // 薄壁参数（可选）
   if (extrude->thinWall.has_value()) {
     XMLElement *twElem = doc.NewElement("ThinWall");
     twElem->SetAttribute("Thickness", extrude->thinWall->thickness);
@@ -1224,29 +1222,10 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
 
   if (auto *e1 = element->FirstChildElement("Extent1")) {
     revolve->extent1 = loadExtent(e1, "Extent1");
-  } else if (element->Attribute("AngleKind")) {
-    int kind = 0;
-    element->QueryIntAttribute("AngleKind", &kind);
-    revolve->extent1.type = (kind == 2) ? SweepExtent::Type::SYMMETRIC
-                                        : SweepExtent::Type::VALUE;
-    element->QueryDoubleAttribute("PrimaryAngle", &revolve->extent1.value);
   }
 
   if (auto *e2 = element->FirstChildElement("Extent2")) {
     revolve->extent2 = loadExtent(e2, "Extent2");
-  } else {
-    double secondary = 0.0;
-    if (element->QueryDoubleAttribute("SecondaryAngle", &secondary) == tinyxml2::XML_SUCCESS &&
-        std::abs(secondary) > 1e-9 &&
-        revolve->extent1.type != SweepExtent::Type::SYMMETRIC) {
-      SweepExtent extent;
-      extent.type = SweepExtent::Type::VALUE;
-      extent.value = secondary;
-      revolve->extent2 = extent;
-      if (revolve->extent1.type == SweepExtent::Type::UNKNOWN) {
-        revolve->extent1.type = SweepExtent::Type::VALUE;
-      }
-    }
   }
 
   XMLElement *axisElem = element->FirstChildElement("Axis");

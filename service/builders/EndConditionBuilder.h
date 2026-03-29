@@ -76,9 +76,6 @@ public:
     return c;
   }
 
-  static SweepExtent MidPlane(double value = 0.0) {
-    return Symmetric(value);
-  }
 };
 
 class EndCondition {
@@ -116,11 +113,6 @@ public:
 
   // 拉伸到下一面
   static SweepExtent UpToNext() { return Extent::UpToNext(); }
-
-  // 拉伸到中间面
-  static SweepExtent MidPlane(double depth = 0.0) {
-    return Extent::MidPlane(depth);
-  }
 
   // 双向贯穿
   static SweepExtent ThroughAllBothSides() {

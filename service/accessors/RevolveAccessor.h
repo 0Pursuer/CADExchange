@@ -75,6 +75,23 @@ public:
     return IsValid() ? Data()->extent1.offset : 0.0;
   }
 
+  bool HasOffset1() const {
+    return IsValid() && Data()->extent1.hasOffset;
+  }
+
+  bool IsFlip1() const { return IsValid() && Data()->extent1.isFlip; }
+
+  bool IsFlipMaterialSide1() const {
+    return IsValid() && Data()->extent1.isFlipMaterialSide;
+  }
+
+  ReferenceAccessor GetReference1() const {
+    if (IsValid()) {
+      return ReferenceAccessor(Data()->extent1.referenceEntity);
+    }
+    return ReferenceAccessor(nullptr);
+  }
+
   bool HasExtent2() const { return IsValid() && Data()->extent2.has_value(); }
 
   SweepExtent::Type GetExtentType2() const {
@@ -87,6 +104,31 @@ public:
     if (!HasExtent2())
       return 0.0;
     return Data()->extent2->value;
+  }
+
+  double GetExtentOffset2() const {
+    if (!HasExtent2())
+      return 0.0;
+    return Data()->extent2->offset;
+  }
+
+  bool HasOffset2() const {
+    return HasExtent2() && Data()->extent2->hasOffset;
+  }
+
+  bool IsFlip2() const {
+    return HasExtent2() && Data()->extent2->isFlip;
+  }
+
+  bool IsFlipMaterialSide2() const {
+    return HasExtent2() && Data()->extent2->isFlipMaterialSide;
+  }
+
+  ReferenceAccessor GetReference2() const {
+    if (HasExtent2()) {
+      return ReferenceAccessor(Data()->extent2->referenceEntity);
+    }
+    return ReferenceAccessor(nullptr);
   }
 
   bool HasThinWall() const {

@@ -605,7 +605,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
       std::string profileID = extrude->GetProfileSketchID();
       addDependencyIfFeatureExists(featID, profileID);
 
-      // 检查 EndCondition1 的参考实体
+      // 检查 Extent1 的参考实体
       auto ref1 = extrude->GetReference1();
       if (ref1.IsValid()) {
         std::string depID = ref1.GetTargetFeatureID();
@@ -615,7 +615,7 @@ void AnalyzeDependencies(const std::string &xmlPath) {
         addDependencyIfFeatureExists(featID, depID);
       }
 
-      // 检查 EndCondition2 的参考实体
+      // 检查 Extent2 的参考实体
       if (extrude->HasDirection2()) {
         auto ref2 = extrude->GetReference2();
         if (ref2.IsValid()) {

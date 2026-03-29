@@ -13,7 +13,7 @@ namespace CADExchange {
  *
  * 本文件声明了 `TinyXMLSerializer`，它负责把内存中的 `UnifiedModel`
  * 导出为轻量的 XML 表示（Save），以及从磁盘上的 XML 重新构建
- * `UnifiedModel`（Load）。序列化格式面向人类可读并兼顾向后兼容性，
+ * `UnifiedModel`（Load）。序列化格式面向人类可读，
  * 主要用于测试、导入导出以及简单持久化场景。
  */
 
