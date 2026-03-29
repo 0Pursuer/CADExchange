@@ -59,8 +59,6 @@ std::string SweepExtentTypeLabel(SweepExtent::Type type) {
     return "UP_TO_EXTENDED";
   case SweepExtent::Type::THRU_POINT:
     return "THRU_POINT";
-  case SweepExtent::Type::MID_PLANE:
-    return "MID_PLANE";
   default:
     return "UNKNOWN";
   }
@@ -70,8 +68,7 @@ std::string DescribeExtentSummary(const SweepExtent &extent, bool angular) {
   std::ostringstream oss;
   oss << SweepExtentTypeLabel(extent.type);
   if (extent.type == SweepExtent::Type::VALUE ||
-      extent.type == SweepExtent::Type::SYMMETRIC ||
-      extent.type == SweepExtent::Type::MID_PLANE) {
+      extent.type == SweepExtent::Type::SYMMETRIC) {
     oss << "(" << FormatNumber(extent.value) << (angular ? " deg" : " mm") << ")";
   }
   if (extent.hasOffset) {
@@ -97,8 +94,7 @@ void PrintExtentDetails(const std::string &prefix, const SweepExtent &extent,
   std::cout << prefix << "类型: " << SweepExtentTypeLabel(extent.type) << std::endl;
 
   if (extent.type == SweepExtent::Type::VALUE ||
-      extent.type == SweepExtent::Type::SYMMETRIC ||
-      extent.type == SweepExtent::Type::MID_PLANE) {
+      extent.type == SweepExtent::Type::SYMMETRIC) {
     std::cout << prefix << (angular ? "角度: " : "深度: ")
               << FormatNumber(extent.value) << (angular ? " deg" : " mm")
               << std::endl;

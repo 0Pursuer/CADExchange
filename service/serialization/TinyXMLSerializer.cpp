@@ -172,8 +172,6 @@ std::string SweepExtentTypeToString(SweepExtent::Type type) {
     return "UpToExtended";
   case SweepExtent::Type::THRU_POINT:
     return "ThruPoint";
-  case SweepExtent::Type::MID_PLANE:
-    return "MidPlane";
   case SweepExtent::Type::UNKNOWN:
     return "Unknown";
   }
@@ -202,7 +200,7 @@ SweepExtentTypeFromString(const char *text) {
   if (value == "thrupoint")
     return SweepExtent::Type::THRU_POINT;
   if (value == "midplane")
-    return SweepExtent::Type::MID_PLANE;
+    return SweepExtent::Type::SYMMETRIC;
   return std::nullopt;
 }
 

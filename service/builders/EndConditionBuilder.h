@@ -77,10 +77,7 @@ public:
   }
 
   static SweepExtent MidPlane(double value = 0.0) {
-    SweepExtent c;
-    c.type = SweepExtent::Type::MID_PLANE;
-    c.value = value;
-    return c;
+    return Symmetric(value);
   }
 };
 

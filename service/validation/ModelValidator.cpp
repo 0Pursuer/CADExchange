@@ -77,7 +77,6 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
     }
 
     if ((extent.type == SweepExtent::Type::VALUE ||
-         extent.type == SweepExtent::Type::MID_PLANE ||
          extent.type == SweepExtent::Type::SYMMETRIC) &&
         extent.value <= 0.0) {
       addError(std::string("[") + kind + "_003] " + kind + " '" + featureID +

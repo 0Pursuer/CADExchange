@@ -219,7 +219,7 @@ std::string extTwoDir =
 5. `UpToVertex(ref, offset)`
 6. `UpToRefPoint(refPoint, offset)`
 7. `UpToNext()`
-8. `MidPlane(depth)`
+8. `MidPlane(depth)`（兼容工厂名，内部映射为 `SYMMETRIC`）
 9. `ThroughAllBothSides()`
 
 #### A) Blind
@@ -302,7 +302,7 @@ std::string extToPoint =
     .Build();
 ```
 
-#### F) UpToNext / MidPlane / ThroughAllBothSides
+#### F) UpToNext / MidPlane(alias of Symmetric) / ThroughAllBothSides
 
 ```cpp
 std::string extUpToNext =

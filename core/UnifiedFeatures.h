@@ -291,7 +291,6 @@ struct SweepExtent {
     UP_TO_ENTITY,           // 到指定参考实体
     UP_TO_EXTENDED,         // 延伸到参考实体
     THRU_POINT,             // 过点
-    MID_PLANE,              // 中间平面（保留给 Extrude 兼容）
     UNKNOWN
   } type = Type::UNKNOWN;
 
