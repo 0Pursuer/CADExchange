@@ -91,6 +91,16 @@ public:
     return -1;
   }
 
+  /**
+   * @brief 获取草图段局部 ID（适用于草图段引用）。
+   */
+  std::string GetSketchSegmentLocalID() const {
+    if (auto seg = std::dynamic_pointer_cast<const CRefSketchSeg>(m_ref)) {
+      return seg->segmentLocalID;
+    }
+    return "";
+  }
+
   // --- 几何指纹获取（扁平化接口） ---
 
   /**

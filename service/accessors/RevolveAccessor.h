@@ -62,6 +62,10 @@ public:
     return ReferenceAccessor(nullptr);
   }
 
+  std::string GetAxisReferenceLocalID() const {
+    return IsValid() ? Data()->axis.referenceLocalID : "";
+  }
+
   // --- 扫掠终止 ---
   SweepExtent::Type GetExtentType1() const {
     return IsValid() ? Data()->extent1.type : SweepExtent::Type::VALUE;
