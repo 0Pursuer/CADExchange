@@ -269,11 +269,9 @@ struct DraftOption {
 };
 
 struct ThinWallOption {
-  double thickness = 0.0;
-  bool isOneSided = true; ///< true=单向薄壁, false=双向（中间平面）
-  bool isOutward =
-      false; ///< 仅 isOneSided=true 时有效: true=向外, false=向内（默认）
-  bool isCovered = false; ///< 薄壁端部是否有盖
+  double startOffset = 0.0; ///< 内侧偏置/壁厚
+  double endOffset = 0.0;   ///< 外侧偏置/壁厚
+  bool isCovered = false;   ///< 薄壁端部是否有盖
 };
 
 /**

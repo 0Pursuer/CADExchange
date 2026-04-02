@@ -3,6 +3,7 @@
 #include "AccessorMacros.h"
 #include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
+#include <cmath>
 #include <optional>
 
 namespace CADExchange {
@@ -152,25 +153,49 @@ public:
 
   // --- 薄壁（可选） ---
   ACCESSOR_HAS_GETTER(ThinWall, thinWall)
-  ACCESSOR_OPTIONAL_GETTER(double, ThinWallThickness, thinWall, thickness, 0.0)
+  double GetThinWallThickness() const {
+    if (!HasThinWall())
+      return 0.0;
+    const double absStart = std::fabs(Data()->thinWall->startOffset);
+    const double absEnd = std::fabs(Data()->thinWall->endOffset);
+    return absStart > absEnd ? absStart : absEnd;
+  }
 
   bool IsThinWallOneSided() const {
     if (!HasThinWall())
       return false;
-    return Data()->thinWall->isOneSided;
+    return std::fabs(Data()->thinWall->startOffset) <= 1e-9 ||
+           std::fabs(Data()->thinWall->endOffset) <= 1e-9;
   }
 
   /// 仅 isOneSided=true 时有意义：向外(true) vs 向内(false,默认)
   bool IsThinWallOutward() const {
     if (!HasThinWall())
       return false;
-    return Data()->thinWall->isOutward;
+    return std::fabs(Data()->thinWall->endOffset) >
+           std::fabs(Data()->thinWall->startOffset);
   }
 
   bool IsThinWallCovered() const {
     if (!HasThinWall())
       return false;
     return Data()->thinWall->isCovered;
+  }
+
+  bool HasThinWallStartOffset() const {
+    return HasThinWall();
+  }
+
+  bool HasThinWallEndOffset() const {
+    return HasThinWall();
+  }
+
+  double GetThinWallStartOffset() const {
+    return HasThinWall() ? Data()->thinWall->startOffset : 0.0;
+  }
+
+  double GetThinWallEndOffset() const {
+    return HasThinWall() ? Data()->thinWall->endOffset : 0.0;
   }
 };
 

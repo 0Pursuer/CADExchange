@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "FeatureBuilderBase.h"
+#include <cmath>
 #include <stdexcept>
 
 namespace CADExchange {
@@ -61,8 +62,26 @@ public:
     if (thickness <= 0) {
       throw std::runtime_error("Thickness must be positive.");
     }
-    m_feature->thinWall =
-        ThinWallOption{thickness, isOneSided, isOutward, isCovered};
+    if (isOneSided) {
+      return SetThinWallOffsets(isOutward ? 0.0 : thickness,
+                                isOutward ? thickness : 0.0,
+                                isCovered);
+    }
+    return SetThinWallOffsets(thickness, thickness, isCovered);
+  }
+
+  RevolveBuilder &SetThinWallOffsets(double startOffset, double endOffset,
+                                     bool isCovered = false) {
+    const double absStart = std::fabs(startOffset);
+    const double absEnd = std::fabs(endOffset);
+    if (absStart <= 1e-9 && absEnd <= 1e-9) {
+      throw std::runtime_error("Thin wall offsets must not both be zero.");
+    }
+    ThinWallOption tw;
+    tw.isCovered = isCovered;
+    tw.startOffset = startOffset;
+    tw.endOffset = endOffset;
+    m_feature->thinWall = tw;
     return *this;
   }
 

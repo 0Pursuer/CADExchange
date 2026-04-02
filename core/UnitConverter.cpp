@@ -153,7 +153,8 @@ void ScaleExtrude(CExtrude &extrude, double factor, UnitScaleContext &ctx) {
     ScaleSweepExtent(*extrude.extent2, factor, ctx, true);
   }
   if (extrude.thinWall.has_value()) {
-    extrude.thinWall->thickness *= factor;
+    extrude.thinWall->startOffset *= factor;
+    extrude.thinWall->endOffset *= factor;
   }
 }
 
@@ -166,7 +167,8 @@ void ScaleRevolve(CRevolve &revolve, double factor, UnitScaleContext &ctx) {
     ScaleSweepExtent(*revolve.extent2, factor, ctx, false);
   }
   if (revolve.thinWall.has_value()) {
-    revolve.thinWall->thickness *= factor;
+    revolve.thinWall->startOffset *= factor;
+    revolve.thinWall->endOffset *= factor;
   }
 }
 

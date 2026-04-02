@@ -814,10 +814,9 @@ void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
   // 薄壁参数（可选）
   if (extrude->thinWall.has_value()) {
     XMLElement *twElem = doc.NewElement("ThinWall");
-    twElem->SetAttribute("Thickness", extrude->thinWall->thickness);
-    twElem->SetAttribute("OneSided",  extrude->thinWall->isOneSided);
-    twElem->SetAttribute("Outward",   extrude->thinWall->isOutward);
     twElem->SetAttribute("Covered",   extrude->thinWall->isCovered);
+    twElem->SetAttribute("StartOffset", extrude->thinWall->startOffset);
+    twElem->SetAttribute("EndOffset", extrude->thinWall->endOffset);
     element->InsertEndChild(twElem);
   }
 }
@@ -861,10 +860,9 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
 
   if (revolve->thinWall.has_value()) {
     XMLElement *twElem = doc.NewElement("ThinWall");
-    twElem->SetAttribute("Thickness", revolve->thinWall->thickness);
-    twElem->SetAttribute("OneSided",  revolve->thinWall->isOneSided);
-    twElem->SetAttribute("Outward",   revolve->thinWall->isOutward);
     twElem->SetAttribute("Covered",   revolve->thinWall->isCovered);
+    twElem->SetAttribute("StartOffset", revolve->thinWall->startOffset);
+    twElem->SetAttribute("EndOffset", revolve->thinWall->endOffset);
     element->InsertEndChild(twElem);
   }
 }
@@ -1207,15 +1205,14 @@ void TinyXMLSerializer::LoadExtrude(XMLElement *element,
   XMLElement *twElem = element->FirstChildElement("ThinWall");
   if (twElem) {
     ThinWallOption tw;
-    twElem->QueryDoubleAttribute("Thickness", &tw.thickness);
-    twElem->QueryBoolAttribute("OneSided",    &tw.isOneSided);
-    twElem->QueryBoolAttribute("Outward",     &tw.isOutward);
     twElem->QueryBoolAttribute("Covered",     &tw.isCovered);
-    if (tw.thickness > 1e-9) {
+    twElem->QueryDoubleAttribute("StartOffset", &tw.startOffset);
+    twElem->QueryDoubleAttribute("EndOffset", &tw.endOffset);
+    if (std::fabs(tw.startOffset) > 1e-9 || std::fabs(tw.endOffset) > 1e-9) {
       extrude->thinWall = tw;
     } else {
       std::cerr << "[TinyXMLSerializer][WARN] Extrude '" << extrude->featureID
-                << "' ThinWall.Thickness is zero or missing — skipping.\n";
+                << "' ThinWall.StartOffset/EndOffset are both zero or missing — skipping.\n";
     }
   }
 }
@@ -1270,15 +1267,14 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
   XMLElement *twElem = element->FirstChildElement("ThinWall");
   if (twElem) {
     ThinWallOption tw;
-    twElem->QueryDoubleAttribute("Thickness", &tw.thickness);
-    twElem->QueryBoolAttribute("OneSided",    &tw.isOneSided);
-    twElem->QueryBoolAttribute("Outward",     &tw.isOutward);
     twElem->QueryBoolAttribute("Covered",     &tw.isCovered);
-    if (tw.thickness > 1e-9) {
+    twElem->QueryDoubleAttribute("StartOffset", &tw.startOffset);
+    twElem->QueryDoubleAttribute("EndOffset", &tw.endOffset);
+    if (std::fabs(tw.startOffset) > 1e-9 || std::fabs(tw.endOffset) > 1e-9) {
       revolve->thinWall = tw;
     } else {
       std::cerr << "[TinyXMLSerializer][WARN] Revolve '" << revolve->featureID
-                << "' ThinWall.Thickness is zero or missing — skipping.\n";
+                << "' ThinWall.StartOffset/EndOffset are both zero or missing — skipping.\n";
     }
   }
 }

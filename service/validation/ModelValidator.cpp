@@ -157,10 +157,11 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       checkExtent(extrude->extent1, extrude->featureID, "Extent1", seen, "EXTRUDE", true);
       if (extrude->extent2)
         checkExtent(*extrude->extent2, extrude->featureID, "Extent2", seen, "EXTRUDE", true);
-      if (extrude->thinWall.has_value() && extrude->thinWall->thickness <= 0.0) {
+      if (extrude->thinWall.has_value() &&
+          std::fabs(extrude->thinWall->startOffset) <= 1e-9 &&
+          std::fabs(extrude->thinWall->endOffset) <= 1e-9) {
         addError("[EXTRUDE_006] Extrude '" + extrude->featureID +
-                 "' has ThinWall but Thickness=" +
-                 std::to_string(extrude->thinWall->thickness) + " (must be > 0).");
+                 "' has ThinWall but StartOffset/EndOffset are both zero.");
       }
     }
 
@@ -214,10 +215,11 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       checkExtent(revolve->extent1, revolve->featureID, "Extent1", seen, "REVOLVE", false);
       if (revolve->extent2)
         checkExtent(*revolve->extent2, revolve->featureID, "Extent2", seen, "REVOLVE", false);
-      if (revolve->thinWall.has_value() && revolve->thinWall->thickness <= 0.0) {
+      if (revolve->thinWall.has_value() &&
+          std::fabs(revolve->thinWall->startOffset) <= 1e-9 &&
+          std::fabs(revolve->thinWall->endOffset) <= 1e-9) {
         addError("[REVOLVE_006] Revolve '" + revolve->featureID +
-                 "' has ThinWall but Thickness=" +
-                 std::to_string(revolve->thinWall->thickness) + " (must be > 0).");
+                 "' has ThinWall but StartOffset/EndOffset are both zero.");
       }
     }
     // ---- CDatumPlane ----

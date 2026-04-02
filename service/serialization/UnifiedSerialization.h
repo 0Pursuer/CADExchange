@@ -223,10 +223,9 @@ template <class Archive> void serialize(Archive &ar, DraftOption &draft) {
  * @brief 序列化薄壁选项，记录厚度与覆盖状态。
  */
 template <class Archive> void serialize(Archive &ar, ThinWallOption &thinWall) {
-  ar(cereal::make_nvp("Thickness", thinWall.thickness),
-     cereal::make_nvp("OneSided",  thinWall.isOneSided),
-     cereal::make_nvp("Outward",   thinWall.isOutward),
-     cereal::make_nvp("Covered",   thinWall.isCovered));
+  ar(cereal::make_nvp("StartOffset", thinWall.startOffset),
+     cereal::make_nvp("EndOffset", thinWall.endOffset),
+     cereal::make_nvp("Covered", thinWall.isCovered));
 }
 
 /**

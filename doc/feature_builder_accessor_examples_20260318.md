@@ -149,7 +149,7 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 4. `SetEndCondition1(const SweepExtent&)`
 5. `SetEndCondition2(const SweepExtent&)`
 6. `SetDraft(angle, outward)`
-7. `SetThinWall(thickness, isOneSided, isOutward, isCovered)`
+7. `SetThinWallOffsets(startOffset, endOffset, isCovered)`
 8. `Build()`
 
 说明：
@@ -157,6 +157,8 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 1. `ExtrudeBuilder` 当前统一写入 `extent1 / extent2`。
 2. `SetEndCondition1/2` 这个命名仍保留，但参数已经是 `SweepExtent`。
 3. `Builder::EndCondition::*` 和 `Builder::Extent::*` 都只是便捷工厂，返回值本质也是 `SweepExtent`。
+4. 薄壁统一使用 `StartOffset/EndOffset/Covered`：
+   `StartOffset` 表示内侧偏置，`EndOffset` 表示外侧偏置。
 
 ### 4.2 推荐写法：通过 Extent / EndCondition / EndConditionHelper 获取 SweepExtent
 
@@ -373,7 +375,7 @@ std::string extWithOptions =
     .SetProfile(sketchID)
     .SetEndCondition1(Builder::EndCondition::Blind(0.02))
     .SetDraft(1.5, false)
-    .SetThinWall(0.0012, true, false, true)
+    .SetThinWallOffsets(0.0012, 0.0, true)
     .Build();
 ```
 
@@ -386,7 +388,7 @@ std::string extWithOptions =
 3. 第一方向兼容读取：`GetEndType1()` `GetDepth1()` `GetOffset1()` `HasOffset1()` `IsFlip1()` `IsFlipMaterialSide1()` `GetReference1()`
 4. 第二方向兼容读取：`HasDirection2()` `GetEndType2()` `GetDepth2()` `GetOffset2()` `HasOffset2()` `IsFlip2()` `IsFlipMaterialSide2()` `GetReference2()`
 5. 拔模：`HasDraft()` `GetDraftAngle()` `IsDraftOutward()`
-6. 薄壁：`HasThinWall()` `GetThinWallThickness()` `IsThinWallOneSided()` `IsThinWallOutward()` `IsThinWallCovered()`
+6. 薄壁：`HasThinWall()` `GetThinWallStartOffset()` `GetThinWallEndOffset()` `IsThinWallCovered()`
 
 建议：
 
@@ -410,7 +412,8 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
     double draftA = ext.GetDraftAngle();
 
     bool hasThin = ext.HasThinWall();
-    double thinT = ext.GetThinWallThickness();
+    double thinStart = ext.GetThinWallStartOffset();
+    double thinEnd = ext.GetThinWallEndOffset();
 
     // 兼容命名接口仍可用，但推荐优先读取 e1/e2：
     auto compatType1 = ext.GetEndType1();
@@ -418,7 +421,7 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 
     (void)dir; (void)op; (void)e1; (void)hasDir2; (void)e2;
     (void)hasDraft; (void)draftA; (void)compatType1; (void)compatValue1;
-    (void)hasThin; (void)thinT;
+    (void)hasThin; (void)thinStart; (void)thinEnd;
   }
 }
 ```
@@ -439,7 +442,7 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 6. `SetExtent1(const SweepExtent&)`
 7. `SetExtent2(const SweepExtent&)`
 8. `SetAngle(angle)` / `SetTwoWayAngle(angle1, angle2)` / `SetSymmetricAngle(totalAngle)`
-9. `SetThinWall(thickness, isOneSided, isOutward, isCovered)`
+9. `SetThinWallOffsets(startOffset, endOffset, isCovered)`
 10. `Build()`
 
 说明：
@@ -449,6 +452,8 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 3. `SetAngle / SetTwoWayAngle / SetSymmetricAngle` 仍可用，但只是对 `extent1 / extent2` 的语法糖。
 4. 若想保持和旧 `EndCondition` 类似的调用风格，优先使用 `Builder::Extent::*`。
 5. `SetExtent1/2` 接收到 `SweepExtent::Type::UNKNOWN` 时会忽略该输入，不会覆盖已设置值。
+6. 薄壁统一使用 `StartOffset/EndOffset/Covered`：
+   `StartOffset` 表示内侧偏置，`EndOffset` 表示外侧偏置。
 
 ### 5.2 典型示例
 
@@ -529,7 +534,7 @@ std::string revUpToEntity =
 2. 旋转轴：`GetAxisOrigin()` `GetAxisDirection()` `GetAxisReference()`
 3. 范围1：`GetExtentType1()` `GetExtentValue1()` `GetExtentOffset1()` `HasOffset1()` `IsFlip1()` `IsFlipMaterialSide1()` `GetReference1()`
 4. 范围2：`HasExtent2()` `GetExtentType2()` `GetExtentValue2()` `GetExtentOffset2()` `HasOffset2()` `IsFlip2()` `IsFlipMaterialSide2()` `GetReference2()`
-5. 薄壁：`HasThinWall()` `GetThinWallThickness()` `IsThinWallOneSided()` `IsThinWallOutward()` `IsThinWallCovered()`
+5. 薄壁：`HasThinWall()` `GetThinWallStartOffset()` `GetThinWallEndOffset()` `IsThinWallCovered()`
 6. 推荐直接访问：`Data()->extent1` / `Data()->extent2`
 
 建议：

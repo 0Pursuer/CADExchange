@@ -2,6 +2,7 @@
 #include "AccessorMacros.h"
 #include "FeatureAccessorBase.h"
 #include "ReferenceAccessor.h"
+#include <cmath>
 #include <memory>
 #include <string>
 
@@ -140,19 +141,45 @@ public:
   }
 
   double GetThinWallThickness() const {
-    return HasThinWall() ? Data()->thinWall->thickness : 0.0;
+    if (!HasThinWall()) {
+      return 0.0;
+    }
+    const double absStart = std::fabs(Data()->thinWall->startOffset);
+    const double absEnd = std::fabs(Data()->thinWall->endOffset);
+    return absStart > absEnd ? absStart : absEnd;
   }
 
   bool IsThinWallOneSided() const {
-    return HasThinWall() ? Data()->thinWall->isOneSided : true;
+    return HasThinWall()
+               ? (std::fabs(Data()->thinWall->startOffset) <= 1e-9 ||
+                  std::fabs(Data()->thinWall->endOffset) <= 1e-9)
+               : true;
   }
 
   bool IsThinWallOutward() const {
-    return HasThinWall() && Data()->thinWall->isOutward;
+    return HasThinWall() &&
+           std::fabs(Data()->thinWall->endOffset) >
+               std::fabs(Data()->thinWall->startOffset);
   }
 
   bool IsThinWallCovered() const {
     return HasThinWall() && Data()->thinWall->isCovered;
+  }
+
+  bool HasThinWallStartOffset() const {
+    return HasThinWall();
+  }
+
+  bool HasThinWallEndOffset() const {
+    return HasThinWall();
+  }
+
+  double GetThinWallStartOffset() const {
+    return HasThinWall() ? Data()->thinWall->startOffset : 0.0;
+  }
+
+  double GetThinWallEndOffset() const {
+    return HasThinWall() ? Data()->thinWall->endOffset : 0.0;
   }
 
 };
