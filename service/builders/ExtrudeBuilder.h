@@ -148,7 +148,7 @@ public:
   /**
    * @brief 设置薄壁参数。
    *
-   * @param thickness 壁厚，必须为正
+   * @param thickness 总壁厚，必须为正
    * @param isOneSided true 则为单向薄壁，false 为双向薄壁
    * @param isCovered 薄壁是否有盖
    * @return 返回 *this 以支持链式调用
@@ -160,11 +160,11 @@ public:
       throw std::runtime_error("Thickness must be positive.");
     }
     if (isOneSided) {
-      return SetThinWallOffsets(isOutward ? 0.0 : thickness,
+      return SetThinWallOffsets(isOutward ? 0.0 : -thickness,
                                 isOutward ? thickness : 0.0,
                                 isCovered);
     }
-    return SetThinWallOffsets(thickness, thickness, isCovered);
+    return SetThinWallOffsets(-thickness * 0.5, thickness * 0.5, isCovered);
   }
 
   ExtrudeBuilder &SetThinWallOffsets(double startOffset, double endOffset,

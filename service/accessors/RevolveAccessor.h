@@ -144,8 +144,13 @@ public:
     if (!HasThinWall()) {
       return 0.0;
     }
-    const double absStart = std::fabs(Data()->thinWall->startOffset);
-    const double absEnd = std::fabs(Data()->thinWall->endOffset);
+    const double start = Data()->thinWall->startOffset;
+    const double end = Data()->thinWall->endOffset;
+    const double absStart = std::fabs(start);
+    const double absEnd = std::fabs(end);
+    if (start < -1e-9 && end > 1e-9) {
+      return absStart + absEnd;
+    }
     return absStart > absEnd ? absStart : absEnd;
   }
 
@@ -158,8 +163,8 @@ public:
 
   bool IsThinWallOutward() const {
     return HasThinWall() &&
-           std::fabs(Data()->thinWall->endOffset) >
-               std::fabs(Data()->thinWall->startOffset);
+           std::fabs(Data()->thinWall->startOffset) <= 1e-9 &&
+           Data()->thinWall->endOffset > 1e-9;
   }
 
   bool IsThinWallCovered() const {

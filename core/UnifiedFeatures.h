@@ -269,8 +269,8 @@ struct DraftOption {
 };
 
 struct ThinWallOption {
-  double startOffset = 0.0; ///< 内侧偏置/壁厚
-  double endOffset = 0.0;   ///< 外侧偏置/壁厚
+  double startOffset = 0.0; ///< 相对草图轮廓的内侧偏置，向内为负
+  double endOffset = 0.0;   ///< 相对草图轮廓的外侧偏置，向外为正
   bool isCovered = false;   ///< 薄壁端部是否有盖
 };
 

@@ -158,7 +158,8 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
 2. `SetEndCondition1/2` 这个命名仍保留，但参数已经是 `SweepExtent`。
 3. `Builder::EndCondition::*` 和 `Builder::Extent::*` 都只是便捷工厂，返回值本质也是 `SweepExtent`。
 4. 薄壁统一使用 `StartOffset/EndOffset/Covered`：
-   `StartOffset` 表示内侧偏置，`EndOffset` 表示外侧偏置。
+   `StartOffset` 表示相对草图轮廓的内侧偏置，向内为负；
+   `EndOffset` 表示相对草图轮廓的外侧偏置，向外为正。
 
 ### 4.2 推荐写法：通过 Extent / EndCondition / EndConditionHelper 获取 SweepExtent
 
@@ -375,7 +376,7 @@ std::string extWithOptions =
     .SetProfile(sketchID)
     .SetEndCondition1(Builder::EndCondition::Blind(0.02))
     .SetDraft(1.5, false)
-    .SetThinWallOffsets(0.0012, 0.0, true)
+    .SetThinWallOffsets(-0.0012, 0.0, true)
     .Build();
 ```
 
@@ -453,7 +454,8 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 4. 若想保持和旧 `EndCondition` 类似的调用风格，优先使用 `Builder::Extent::*`。
 5. `SetExtent1/2` 接收到 `SweepExtent::Type::UNKNOWN` 时会忽略该输入，不会覆盖已设置值。
 6. 薄壁统一使用 `StartOffset/EndOffset/Covered`：
-   `StartOffset` 表示内侧偏置，`EndOffset` 表示外侧偏置。
+   `StartOffset` 表示相对草图轮廓的内侧偏置，向内为负；
+   `EndOffset` 表示相对草图轮廓的外侧偏置，向外为正。
 
 ### 5.2 典型示例
 

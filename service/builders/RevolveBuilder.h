@@ -63,11 +63,11 @@ public:
       throw std::runtime_error("Thickness must be positive.");
     }
     if (isOneSided) {
-      return SetThinWallOffsets(isOutward ? 0.0 : thickness,
+      return SetThinWallOffsets(isOutward ? 0.0 : -thickness,
                                 isOutward ? thickness : 0.0,
                                 isCovered);
     }
-    return SetThinWallOffsets(thickness, thickness, isCovered);
+    return SetThinWallOffsets(-thickness * 0.5, thickness * 0.5, isCovered);
   }
 
   RevolveBuilder &SetThinWallOffsets(double startOffset, double endOffset,
