@@ -329,7 +329,7 @@ struct CRevolveAxis {
   std::string referenceLocalID;
   std::shared_ptr<CRefEntityBase> referenceEntity;
   CPoint3D origin;
-  CVector3D direction;
+  CVector3D direction; ///< 统一语义：特征正旋转方向；ReferenceEntity 保留原始几何方向
 };
 
 /**

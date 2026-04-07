@@ -39,6 +39,8 @@ public:
       throw std::runtime_error("Axis direction vector is too small (near zero).");
     }
     m_feature->axis.origin = origin;
+    // Unified semantics: axis.direction stores the feature's positive rotation
+    // direction. The referenced edge/axis keeps its raw extracted geometry.
     m_feature->axis.direction = direction;
     m_feature->axis.direction.Normalize();
     return *this;
