@@ -281,7 +281,7 @@ struct ThinWallOption {
  */
 struct SweepExtent {
   enum class Type {
-    VALUE,                  // 数值（Extrude: 深度 / Revolve: 角度）
+    VALUE,                  // 数值（Extrude: 深度 / Revolve: 角度，内部统一用弧度）
     SYMMETRIC,              // 对称
     THROUGH_ALL,            // 贯穿
     THROUGH_ALL_BOTH_SIDES, // 双向贯穿（保留给 Extrude 兼容）
@@ -292,6 +292,9 @@ struct SweepExtent {
     UNKNOWN
   } type = Type::UNKNOWN;
 
+  // 共享数值参数：
+  // - Extrude: 线性长度，跟随模型单位
+  // - Revolve: 角度，内部统一使用弧度
   double value = 0.0;
   double offset = 0.0;
   bool hasOffset = false;                          ///< 是否启用偏移
@@ -337,8 +340,8 @@ struct CRevolveAxis {
  */
 struct CRevolve : public CProfiledFeatureBase {
   CRevolveAxis axis;
-  SweepExtent extent1;
-  std::optional<SweepExtent> extent2;
+  SweepExtent extent1;              ///< Revolve 角度值统一使用弧度
+  std::optional<SweepExtent> extent2; ///< Revolve 第二方向角度值统一使用弧度
 
   CRevolve() { featureType = FeatureType::Revolve; }
 };

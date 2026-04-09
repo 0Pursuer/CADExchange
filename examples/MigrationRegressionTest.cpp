@@ -4,6 +4,7 @@
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
 #include "../service/serialization/CADSerializer.h"
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -15,6 +16,9 @@ using namespace CADExchange::Accessor;
 using namespace CADExchange::Builder;
 
 namespace {
+
+constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr double kHalfPi = kPi * 0.5;
 
 void Fail(const std::string &message) {
   std::cerr << "[FAIL] " << message << std::endl;
@@ -57,7 +61,7 @@ void TestRevolveBuilderIgnoresUnknownExtent() {
       RevolveBuilder(model, "RevolveUnknownIgnored")
           .SetProfile("SK-1")
           .SetAxisExplicit(StandardID::kOrigin, StandardID::kAxisZ)
-          .SetAngle(90.0)
+          .SetAngle(kHalfPi)
           .SetExtent1(invalid)
           .SetExtent2(invalid)
           .Build();
@@ -66,10 +70,23 @@ void TestRevolveBuilderIgnoresUnknownExtent() {
   Expect(revolve.IsValid(), "RevolveAccessor should be valid.");
   Expect(revolve.GetExtentType1() == SweepExtent::Type::VALUE,
          "UNKNOWN extent1 must not overwrite existing VALUE extent.");
-  Expect(std::abs(revolve.GetExtentValue1() - 90.0) < 1e-9,
-         "Extent1 value should remain 90 degrees.");
+  Expect(std::abs(revolve.GetExtentValue1() - kHalfPi) < 1e-9,
+         "Extent1 value should remain pi/2 radians.");
   Expect(!revolve.HasExtent2(),
          "UNKNOWN extent2 must be ignored rather than stored.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("E:/MyProject/tmp/cadexchange_revolve_radians.xml");
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving revolve radian XML should succeed.");
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("Value=\"1.5707963267948966\"") != std::string::npos,
+         "Serialized revolve XML should store radians, not degrees.");
 }
 
 void TestRevolveAccessorExposesSharedExtentFields() {

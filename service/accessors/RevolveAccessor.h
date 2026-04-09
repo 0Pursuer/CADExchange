@@ -14,6 +14,7 @@ namespace Accessor {
  *
  * 对应 Builder 层的 RevolveBuilder，提供对旋转特征的只读访问。
  * 包括轮廓草图、旋转轴和 SweepExtent 配置。
+ * Revolve 的角度值在 Accessor 中统一按弧度返回。
  */
 class RevolveAccessor : public FeatureAccessorBase {
 private:

@@ -9,6 +9,7 @@
 > 对 `RevolveAccessor` 而言，访问接口已经直接切换到 `GetExtentType1/2`、`GetExtentValue1/2`、
 > `GetExtentOffset1/2`、`HasOffset1/2`、`GetReference1/2` 等共享 `SweepExtent` 读取接口，
 > 不再保留旧的角度语法糖接口。
+> `Revolve` 的角度值自 `2026-04-07` 起在 `CADExchange` 内部统一使用弧度；Creo / UG 的读写桥接在边界处负责与原生“度”互转。
 
 ## 1. 文档定位
 
@@ -450,12 +451,13 @@ if (auto feat = ma.GetFeatureByID(extWithOptions)) {
 
 1. `Revolve` 已不再使用 `AngleKind / PrimaryAngle / SecondaryAngle` 作为模型层字段。
 2. 推荐优先使用 `SetExtent1/2`，这样与 `Extrude` 的共享语义完全一致。
-3. `SetAngle / SetTwoWayAngle / SetSymmetricAngle` 仍可用，但只是对 `extent1 / extent2` 的语法糖。
+3. `SetAngle / SetTwoWayAngle / SetSymmetricAngle` 仍可用，但只是对 `extent1 / extent2` 的语法糖，输入角度统一使用弧度。
 4. 若想保持和旧 `EndCondition` 类似的调用风格，优先使用 `Builder::Extent::*`。
 5. `SetExtent1/2` 接收到 `SweepExtent::Type::UNKNOWN` 时会忽略该输入，不会覆盖已设置值。
 6. 薄壁统一使用 `StartOffset/EndOffset/Covered`：
    `StartOffset` 表示相对草图轮廓的内侧偏置，向内为负；
    `EndOffset` 表示相对草图轮廓的外侧偏置，向外为正。
+7. `Builder::Extent::Angle(...)` / `Builder::Extent::Symmetric(...)` / `GetExtentValue1/2()` 的 Revolve 角度值也统一使用弧度。
 
 ### 5.2 典型示例
 
@@ -467,7 +469,7 @@ std::string revSingle =
     .SetProfile(sketchID)
     .SetAxisExplicit(CPoint3D{0, 0, 0}, CVector3D{0, 0, 1})
     .SetOperation(BooleanOp::BOSS)
-    .SetAngle(360.0)
+    .SetAngle(CADExchange::DegreesToRadians(360.0))
     .Build();
 ```
 
@@ -479,7 +481,8 @@ std::string revTwoWay =
     .SetProfile(sketchID)
     .SetAxisExplicit(CPoint3D{0, 0, 0}, CVector3D{0, 1, 0})
     .SetOperation(BooleanOp::CUT)
-    .SetTwoWayAngle(120.0, 30.0)
+    .SetTwoWayAngle(CADExchange::DegreesToRadians(120.0),
+                    CADExchange::DegreesToRadians(30.0))
     .Build();
 ```
 
@@ -491,7 +494,7 @@ std::string revExtent =
     .SetProfile(sketchID)
     .SetAxisRef(Builder::Ref::Axis("DatumAxis_001"))
     .SetOperation(BooleanOp::BOSS)
-    .SetExtent1(Builder::Extent::Angle(270.0))
+    .SetExtent1(Builder::Extent::Angle(CADExchange::DegreesToRadians(270.0)))
     .Build();
 ```
 
@@ -502,7 +505,7 @@ std::string revSym =
   Builder::RevolveBuilder(model, "Rev_Symmetric")
     .SetProfile(sketchID)
     .SetAxisFromSketchLine("CenterLine_1")
-    .SetExtent1(Builder::Extent::Symmetric(180.0))
+    .SetExtent1(Builder::Extent::Symmetric(CADExchange::DegreesToRadians(180.0)))
     .Build();
 ```
 
@@ -541,7 +544,7 @@ std::string revUpToEntity =
 
 建议：
 
-1. 若只关心角度值，`GetExtentValue1/2()` 足够。
+1. 若只关心角度值，`GetExtentValue1/2()` 足够；返回值单位统一是弧度。
 2. 若要处理与 `Extrude` 共用的 offset / flip / reference 语义，必须同时读取 `HasOffset* / IsFlip* / GetReference*`。
 
 ```cpp

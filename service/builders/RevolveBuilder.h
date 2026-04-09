@@ -9,6 +9,8 @@ namespace Builder {
 
 /**
  * @brief 旋转构建器，用于描述旋转轴与角度。
+ *
+ * Revolve 角度在 CADExchange 内部统一使用弧度。
  */
 class RevolveBuilder : public FeatureBuilderBase<CRevolve> {
 public:
