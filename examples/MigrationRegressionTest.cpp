@@ -171,6 +171,14 @@ void TestLegacyRevolveXmlRejected() {
 
 void TestRevolveSketchAxisSerializesReferenceEntity() {
   UnifiedModel model(UnitType::METER, "revolve-sketch-axis-reference");
+  auto profileSketch = MakeSketch("SK-PROFILE", "SketchProfile");
+  auto profileLine = std::make_shared<CSketchLine>();
+  profileLine->localID = "P_1";
+  profileLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  profileLine->endPos = CPoint3D{1.0, 0.0, 0.0};
+  profileSketch->segments.push_back(profileLine);
+  model.AddFeature(profileSketch);
+
   auto sketch = MakeSketch("SK-AX", "SketchAxis");
   auto axisLine = std::make_shared<CSketchLine>();
   axisLine->localID = "L_1";
@@ -181,8 +189,10 @@ void TestRevolveSketchAxisSerializesReferenceEntity() {
 
   const std::string revolveId =
       RevolveBuilder(model, "RevolveSketchAxis")
-          .SetProfile("SK-AX")
-          .SetAxisFromSketchLine("L_1")
+          .SetProfile("SK-PROFILE")
+          .SetAxisRef(
+              static_cast<std::shared_ptr<CRefEntityBase>>(
+                  Ref::SketchSegment("SK-AX", "L_1", 0)))
           .SetAxisExplicit(StandardID::kOrigin, StandardID::kAxisZ)
           .SetAngle(kHalfPi)
           .Build();
@@ -212,6 +222,17 @@ void TestRevolveSketchAxisSerializesReferenceEntity() {
          "Loading revolve sketch-axis XML should succeed.");
   RevolveAccessor loadedRevolve(loaded.GetFeature(revolveId));
   Expect(loadedRevolve.IsValid(), "Loaded revolve should be accessible.");
+  const auto loadedAxisRef = loadedRevolve.GetAxisReference();
+  Expect(loadedAxisRef.IsValid(),
+         "Loaded revolve should preserve axis ReferenceEntity.");
+  Expect(loadedAxisRef.GetRefType() == RefType::TOPO_SKETCH_SEG,
+         "Loaded revolve axis reference type should remain SketchSeg.");
+  Expect(loadedAxisRef.GetParentFeatureID() == "SK-AX",
+         "Loaded revolve axis sketch reference should keep parent sketch ID.");
+  Expect(loadedAxisRef.GetSketchSegmentLocalID() == "L_1",
+         "Loaded revolve axis sketch reference should keep local segment ID.");
+  Expect(loadedRevolve.GetProfileSketchID() == "SK-PROFILE",
+         "Loaded revolve profile sketch should not be overwritten by axis parent.");
   Expect(loadedRevolve.GetAxisReferenceLocalID() == "L_1",
          "Loaded revolve should keep axis local ID from sketch-segment reference.");
 }

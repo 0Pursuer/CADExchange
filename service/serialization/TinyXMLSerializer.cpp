@@ -1281,12 +1281,10 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
         if (revolve->profileSketchID.empty()) {
           revolve->profileSketchID = sketch_seg->parentFeatureID;
         }
-        // Keep runtime behavior unchanged for sketch-line axes:
-        // Creo write path resolves these via RefLocalID + profile sketch.
-        revolve->axis.referenceEntity.reset();
-      } else {
-        revolve->axis.referenceEntity = std::move(loaded_axis_ref);
       }
+      // Keep the explicit axis ReferenceEntity so cross-sketch axis bindings
+      // are not collapsed into profileSketchID + RefLocalID.
+      revolve->axis.referenceEntity = std::move(loaded_axis_ref);
     }
   }
 
