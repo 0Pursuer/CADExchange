@@ -44,7 +44,8 @@ public:
   }
 
   bool SaveEdgesToJson(const std::filesystem::path &filePath,
-                       std::string *errorMessage = nullptr) const {
+                       std::string *errorMessage = nullptr,
+                       const std::string &lengthUnit = "") const {
     std::ofstream out(filePath, std::ios::trunc);
     if (!out.is_open()) {
       if (errorMessage) {
@@ -59,6 +60,9 @@ public:
 
     out << "{\n";
     out << "  \"schema_version\": 1,\n";
+    if (!lengthUnit.empty()) {
+      out << "  \"length_unit\": \"" << EscapeJson(lengthUnit) << "\",\n";
+    }
     out << "  \"edge_count\": " << m_edges.size() << ",\n";
     out << "  \"datum_plane_count\": " << m_datumPlanes.size() << ",\n";
     out << "  \"edges\": [\n";
