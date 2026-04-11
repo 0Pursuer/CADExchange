@@ -169,12 +169,60 @@ void TestLegacyRevolveXmlRejected() {
          "Legacy revolve rejection should come from unknown extent type.");
 }
 
+void TestRevolveSketchAxisSerializesReferenceEntity() {
+  UnifiedModel model(UnitType::METER, "revolve-sketch-axis-reference");
+  auto sketch = MakeSketch("SK-AX", "SketchAxis");
+  auto axisLine = std::make_shared<CSketchLine>();
+  axisLine->localID = "L_1";
+  axisLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  axisLine->endPos = CPoint3D{0.0, 1.0, 0.0};
+  sketch->segments.push_back(axisLine);
+  model.AddFeature(sketch);
+
+  const std::string revolveId =
+      RevolveBuilder(model, "RevolveSketchAxis")
+          .SetProfile("SK-AX")
+          .SetAxisFromSketchLine("L_1")
+          .SetAxisExplicit(StandardID::kOrigin, StandardID::kAxisZ)
+          .SetAngle(kHalfPi)
+          .Build();
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("E:/MyProject/tmp/cadexchange_revolve_sketch_axis_ref.xml");
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving revolve sketch-axis XML should succeed.");
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("<Axis RefLocalID=\"L_1\"") != std::string::npos,
+         "Axis should keep RefLocalID for backward compatibility.");
+  Expect(xml.find("Type=\"SketchSeg\"") != std::string::npos,
+         "Axis should serialize a sketch-segment ReferenceEntity.");
+  Expect(xml.find("ParentFeatureID=\"SK-AX\"") != std::string::npos,
+         "Sketch-segment reference should carry parent sketch ID.");
+  Expect(xml.find("SegmentLocalID=\"L_1\"") != std::string::npos,
+         "Sketch-segment reference should carry segment local ID.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading revolve sketch-axis XML should succeed.");
+  RevolveAccessor loadedRevolve(loaded.GetFeature(revolveId));
+  Expect(loadedRevolve.IsValid(), "Loaded revolve should be accessible.");
+  Expect(loadedRevolve.GetAxisReferenceLocalID() == "L_1",
+         "Loaded revolve should keep axis local ID from sketch-segment reference.");
+}
+
 } // namespace
 
 int main() {
   TestRevolveBuilderIgnoresUnknownExtent();
   TestRevolveAccessorExposesSharedExtentFields();
   TestLegacyRevolveXmlRejected();
+  TestRevolveSketchAxisSerializesReferenceEntity();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

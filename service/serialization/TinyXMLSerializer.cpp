@@ -855,8 +855,19 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
   axisElem->SetAttribute("RefLocalID", revolve->axis.referenceLocalID.c_str());
   SavePoint3D(axisElem, "Origin", revolve->axis.origin);
   SaveVector3D(axisElem, "Direction", revolve->axis.direction);
-  SaveRefEntity(doc, axisElem, "ReferenceEntity",
-                revolve->axis.referenceEntity);
+  std::shared_ptr<CRefEntityBase> axis_ref = revolve->axis.referenceEntity;
+  if (!axis_ref && !revolve->axis.referenceLocalID.empty() &&
+      !revolve->profileSketchID.empty()) {
+    auto sketch_seg_ref = std::make_shared<CRefSketchSeg>();
+    sketch_seg_ref->parentFeatureID = revolve->profileSketchID;
+    sketch_seg_ref->segmentLocalID = revolve->axis.referenceLocalID;
+#ifdef _MSC_VER
+#pragma warning(suppress : 4996)
+#endif
+    sketch_seg_ref->topologyIndex = -1;
+    axis_ref = sketch_seg_ref;
+  }
+  SaveRefEntity(doc, axisElem, "ReferenceEntity", axis_ref);
 
   if (revolve->thinWall.has_value()) {
     XMLElement *twElem = doc.NewElement("ThinWall");
@@ -1260,8 +1271,23 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
       revolve->axis.referenceLocalID = id;
     revolve->axis.origin = LoadPoint3D(axisElem, "Origin");
     revolve->axis.direction = LoadVector3D(axisElem, "Direction");
-    if (auto *ref = axisElem->FirstChildElement("ReferenceEntity"))
-      revolve->axis.referenceEntity = LoadRefEntity(ref);
+    if (auto *ref = axisElem->FirstChildElement("ReferenceEntity")) {
+      auto loaded_axis_ref = LoadRefEntity(ref);
+      if (auto sketch_seg =
+              std::dynamic_pointer_cast<CRefSketchSeg>(loaded_axis_ref)) {
+        if (revolve->axis.referenceLocalID.empty()) {
+          revolve->axis.referenceLocalID = sketch_seg->segmentLocalID;
+        }
+        if (revolve->profileSketchID.empty()) {
+          revolve->profileSketchID = sketch_seg->parentFeatureID;
+        }
+        // Keep runtime behavior unchanged for sketch-line axes:
+        // Creo write path resolves these via RefLocalID + profile sketch.
+        revolve->axis.referenceEntity.reset();
+      } else {
+        revolve->axis.referenceEntity = std::move(loaded_axis_ref);
+      }
+    }
   }
 
   XMLElement *twElem = element->FirstChildElement("ThinWall");
