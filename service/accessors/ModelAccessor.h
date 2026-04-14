@@ -24,23 +24,6 @@ private:
 public:
   ModelAccessor() = default;
 
-  // ModelAccessor doesn't inherit from FeatureAccessorBase in the same way (it
-  // wraps UnifiedModel), but the plan says "Implement Data() returning const
-  // CModel*". Wait, ModelAccessor::m_model is `UnifiedModel`, not
-  // `std::shared_ptr<const CModel>`. And `UnifiedModel` seems to be a class
-  // wrapper, not a raw C struct pointer. Let's check `UnifiedModel` definition
-  // in `core/UnifiedModel.h` if possible, but based on `GetRawModel` it returns
-  // `const UnifiedModel&`. The plan said: "Implement Data() returning const
-  // CModel*". This might be a mistake in the plan if `UnifiedModel` captures
-  // `CModel`. Or maybe `UnifiedModel` IS `CModel` alias? I haven't seen
-  // `CModel` definition. Let's assume `UnifiedModel` is the data holder.
-  // `ModelAccessor` has `GetFeatureCount` which uses `m_model.GetFeatures()`.
-  // Getting strict `Data()` pointer might not apply directly if `m_model` is an
-  // object, not a pointer. However, I can provide `Data()` returning `const
-  // UnifiedModel*`.
-
-  // Let's stick to what's reasonable. `m_model` is a `UnifiedModel`.
-
   const UnifiedModel *Data() const { return &m_model; }
 
   const UnifiedModel *operator->() const { return &m_model; }

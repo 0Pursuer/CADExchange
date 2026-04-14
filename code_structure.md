@@ -79,8 +79,6 @@
 - `DatumPlaneBuilder.h`：基准面构造（方法、引用、约束）。  
 - `FeatureBuilders.h`：Builder 聚合头。  
 - `StringHelper.h`：UUID（递增串）与 UTF8/宽字串路径处理。  
-- `ReferenceFactory.h`：已废弃占位。  
-- `ReferenceFactory.cpp`：当前为空文件。
 
 ## 2.4 service/accessors
 
@@ -299,14 +297,6 @@
   - 无（聚合头）。
 - **其他函数分组**
   - 汇总 include。
-
-### `service/builders/ReferenceFactory.h` / `ReferenceFactory.cpp`
-- **核心函数详列**
-  - 当前无实现（已废弃占位）。
-- **其他函数分组**
-  - 注释指向新路径说明。
-
----
 
 ### 3.3 service/accessors
 
@@ -668,22 +658,12 @@ graph TD
    - 符号：`ValidateReference`、`ModelValidator::Validate`  
    - 问题：写时校验与全局校验规则不在同一策略中心，容易出现“局部通过、全局失败”的规则漂移。
 
-5. **废弃抽象残留**  
-   - 文件：`service/builders/ReferenceFactory.h`、`service/builders/ReferenceFactory.cpp`  
-   - 符号：`ReferenceFactory`（无实际实现）  
-   - 问题：增加认知噪音，影响新开发者判断当前生效入口。
-
-6. **`ModelAccessor.h` 出现过程性注释残留**  
-   - 文件：`service/accessors/ModelAccessor.h`  
-   - 符号：类内大段“plan 推理式”注释（约 27~43 行）  
-   - 问题：非 API 文档信息混入头文件，降低可读性与专业性。
-
-7. **构建配置与目录现状有不一致风险**  
+5. **构建配置与目录现状有不一致风险**  
    - 文件：`CMakeLists.txt`、`README.md`  
    - 符号：`include/` include path、README 中 `include/src/test` 结构描述  
    - 问题：当前仓库顶层无 `include/`、`src/`、`test/` 对应目录，文档与构建说明存在历史残留。
 
-8. **ID 生成策略非全局唯一**  
+6. **ID 生成策略非全局唯一**  
    - 文件：`service/builders/StringHelper.h`  
    - 符号：`StringHelper::GenerateUUID()`  
    - 问题：当前仅 `FB-<递增号>`，跨进程/跨文件合并时不能保证真正 UUID 语义。
@@ -712,8 +692,8 @@ graph TD
    - 目标：抽出 `ReferenceRuleService`，Builder 与 Validator 共用规则。  
    - 收益：减少规则漂移，便于新增引用类型时单点扩展。
 
-5. **清理废弃入口与注释残留**  
-   - 目标：处理 `ReferenceFactory.*`（删除或迁移说明集中化），清理 `ModelAccessor.h` 过程性注释。  
+5. **（已完成）清理废弃入口与注释残留**  
+   - 已完成：移除 `ReferenceFactory.*` 占位文件，清理 `ModelAccessor.h` 过程性注释。  
    - 收益：降低维护噪音，提升头文件可读性。
 
 6. **同步构建与文档结构描述**  
@@ -740,15 +720,15 @@ graph TD
 |---|---|---|---|---|---|
 | Extent/ThinWall 映射重复 | Extrude/Revolve Builder/Accessor 双份逻辑 | `feature_extrude` 与 `feature_revolve` 各自维护映射 | `feature_extrude` 与 `feature_revolve` 各自维护 `AddElement*` + 端条件映射 | `feature_extrude` 与 `feature_revolve` 各自 `ApplyEndConditions/ApplyThinWall` | 抽 `SweepExtentThinWallMapper`，由 CADExchange 定义接口、各 CAD 实现适配 |
 | Reference 解析耦合 | Builder 与 Validator 规则分散 | `ref_entity_factory` 细节（mark）外溢到特征层 | `ref_entity_factory` 反向依赖 `feature_sketch` | `ref_entity_factory` 与 datum/read_extract 匹配算法重复 | 抽“引用解析服务层”并统一 `SelectionRole` 语义 |
-| Read/Write 契约耦合 | Save/Load 与 Validate 强绑定 | Write 入口依赖 read 输出键 `cadexchange_tinyxml` | 同左 | 同左 | 增加 Write 直接 tinyxml 输入路径，JSON 仅做兼容层 |
-| FeatureType 分发容错不一致 | 规则集中但扩展点分散 | `ToHandlerIndex` 越界兜底风险 | dispatcher 前置校验较强 | 未注册 `FeatureType` 默认放行 | 统一为“显式 unsupported + 统计 + 可配置失败策略” |
+| Read/Write 契约耦合 | Save/Load 与 Validate 强绑定 | 已支持 `input_tinyxml_path` 直读 + JSON 兼容 | 同左 | 同左 | 已收敛为“tinyxml 直读 + JSON 兼容层” |
+| FeatureType 分发容错不一致 | 规则集中但扩展点分散 | 已改为越界即 unsupported 失败 | 已改为 unsupported 失败 | 已改为 unsupported 失败 | 已完成跨模块失败语义收紧；统计摘要可继续增强 |
 
 ### 8.2 重构优先级（可执行）
 
 - **P0（先落地）**
   1. 建立跨模块 `Extent/ThinWall/Flip` 映射组件（CADExchange 出接口，三 CAD 桥接适配）。
-  2. 统一 `FeatureType` 分发失败语义：未注册/越界一律返回 unsupported，并输出统计摘要。
-  3. 给 Write 入口补“直接 tinyxml 输入”路径，解除对 read JSON 键的硬耦合。
+  2. （已完成）统一 `FeatureType` 分发失败语义：未注册/越界返回 unsupported 失败。
+  3. （已完成）Write 入口已补“直接 tinyxml 输入”路径，解除对 read JSON 键的硬耦合。
 - **P1（短期）**
   1. 拆分三端 `ref_entity_factory` 大文件，并收敛 `Reference` 匹配算法到单服务。
   2. 收敛 `FeatureCreationContext`（或等价上下文）字段，减少跨特征隐式副作用。
