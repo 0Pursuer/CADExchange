@@ -172,6 +172,40 @@ void ScaleRevolve(CRevolve &revolve, double factor, UnitScaleContext &ctx) {
   }
 }
 
+void ScaleSweep(CSweep &sweep, double factor, UnitScaleContext &ctx) {
+  if (sweep.profile.embedded.has_value()) {
+    ScaleSketch(sweep.profile.embedded->sketch, factor, ctx);
+  }
+  if (sweep.profile.circular.has_value()) {
+    sweep.profile.circular->outerRadius *= factor;
+    sweep.profile.circular->innerRadius *= factor;
+  }
+  for (auto &ref : sweep.path.references) {
+    ScaleRefEntity(ref, factor, ctx);
+  }
+  if (sweep.path.startPoint.has_value()) {
+    ScalePoint(*sweep.path.startPoint, factor);
+  }
+  if (sweep.path.endPoint.has_value()) {
+    ScalePoint(*sweep.path.endPoint, factor);
+  }
+  for (auto &guidePath : sweep.guidePaths) {
+    for (auto &ref : guidePath.references) {
+      ScaleRefEntity(ref, factor, ctx);
+    }
+    if (guidePath.startPoint.has_value()) {
+      ScalePoint(*guidePath.startPoint, factor);
+    }
+    if (guidePath.endPoint.has_value()) {
+      ScalePoint(*guidePath.endPoint, factor);
+    }
+  }
+  if (sweep.thinWall.has_value()) {
+    sweep.thinWall->startOffset *= factor;
+    sweep.thinWall->endOffset *= factor;
+  }
+}
+
 void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &ctx) {
   for (auto &ref : datumPlane.referenceEntities) {
     ScaleRefEntity(ref, factor, ctx);
@@ -230,6 +264,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Revolve:
         ScaleRevolve(*std::static_pointer_cast<CRevolve>(feature), factor, ctx);
+        break;
+      case FeatureType::Sweep:
+        ScaleSweep(*std::static_pointer_cast<CSweep>(feature), factor, ctx);
         break;
       case FeatureType::DatumPlane:
         ScaleDatumPlane(*std::static_pointer_cast<CDatumPlane>(feature), factor, ctx);

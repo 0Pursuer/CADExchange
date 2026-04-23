@@ -1,4 +1,4 @@
-# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / Revolve / DatumPlane）
+# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / Revolve / Sweep / DatumPlane）
 
 更新时间：2026-03-29
 
@@ -581,9 +581,190 @@ if (auto feat = ma.GetFeatureByID(revSingle)) {
 
 ---
 
-## 6. DatumPlaneBuilder 详细用法
+## 6. SweepBuilder 详细用法
 
 ### 6.1 Builder 主接口
+
+`SweepBuilder` 当前按 V1 unified sweep 定义实现，只覆盖三系统都容易落地的实体扫掠基础语义：
+
+1. `SetProfile(sketchID)` / `SetProfileByName(sketchName)`：外部草图引用截面（`SketchReference`）
+2. `SetEmbeddedProfile(sketch)`：内嵌截面草绘（`EmbeddedSketch`）
+3. `SetCircularProfile(outerRadius, innerRadius)`：参数圆/管截面（`Circular`）
+4. `SetSectionPlacement(SweepSectionPlacement::ExistingProfilePlane/PathNormalAtStart)`
+5. `SetProfilePathAngleCos(cosValue)`（可选）
+6. `AddPathReference(refEntity)`
+7. `SetPathReferences(refEntities)`
+8. `SetPathStartPoint(point)` / `SetPathEndPoint(point)`
+9. `SetPathClosed(isClosed)`
+10. `AddGuidePathReference(refEntity, guidePathIndex)` / `AddGuidePath(guidePath)`
+11. `SetGuidePathStartPoint(index, point)` / `SetGuidePathEndPoint(index, point)`
+12. `SetGuidePathClosed(index, isClosed)`
+13. `SetOrientation(SweepPathOrientation::FollowPath/KeepProfileNormal)`
+14. `SetOperation(BooleanOp::BOSS/CUT/MERGE)`
+15. `SetThinWallOffsets(startOffset, endOffset, isCovered)`
+16. `Build()`
+
+说明：
+
+1. Sweep 轮廓改为 tagged-union：`SketchReference / EmbeddedSketch / Circular`；仅在 `SketchReference` 下要求外部 `profileSketchID`。
+2. `path` 使用 `CRefEntityBase` 引用链，不限定为草图；可以是 `Ref::Sketch(...)`、`Ref::SketchSegment(...)`、`Ref::Edge(...)` 等可解析为曲线链的引用。
+3. `guidePaths` 是可选参数，元素同样使用 `CSweepPath`，因此引导线与主扫掠路径使用完全相同的引用实体表达方式。
+4. `sectionPlacement` 用于表达截面相对路径位置语义：`ExistingProfilePlane` 或 `PathNormalAtStart`。
+5. 当前 V1 不表达曲面扫掠、centerline、twist、draft along path 等高级选项。
+
+### 6.2 典型写法：草图圆轮廓 + 草图段路径
+
+```cpp
+using namespace CADExchange;
+using namespace CADExchange::Builder;
+
+std::string sweepID =
+  Builder::SweepBuilder(model, "Sweep_Round")
+    .SetProfile(profileSketchID)
+    .SetOperation(BooleanOp::BOSS)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .SetPathStartPoint(CPoint3D{0.0, 0.0, 0.0})
+    .SetPathEndPoint(CPoint3D{0.05, 0.0, 0.0})
+    .SetOrientation(SweepPathOrientation::FollowPath)
+    .Build();
+```
+
+### 6.2.1 典型写法：圆形参数截面（无 profile sketch）
+
+```cpp
+std::string circularSweepID =
+  Builder::SweepBuilder(model, "Sweep_Circular")
+    .SetCircularProfile(0.004, 0.002) // 外半径/内半径（内半径 0 表示实心）
+    .SetSectionPlacement(SweepSectionPlacement::PathNormalAtStart)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .Build();
+```
+
+### 6.2.2 典型写法：内嵌截面草绘（Creo/UG 变化扫掠语义）
+
+```cpp
+CSketch section;
+section.sketchCSys.origin = CPoint3D{0.0, 0.0, 0.0};
+section.sketchCSys.xDir = CVector3D{1.0, 0.0, 0.0};
+section.sketchCSys.yDir = CVector3D{0.0, 1.0, 0.0};
+section.sketchCSys.zDir = CVector3D{0.0, 0.0, 1.0};
+// 省略 section.segments 构造（至少 1 个段）
+
+std::string embeddedSweepID =
+  Builder::SweepBuilder(model, "Sweep_Embedded")
+    .SetEmbeddedProfile(section)
+    .SetSectionPlacement(SweepSectionPlacement::PathNormalAtStart)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .Build();
+```
+
+### 6.3 典型写法：实体边作为路径
+
+路径不是草图时，不要设计 `pathSketchID` 这类专用字段；统一通过引用实体表达：
+
+```cpp
+std::string sweepByEdge =
+  Builder::SweepBuilder(model, "Sweep_By_Model_Edge")
+    .SetProfile(profileSketchID)
+    .SetOperation(BooleanOp::CUT)
+    .AddPathReference(
+      Builder::Ref::Edge("Base_Extrude", 3)
+        .StartPoint(CPoint3D{0.0, 0.0, 0.0})
+        .EndPoint(CPoint3D{0.05, 0.0, 0.0})
+        .MidPoint(CPoint3D{0.025, 0.0, 0.0}))
+    .SetPathStartPoint(CPoint3D{0.0, 0.0, 0.0})
+    .SetPathEndPoint(CPoint3D{0.05, 0.0, 0.0})
+    .Build();
+```
+
+### 6.4 可选引导线
+
+引导线与主路径一样使用 `CRefEntityBase` 引用链。没有引导线时不需要设置；有一条引导线时可以直接使用默认 `guidePathIndex=0`：
+
+```cpp
+std::string guidedSweep =
+  Builder::SweepBuilder(model, "Sweep_With_Guide")
+    .SetProfile(profileSketchID)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .AddGuidePathReference(Builder::Ref::SketchSegment(guideSketchID, guideLineLocalID, 0))
+    .SetGuidePathStartPoint(0, CPoint3D{0.0, 0.01, 0.0})
+    .SetGuidePathEndPoint(0, CPoint3D{0.05, 0.01, 0.0})
+    .Build();
+```
+
+多条引导线可以通过不同 `guidePathIndex` 分组：
+
+```cpp
+std::string multiGuideSweep =
+  Builder::SweepBuilder(model, "Sweep_With_Two_Guides")
+    .SetProfile(profileSketchID)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .AddGuidePathReference(Builder::Ref::SketchSegment(guideSketchA, guideLineA, 0), 0)
+    .AddGuidePathReference(Builder::Ref::SketchSegment(guideSketchB, guideLineB, 0), 1)
+    .Build();
+```
+
+### 6.5 薄壁扫掠
+
+薄壁字段沿用 `Extrude/Revolve` 的 `ThinWallOption` 语义，统一使用 `StartOffset/EndOffset/Covered`：
+
+```cpp
+std::string thinSweep =
+  Builder::SweepBuilder(model, "Sweep_Thin")
+    .SetProfile(profileSketchID)
+    .AddPathReference(Builder::Ref::SketchSegment(pathSketchID, pathLineLocalID, 0))
+    .SetThinWallOffsets(-0.001, 0.001, false)
+    .Build();
+```
+
+### 6.6 SweepAccessor 读取参考
+
+`SweepAccessor` 主要方法：
+
+1. 轮廓语义：`GetProfileKind()` `GetProfileSketchID()` `GetSectionPlacement()` `HasProfilePathAngleCos()` `GetProfilePathAngleCos()`
+2. 圆形参数截面：`HasCircularProfile()` `GetCircularOuterRadius()` `GetCircularInnerRadius()`
+3. 内嵌截面草绘：`HasEmbeddedProfile()` `GetEmbeddedProfileSegmentCount()` `GetEmbeddedProfileSketch()`
+4. 路径：`GetPathReferenceCount()` `GetPathReference(i)` `IsPathClosed()`
+5. 路径方向消歧：`HasPathStartPoint()` `GetPathStartPoint()` `HasPathEndPoint()` `GetPathEndPoint()`
+6. 引导线：`GetGuidePathCount()` `GetGuidePathReferenceCount(i)` `GetGuidePathReference(i,j)` `HasGuidePathStartPoint(i)` `HasGuidePathEndPoint(i)`
+7. 薄壁：`HasThinWall()` `GetThinWallStartOffset()` `GetThinWallEndOffset()` `IsThinWallCovered()`
+8. 推荐直接读取：`Data()->path.references` 与 `Data()->guidePaths`，用于桥接层保留完整路径引用链顺序。
+
+```cpp
+using namespace CADExchange::Accessor;
+
+if (auto feat = ma.GetFeatureByID(sweepID)) {
+  auto sweepOpt = feat->As<Accessor::SweepAccessor>();
+  if (sweepOpt.has_value()) {
+    auto sweep = *sweepOpt;
+
+    auto profileKind = sweep.GetProfileKind();
+    std::string profile = sweep.GetProfileSketchID();
+    auto placement = sweep.GetSectionPlacement();
+    int pathN = sweep.GetPathReferenceCount();
+    auto firstPathRef = sweep.GetPathReference(0);
+    int guideN = sweep.GetGuidePathCount();
+    auto firstGuideRef = sweep.GetGuidePathReference(0, 0);
+    bool hasStart = sweep.HasPathStartPoint();
+    CPoint3D start = sweep.GetPathStartPoint();
+    auto orientation = sweep.GetOrientation();
+    double outerR = sweep.GetCircularOuterRadius();
+    int embeddedSegCount = sweep.GetEmbeddedProfileSegmentCount();
+
+    (void)profileKind; (void)profile; (void)placement;
+    (void)pathN; (void)firstPathRef;
+    (void)guideN; (void)firstGuideRef; (void)hasStart;
+    (void)start; (void)orientation;
+    (void)outerR; (void)embeddedSegCount;
+  }
+}
+```
+
+---
+
+## 7. DatumPlaneBuilder 详细用法
+
+### 7.1 Builder 主接口
 
 `DatumPlaneBuilder` 主要方法：
 
@@ -611,7 +792,7 @@ if (auto feat = ma.GetFeatureByID(revSingle)) {
 8. `LINE`
 9. `TANGENT`
 
-### 6.2 PlaneConstraintBuilder 全方式
+### 7.2 PlaneConstraintBuilder 全方式
 
 1. `Parallel(ref, reversed)`
 2. `Perpendicular(ref, reversed)`
@@ -622,7 +803,7 @@ if (auto feat = ma.GetFeatureByID(revSingle)) {
 7. `Tangent(ref, reversed)`
 8. `Projection(ref, reversed)`
 
-### 6.3 典型示例
+### 7.3 典型示例
 
 #### A) OFFSET
 
@@ -728,7 +909,7 @@ std::string dpLine =
     .Build();
 ```
 
-### 6.4 DatumPlaneAccessor 读取参考
+### 7.4 DatumPlaneAccessor 读取参考
 
 `DatumPlaneAccessor` 主要方法：
 
@@ -760,11 +941,11 @@ if (auto feat = ma.GetFeatureByID(dpOffset)) {
 
 ---
 
-## 7. UG 提取参数 -> Builder 映射参考
+## 8. UG 提取参数 -> Builder 映射参考
 
 来源：`UgLibs/doc/ug_datum_plane_read_create_research_20260318.md`
 
-### 7.1 UG fixed_dplane
+### 8.1 UG fixed_dplane
 
 UG 读取到：
 
@@ -784,7 +965,7 @@ std::string fromUgFixed =
 
 如果后续 `CDatumPlane` 增加 point/normal 直存字段，应优先改成直接写 point/normal。
 
-### 7.2 UG relative_dplane
+### 8.2 UG relative_dplane
 
 UG 读取到：
 
@@ -822,11 +1003,11 @@ std::string fromUgAngle =
 
 ---
 
-## 8. Creo 提取参数 -> Builder 映射参考
+## 9. Creo 提取参数 -> Builder 映射参考
 
 来源：`CreoLibs/doc/creo_datum_plane_read_create_research_20260318.md`
 
-### 8.1 PRO_DTMPLN_OFFS
+### 9.1 PRO_DTMPLN_OFFS
 
 Creo 读取到：
 
@@ -847,7 +1028,7 @@ std::string fromCreoOffs =
     .Build();
 ```
 
-### 8.2 PRO_DTMPLN_ANG
+### 9.2 PRO_DTMPLN_ANG
 
 Creo 读取到：
 
@@ -869,7 +1050,7 @@ std::string fromCreoAng =
     .Build();
 ```
 
-### 8.3 PRO_DTMPLN_PRL / MIDPLN / TANG（建议映射）
+### 9.3 PRO_DTMPLN_PRL / MIDPLN / TANG（建议映射）
 
 1. `PRO_DTMPLN_PRL` -> `PlaneMethod::PARALLEL` + `PlaneConstraintType::PARALLEL`
 2. `PRO_DTMPLN_MIDPLN` -> `PlaneMethod::MID_PLANE` + 双引用 + `SYMMETRIC`
@@ -877,21 +1058,23 @@ std::string fromCreoAng =
 
 ---
 
-## 9. 常见调用建议
+## 10. 常见调用建议
 
 1. 草图先 `Build` 再拉伸，优先用 `SetProfile(sketchID)`。
 2. 对 `Extrude / Revolve`，优先把终止范围理解为 `SweepExtent`，而不是旧的 “depth / angle” 专有结构。
+3. 对 `Sweep`，优先把主路径和引导线都理解为 `CRefEntityBase` 引用链，而不是草图专用 ID；草图路径和实体边路径应使用同一套 `Ref::*` 入口。
 3. 终止面/点/顶点尽量使用 `Ref::*` 包装，避免直接操作底层引用结构。
 4. 基准面约束里 `ref` 是“referenceEntities 下标”，建议用 `AddReferenceAndGetIndex(...)` 获取，避免硬编码。
 5. Accessor 回读时优先检查 `IsValid()/Has*()`，复杂字段优先看 `Data()->extent1/extent2`。
 6. 除了草图 localID 这种必须落局部变量的场景，其余 builder 示例尽量保持单条链式调用到 `.Build()`。
 
-## 10. 最小验收建议
+## 11. 最小验收建议
 
 1. Builder 创建后调用 `UnifiedModel::Validate()`。
 2. 通过 Accessor 回读关键字段：
    1. Sketch: segment/constraint 数量和类型。
    2. Extrude: extent 类型、value/offset、引用。
    3. Revolve: axis、extent 类型、value、operation。
-   4. DatumPlane: method、referenceCount、constraint(type/ref/value/reversed)。
+   4. Sweep: profileSketchID、path/guide reference count、reference type/localID、orientation、thinWall。
+   5. DatumPlane: method、referenceCount、constraint(type/ref/value/reversed)。
 3. 对桥接模块执行你现有的 round-trip 五步校验链路。

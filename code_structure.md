@@ -5,7 +5,7 @@
 
 ## 0. 跨模块统一术语与口径（本轮收敛）
 
-- **FeatureType**：统一指 `CADExchange::FeatureType`（`Sketch/Extrude/Revolve/DatumPlane`）；各 CAD 侧类型先映射到该枚举后再进入流程。  
+- **FeatureType**：统一指 `CADExchange::FeatureType`（`Sketch/Extrude/Revolve/Sweep/DatumPlane`）；各 CAD 侧类型先映射到该枚举后再进入流程。
 - **Extent（SweepExtent）**：统一按 `Type + Value + Offset + Reference` 描述终止条件。  
 - **Reference**：统一指 `CRef*` 引用实体（标准基准/拓扑几何/草图段），Read 与 Write 均按 `RefType + 几何指纹` 落地。  
 - **ThinWall**：统一指薄壁选项（`HasThinWall + Thickness + Side/Direction`）。  
@@ -61,7 +61,7 @@
 ## 2.2 core
 
 - `core/UnifiedTypes.h`：基础几何类型、单位、标准基准 ID、向量运算工具。  
-- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CDatumPlane`、`SweepExtent` 等）。  
+- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CSweep/CDatumPlane`、`SweepExtent` 等）。
 - `core/UnifiedModel.h`：`UnifiedModel` 容器、索引、查找、校验入口声明。  
 - `core/UnitConverter.cpp`：`ConvertModelUnit` 及特征/引用的单位缩放实现。  
 - `core/TypeAdapters.h`：`PointAdapter/VectorAdapter` 与反向 `PointWriter/VectorWriter`。  
@@ -76,6 +76,7 @@
 - `EndConditionBuilder.h`：`Extent`/`EndCondition` 工厂与辅助构造。  
 - `ExtrudeBuilder.h`：拉伸构造（轮廓、方向、`extent1/extent2`、薄壁、拔模）。  
 - `RevolveBuilder.h`：旋转构造（轮廓、轴、`extent1/extent2`、薄壁）。  
+- `SweepBuilder.h`：扫掠构造（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁）。
 - `DatumPlaneBuilder.h`：基准面构造（方法、引用、约束）。  
 - `FeatureBuilders.h`：Builder 聚合头。  
 - `StringHelper.h`：UUID（递增串）与 UTF8/宽字串路径处理。  
@@ -88,6 +89,7 @@
 - `SketchAccessor.h`：草图/草图段访问。  
 - `ExtrudeAccessor.h`：拉伸访问（共享 `SweepExtent` 字段读取）。  
 - `RevolveAccessor.h`：旋转访问（共享 `SweepExtent` 字段读取）。  
+- `SweepAccessor.h`：扫掠访问（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁读取）。
 - `DatumPlaneAccessor.h`：基准面访问。  
 - `ModelAccessor.h`：模型访问入口（按索引/ID 取特征）。  
 - `FeatureAccessors.h`：Accessor 聚合头。  
@@ -113,7 +115,7 @@
 
 - `examples/RecommendedApproach.cpp`：推荐构建路径演示（Builder + SaveModel）。  
 - `examples/PartReconstructionDemo.cpp`：加载/遍历/提取/依赖分析/重建模拟演示。  
-- `examples/MigrationRegressionTest.cpp`：旋转特征迁移回归测试（尤其 `SweepExtent` 语义）。
+- `examples/MigrationRegressionTest.cpp`：旋转/扫掠特征迁移回归测试（尤其 `SweepExtent` 与 sweep path 引用语义）。
 
 ## 2.9 thirdParty
 
@@ -272,6 +274,23 @@
 - **其他函数分组**
   - 布尔操作：`SetOperation(...)`。
 
+### `service/builders/SweepBuilder.h`
+- **核心类型**
+  - `SweepBuilder`
+- **核心函数详列**
+  - `SetProfile(...)` / `SetProfileByName(...)`：设置外部草图引用轮廓（`SketchReference`）。
+  - `SetEmbeddedProfile(...)`：设置扫掠内部截面草绘（`EmbeddedSketch`）。
+  - `SetCircularProfile(...)`：设置参数圆/管截面（`Circular`）。
+  - `SetSectionPlacement(...)` / `SetProfilePathAngleCos(...)`：设置截面相对路径放置语义与可选角度余弦。
+  - `AddPathReference(...)` / `SetPathReferences(...)`：设置有序主路径引用链，引用类型统一为 `CRefEntityBase`。
+  - `SetPathStartPoint(...)` / `SetPathEndPoint(...)` / `SetPathClosed(...)`：设置路径方向消歧与闭合状态。
+  - `AddGuidePathReference(...)` / `AddGuidePath(...)`：设置可选引导线路径，元素复用 `CSweepPath`。
+  - `SetGuidePathStartPoint(...)` / `SetGuidePathEndPoint(...)` / `SetGuidePathClosed(...)`：设置引导线方向消歧与闭合状态。
+  - `SetOrientation(...)`：设置截面方向策略。
+  - `SetThinWall()` / `SetThinWallOffsets()`：写入共享薄壁参数。
+- **其他函数分组**
+  - 布尔操作：`SetOperation(...)`。
+
 ### `service/builders/DatumPlaneBuilder.h`
 - **核心类**
   - `PlaneConstraintBuilder`、`DatumPlaneBuilder`
@@ -360,6 +379,22 @@
   - 薄壁读取：`HasThinWall/GetThinWallThickness/...`。
 - **其他函数分组**
   - 无（接口集中在核心读取）。
+
+### `service/accessors/SweepAccessor.h`
+- **核心类型**
+  - `SweepAccessor`
+- **核心函数详列**
+  - `GetProfileKind()` / `GetProfileSketchID()` / `GetSectionPlacement()` / `GetOperation()` / `GetOrientation()`：读取扫掠轮廓语义与基础属性。
+  - `HasCircularProfile()` / `GetCircularOuterRadius()` / `GetCircularInnerRadius()`：读取圆/管参数轮廓。
+  - `HasEmbeddedProfile()` / `GetEmbeddedProfileSegmentCount()` / `GetEmbeddedProfileSketch()`：读取内嵌截面草绘。
+  - `HasProfilePathAngleCos()` / `GetProfilePathAngleCos()`：读取可选截面-路径角度余弦。
+  - `GetPathReferenceCount()` / `GetPathReference(i)` / `IsPathClosed()`：读取主路径引用链。
+  - `HasPathStartPoint()` / `GetPathStartPoint()` / `HasPathEndPoint()` / `GetPathEndPoint()`：读取路径方向消歧点。
+  - `GetGuidePathCount()` / `GetGuidePathReferenceCount(i)` / `GetGuidePathReference(i,j)`：读取可选引导线路径。
+  - `HasGuidePathStartPoint(i)` / `GetGuidePathStartPoint(i)` / `HasGuidePathEndPoint(i)` / `GetGuidePathEndPoint(i)`：读取引导线方向消歧点。
+  - `HasThinWall()` / `GetThinWallThickness()` / `GetThinWallStartOffset()` / `GetThinWallEndOffset()`：读取共享薄壁参数。
+- **其他函数分组**
+  - 原始只读访问：`Data()` / `operator->()`。
 
 ### `service/accessors/DatumPlaneAccessor.h`
 - **核心类**
@@ -553,7 +588,7 @@
 ## 4.1 Write 工作流（Builder -> Validate -> SaveModel）
 
 1. 创建 `UnifiedModel model(unit, name)`。  
-2. 通过 `SketchBuilder/ExtrudeBuilder/RevolveBuilder/DatumPlaneBuilder` 写入特征参数。  
+2. 通过 `SketchBuilder/ExtrudeBuilder/RevolveBuilder/SweepBuilder/DatumPlaneBuilder` 写入特征参数。
 3. 每个 Builder 最后调用 `Build()`，由 `FeatureBuilderBase::Build()` 调用 `UnifiedModel::AddFeature()`。  
 4. 引用类参数通过 `Ref::*` 构建；`FeatureBuilderBase::ValidateReference()` 在写入前检查引用可达性（标准基准除外）。
 

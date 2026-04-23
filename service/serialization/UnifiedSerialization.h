@@ -305,6 +305,47 @@ template <class Archive> void serialize(Archive &ar, CRevolve &rev) {
 }
 
 /**
+ * @brief Serialize a sweep path reference chain.
+ */
+template <class Archive> void serialize(Archive &ar, CSweepPath &path) {
+  ar(cereal::make_nvp("References", path.references),
+     cereal::make_nvp("StartPoint", path.startPoint),
+     cereal::make_nvp("EndPoint", path.endPoint),
+     cereal::make_nvp("Closed", path.isClosed));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CSweepCircularProfile &profile) {
+  ar(cereal::make_nvp("OuterRadius", profile.outerRadius),
+     cereal::make_nvp("InnerRadius", profile.innerRadius));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CSweepEmbeddedProfile &profile) {
+  ar(cereal::make_nvp("Sketch", profile.sketch));
+}
+
+template <class Archive> void serialize(Archive &ar, CSweepProfile &profile) {
+  ar(cereal::make_nvp("Kind", profile.kind),
+     cereal::make_nvp("SketchID", profile.sketchID),
+     cereal::make_nvp("Embedded", profile.embedded),
+     cereal::make_nvp("Circular", profile.circular));
+}
+
+/**
+ * @brief Serialize a sweep feature.
+ */
+template <class Archive> void serialize(Archive &ar, CSweep &sweep) {
+  ar(cereal::base_class<CProfiledFeatureBase>(&sweep),
+     cereal::make_nvp("Profile", sweep.profile),
+     cereal::make_nvp("Path", sweep.path),
+     cereal::make_nvp("GuidePaths", sweep.guidePaths),
+     cereal::make_nvp("Orientation", sweep.orientation),
+     cereal::make_nvp("SectionPlacement", sweep.sectionPlacement),
+     cereal::make_nvp("ProfilePathAngleCos", sweep.profilePathAngleCos));
+}
+
+/**
  * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
  */
 template <class Archive>

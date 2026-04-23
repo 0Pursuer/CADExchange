@@ -36,6 +36,15 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
     if (auto rv = std::dynamic_pointer_cast<CRevolve>(f))
       if (!rv->profileSketchID.empty())
         referencedSketchIDs.insert(rv->profileSketchID);
+    if (auto sw = std::dynamic_pointer_cast<CSweep>(f)) {
+      const std::string sketchID = !sw->profile.sketchID.empty()
+                                       ? sw->profile.sketchID
+                                       : sw->profileSketchID;
+      if (sw->profile.kind == SweepProfileKind::SketchReference &&
+          !sketchID.empty()) {
+        referencedSketchIDs.insert(sketchID);
+      }
+    }
   }
 
   // length magnitude threshold (convert to meters)
@@ -112,6 +121,52 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
     }
   };
 
+  auto checkSweepPathReference =
+      [&](const std::shared_ptr<CRefEntityBase> &ref,
+          const std::string &featureID,
+          const std::string &role,
+          size_t index,
+          const std::unordered_set<std::string> &seen) {
+        const std::string idx = std::to_string(index);
+        if (!ref) {
+          addError("[SWEEP_003] Sweep '" + featureID + "' " + role +
+                   " reference[" + idx + "] is null.");
+          return;
+        }
+        if (auto sketch = std::dynamic_pointer_cast<CRefSketch>(ref)) {
+          if (seen.find(sketch->targetFeatureID) == seen.end()) {
+            addError("[REF_001] Sweep '" + featureID + "' " + role +
+                     " reference[" + idx + "] sketch '" +
+                     sketch->targetFeatureID +
+                     "' has not been defined yet.");
+          }
+          return;
+        }
+        if (auto sketchSeg = std::dynamic_pointer_cast<CRefSketchSeg>(ref)) {
+          if (sketchSeg->parentFeatureID.empty() ||
+              sketchSeg->segmentLocalID.empty()) {
+            addError("[SWEEP_004] Sweep '" + featureID + "' " + role +
+                     " reference[" + idx +
+                     "] sketch segment requires parentFeatureID and segmentLocalID.");
+          } else if (seen.find(sketchSeg->parentFeatureID) == seen.end()) {
+            addError("[REF_001] Sweep '" + featureID + "' " + role +
+                     " reference[" + idx + "] sketch '" +
+                     sketchSeg->parentFeatureID +
+                     "' has not been defined yet.");
+          }
+          return;
+        }
+        if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_002] Sweep '" + featureID + "' " + role +
+                    " reference[" + idx + "] parent feature '" +
+                    subTopo->parentFeatureID +
+                    "' has not been defined yet.");
+          }
+        }
+      };
+
   // Main validation loop
   std::unordered_set<std::string> seen;
   std::unordered_set<std::string> seenIDs;
@@ -171,7 +226,7 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       if (sketch->segments.empty() &&
           referencedSketchIDs.count(sketch->featureID)) {
         addWarn("[SKETCH_001] Sketch '" + sketch->featureID +
-                "' is referenced by Extrude/Revolve but has no segments.");
+                "' is referenced by a profiled feature but has no segments.");
       }
       // GEOM_003
       if (referencedSketchIDs.count(sketch->featureID) &&
@@ -219,6 +274,86 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
           std::fabs(revolve->thinWall->startOffset) <= 1e-9 &&
           std::fabs(revolve->thinWall->endOffset) <= 1e-9) {
         addError("[REVOLVE_006] Revolve '" + revolve->featureID +
+                 "' has ThinWall but StartOffset/EndOffset are both zero.");
+      }
+    }
+    // ---- CSweep ----
+    else if (auto sweep = std::dynamic_pointer_cast<CSweep>(feature)) {
+      if (sweep->profile.kind == SweepProfileKind::SketchReference) {
+        const std::string sketchID = !sweep->profile.sketchID.empty()
+                                         ? sweep->profile.sketchID
+                                         : sweep->profileSketchID;
+        if (sketchID.empty()) {
+          addError("[SWEEP_001] Sweep '" + sweep->featureID +
+                   "' has empty sketch profile reference.");
+        } else if (seen.find(sketchID) == seen.end()) {
+          addError("[REF_001] Sweep '" + sweep->featureID +
+                   "' references sketch '" + sketchID +
+                   "' which has not been defined yet.");
+        }
+      } else if (sweep->profile.kind == SweepProfileKind::EmbeddedSketch) {
+        if (!sweep->profile.embedded.has_value()) {
+          addError("[SWEEP_007] Sweep '" + sweep->featureID +
+                   "' uses EmbeddedSketch profile but has no embedded sketch.");
+        } else if (sweep->profile.embedded->sketch.segments.empty()) {
+          addError("[SWEEP_008] Sweep '" + sweep->featureID +
+                   "' embedded profile sketch has no segments.");
+        }
+      } else if (sweep->profile.kind == SweepProfileKind::Circular) {
+        if (!sweep->profile.circular.has_value()) {
+          addError("[SWEEP_009] Sweep '" + sweep->featureID +
+                   "' uses Circular profile but has no circular parameters.");
+        } else {
+          const auto &circular = *sweep->profile.circular;
+          if (circular.outerRadius <= 0.0) {
+            addError("[SWEEP_010] Sweep '" + sweep->featureID +
+                     "' circular outer radius must be positive.");
+          }
+          if (circular.innerRadius < 0.0 ||
+              circular.innerRadius >= circular.outerRadius) {
+            addError("[SWEEP_011] Sweep '" + sweep->featureID +
+                     "' circular inner radius must be non-negative and less "
+                     "than outer radius.");
+          }
+        }
+      }
+
+      if (sweep->path.references.empty()) {
+        addError("[SWEEP_002] Sweep '" + sweep->featureID +
+                 "' has no path references.");
+      }
+      if (sweep->profilePathAngleCos &&
+          (*sweep->profilePathAngleCos < -1.0 ||
+           *sweep->profilePathAngleCos > 1.0)) {
+        addError("[SWEEP_012] Sweep '" + sweep->featureID +
+                 "' profilePathAngleCos must be within [-1, 1].");
+      }
+
+      for (size_t i = 0; i < sweep->path.references.size(); ++i) {
+        checkSweepPathReference(sweep->path.references[i], sweep->featureID,
+                                "path", i, seen);
+      }
+
+      for (size_t guideIndex = 0; guideIndex < sweep->guidePaths.size();
+           ++guideIndex) {
+        const auto &guidePath = sweep->guidePaths[guideIndex];
+        if (guidePath.references.empty()) {
+          addError("[SWEEP_005] Sweep '" + sweep->featureID +
+                   "' guidePath[" + std::to_string(guideIndex) +
+                   "] has no references.");
+        }
+        const std::string role =
+            "guidePath[" + std::to_string(guideIndex) + "]";
+        for (size_t i = 0; i < guidePath.references.size(); ++i) {
+          checkSweepPathReference(guidePath.references[i], sweep->featureID,
+                                  role, i, seen);
+        }
+      }
+
+      if (sweep->thinWall.has_value() &&
+          std::fabs(sweep->thinWall->startOffset) <= 1e-9 &&
+          std::fabs(sweep->thinWall->endOffset) <= 1e-9) {
+        addError("[SWEEP_006] Sweep '" + sweep->featureID +
                  "' has ThinWall but StartOffset/EndOffset are both zero.");
       }
     }

@@ -1,8 +1,10 @@
 #include "../core/UnifiedModel.h"
 #include "../service/accessors/RevolveAccessor.h"
+#include "../service/accessors/SweepAccessor.h"
 #include "../service/builders/EndConditionBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
+#include "../service/builders/SweepBuilder.h"
 #include "../service/serialization/CADSerializer.h"
 #include <cmath>
 #include <filesystem>
@@ -80,7 +82,7 @@ void TestRevolveBuilderIgnoresUnknownExtent() {
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
-         "Saving revolve radian XML should succeed.");
+         "Saving revolve radian XML should succeed: " + errorMessage);
 
   std::ifstream in(xmlPath, std::ios::binary);
   const std::string xml((std::istreambuf_iterator<char>(in)),
@@ -237,6 +239,270 @@ void TestRevolveSketchAxisSerializesReferenceEntity() {
          "Loaded revolve should keep axis local ID from sketch-segment reference.");
 }
 
+void TestSweepBuilderAccessorAndXmlRoundTrip() {
+  UnifiedModel model(UnitType::METER, "sweep-builder-accessor-xml");
+
+  auto profileSketch = MakeSketch("SK-SWEEP-PROFILE", "SweepProfile");
+  auto circle = std::make_shared<CSketchCircle>();
+  circle->localID = "C_1";
+  circle->center = CPoint3D{0.0, 0.0, 0.0};
+  circle->radius = 0.002;
+  profileSketch->segments.push_back(circle);
+  model.AddFeature(profileSketch);
+
+  auto pathSketch = MakeSketch("SK-SWEEP-PATH", "SweepPathSketch");
+  auto pathLine = std::make_shared<CSketchLine>();
+  pathLine->localID = "L_PATH";
+  pathLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  pathLine->endPos = CPoint3D{0.05, 0.0, 0.0};
+  pathSketch->segments.push_back(pathLine);
+  auto guideLine = std::make_shared<CSketchLine>();
+  guideLine->localID = "L_GUIDE";
+  guideLine->startPos = CPoint3D{0.0, 0.01, 0.0};
+  guideLine->endPos = CPoint3D{0.05, 0.01, 0.0};
+  pathSketch->segments.push_back(guideLine);
+  model.AddFeature(pathSketch);
+
+  const std::string sweepId =
+      SweepBuilder(model, "SweepRoundTrip")
+          .SetProfile("SK-SWEEP-PROFILE")
+          .SetOperation(BooleanOp::BOSS)
+          .AddPathReference(Ref::SketchSegment("SK-SWEEP-PATH", "L_PATH", 0))
+          .SetPathStartPoint(CPoint3D{0.0, 0.0, 0.0})
+          .SetPathEndPoint(CPoint3D{0.05, 0.0, 0.0})
+          .AddGuidePathReference(
+              Ref::SketchSegment("SK-SWEEP-PATH", "L_GUIDE", 1))
+          .SetGuidePathStartPoint(0, CPoint3D{0.0, 0.01, 0.0})
+          .SetGuidePathEndPoint(0, CPoint3D{0.05, 0.01, 0.0})
+          .SetOrientation(SweepPathOrientation::KeepProfileNormal)
+          .SetThinWallOffsets(-0.001, 0.001, false)
+          .Build();
+
+  SweepAccessor sweep(model.GetFeature(sweepId));
+  Expect(sweep.IsValid(), "SweepAccessor should be valid.");
+  Expect(sweep.GetProfileSketchID() == "SK-SWEEP-PROFILE",
+         "Sweep profile sketch should be readable.");
+  Expect(sweep.GetPathReferenceCount() == 1,
+         "Sweep path should contain one reference.");
+  Expect(sweep.GetPathReference(0).GetRefType() == RefType::TOPO_SKETCH_SEG,
+         "Sweep path reference should preserve sketch-segment type.");
+  Expect(sweep.GetPathReference(0).GetParentFeatureID() == "SK-SWEEP-PATH",
+         "Sweep path reference should preserve path sketch ID.");
+  Expect(sweep.GetPathReference(0).GetSketchSegmentLocalID() == "L_PATH",
+         "Sweep path reference should preserve path segment local ID.");
+  Expect(sweep.HasPathStartPoint() && sweep.HasPathEndPoint(),
+         "Sweep path should expose start/end disambiguation points.");
+  Expect(sweep.GetGuidePathCount() == 1,
+         "Sweep guide path should be optional and readable when present.");
+  Expect(sweep.GetGuidePathReferenceCount(0) == 1,
+         "Sweep guide path should preserve its reference count.");
+  Expect(sweep.GetGuidePathReference(0, 0).GetRefType() ==
+             RefType::TOPO_SKETCH_SEG,
+         "Sweep guide path reference should preserve sketch-segment type.");
+  Expect(sweep.GetGuidePathReference(0, 0).GetSketchSegmentLocalID() ==
+             "L_GUIDE",
+         "Sweep guide path should preserve guide segment local ID.");
+  Expect(sweep.HasGuidePathStartPoint(0) && sweep.HasGuidePathEndPoint(0),
+         "Sweep guide path should expose optional start/end points.");
+  Expect(sweep.GetOrientation() == SweepPathOrientation::KeepProfileNormal,
+         "Sweep orientation should be readable.");
+  Expect(sweep.HasThinWall(), "Sweep thin wall should be readable.");
+  Expect(std::abs(sweep.GetThinWallThickness() - 0.002) < 1e-9,
+         "Sweep thin wall thickness should combine two-sided offsets.");
+
+  auto report = model.Validate();
+  Expect(report.isValid, "Sweep model validation should pass.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_roundtrip.xml");
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving sweep XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("Type=\"Sweep\"") != std::string::npos,
+         "Sweep XML should use Feature Type=\"Sweep\".");
+  Expect(xml.find("Orientation=\"KeepProfileNormal\"") != std::string::npos,
+         "Sweep XML should serialize orientation.");
+  Expect(xml.find("SegmentLocalID=\"L_PATH\"") != std::string::npos,
+         "Sweep XML should serialize path sketch segment reference.");
+  Expect(xml.find("GuidePaths") != std::string::npos,
+         "Sweep XML should serialize optional guide paths when present.");
+  Expect(xml.find("SegmentLocalID=\"L_GUIDE\"") != std::string::npos,
+         "Sweep XML should serialize guide sketch segment reference.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading sweep XML should succeed: " + errorMessage);
+  SweepAccessor loadedSweep(loaded.GetFeature(sweepId));
+  Expect(loadedSweep.IsValid(), "Loaded sweep should be accessible.");
+  Expect(loadedSweep.GetProfileSketchID() == "SK-SWEEP-PROFILE",
+         "Loaded sweep should preserve profile sketch.");
+  Expect(loadedSweep.GetPathReferenceCount() == 1,
+         "Loaded sweep should preserve path reference count.");
+  Expect(loadedSweep.GetPathReference(0).GetSketchSegmentLocalID() == "L_PATH",
+         "Loaded sweep should preserve path sketch segment local ID.");
+  Expect(loadedSweep.GetGuidePathCount() == 1,
+         "Loaded sweep should preserve guide path count.");
+  Expect(loadedSweep.GetGuidePathReference(0, 0).GetSketchSegmentLocalID() ==
+             "L_GUIDE",
+         "Loaded sweep should preserve guide sketch segment local ID.");
+  Expect(loadedSweep.GetOrientation() ==
+             SweepPathOrientation::KeepProfileNormal,
+         "Loaded sweep should preserve orientation.");
+}
+
+void TestSweepCircularProfileWithoutSketchRoundTrip() {
+  UnifiedModel model(UnitType::METER, "sweep-circular-profile");
+
+  auto pathSketch = MakeSketch("SK-CIRCULAR-SWEEP-PATH", "CircularSweepPath");
+  auto pathLine = std::make_shared<CSketchLine>();
+  pathLine->localID = "L_PATH";
+  pathLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  pathLine->endPos = CPoint3D{0.1, 0.0, 0.0};
+  pathSketch->segments.push_back(pathLine);
+  model.AddFeature(pathSketch);
+
+  const std::string sweepId =
+      SweepBuilder(model, "CircularSweep")
+          .SetCircularProfile(0.004, 0.002)
+          .SetSectionPlacement(SweepSectionPlacement::PathNormalAtStart)
+          .AddPathReference(
+              Ref::SketchSegment("SK-CIRCULAR-SWEEP-PATH", "L_PATH", 0))
+          .Build();
+
+  SweepAccessor sweep(model.GetFeature(sweepId));
+  Expect(sweep.IsValid(), "Circular sweep should be accessible.");
+  Expect(sweep.GetProfileKind() == SweepProfileKind::Circular,
+         "Circular sweep should expose circular profile kind.");
+  Expect(sweep.GetProfileSketchID().empty(),
+         "Circular sweep should not require a profile sketch ID.");
+  Expect(std::abs(sweep.GetCircularOuterRadius() - 0.004) < 1e-12,
+         "Circular sweep should expose outer radius.");
+  Expect(std::abs(sweep.GetCircularInnerRadius() - 0.002) < 1e-12,
+         "Circular sweep should expose inner radius.");
+  Expect(sweep.GetSectionPlacement() ==
+             SweepSectionPlacement::PathNormalAtStart,
+         "Circular sweep should preserve path-normal section placement.");
+
+  auto report = model.Validate();
+  Expect(report.isValid,
+         "Circular sweep without profileSketchID should validate.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_circular.xml");
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving circular sweep XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("<Profile Kind=\"Circular\"") != std::string::npos,
+         "Circular sweep XML should serialize profile kind.");
+  Expect(xml.find("OuterRadius=\"0.004") != std::string::npos,
+         "Circular sweep XML should serialize outer radius.");
+  Expect(xml.find("InnerRadius=\"0.002") != std::string::npos,
+         "Circular sweep XML should serialize inner radius.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading circular sweep XML should succeed: " + errorMessage);
+  SweepAccessor loadedSweep(loaded.GetFeature(sweepId));
+  Expect(loadedSweep.GetProfileKind() == SweepProfileKind::Circular,
+         "Loaded circular sweep should preserve profile kind.");
+  Expect(std::abs(loadedSweep.GetCircularOuterRadius() - 0.004) < 1e-12,
+         "Loaded circular sweep should preserve outer radius.");
+  Expect(std::abs(loadedSweep.GetCircularInnerRadius() - 0.002) < 1e-12,
+         "Loaded circular sweep should preserve inner radius.");
+}
+
+void TestSweepEmbeddedSketchProfileRoundTrip() {
+  UnifiedModel model(UnitType::METER, "sweep-embedded-profile");
+
+  CSketch section;
+  section.sketchCSys.origin = CPoint3D{0.0, 0.0, 0.0};
+  section.sketchCSys.xDir = CVector3D{1.0, 0.0, 0.0};
+  section.sketchCSys.yDir = CVector3D{0.0, 1.0, 0.0};
+  section.sketchCSys.zDir = CVector3D{0.0, 0.0, 1.0};
+  auto bottom = std::make_shared<CSketchLine>();
+  bottom->localID = "E_BOTTOM";
+  bottom->startPos = CPoint3D{-0.005, -0.005, 0.0};
+  bottom->endPos = CPoint3D{0.005, -0.005, 0.0};
+  auto right = std::make_shared<CSketchLine>();
+  right->localID = "E_RIGHT";
+  right->startPos = CPoint3D{0.005, -0.005, 0.0};
+  right->endPos = CPoint3D{0.005, 0.005, 0.0};
+  auto top = std::make_shared<CSketchLine>();
+  top->localID = "E_TOP";
+  top->startPos = CPoint3D{0.005, 0.005, 0.0};
+  top->endPos = CPoint3D{-0.005, 0.005, 0.0};
+  auto left = std::make_shared<CSketchLine>();
+  left->localID = "E_LEFT";
+  left->startPos = CPoint3D{-0.005, 0.005, 0.0};
+  left->endPos = CPoint3D{-0.005, -0.005, 0.0};
+  section.segments = {bottom, right, top, left};
+
+  auto pathSketch = MakeSketch("SK-EMBEDDED-SWEEP-PATH", "EmbeddedSweepPath");
+  auto pathLine = std::make_shared<CSketchLine>();
+  pathLine->localID = "L_PATH";
+  pathLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  pathLine->endPos = CPoint3D{0.0, 0.0, 0.1};
+  pathSketch->segments.push_back(pathLine);
+  model.AddFeature(pathSketch);
+
+  const std::string sweepId =
+      SweepBuilder(model, "EmbeddedSweep")
+          .SetEmbeddedProfile(section)
+          .SetSectionPlacement(SweepSectionPlacement::PathNormalAtStart)
+          .AddPathReference(
+              Ref::SketchSegment("SK-EMBEDDED-SWEEP-PATH", "L_PATH", 0))
+          .Build();
+
+  SweepAccessor sweep(model.GetFeature(sweepId));
+  Expect(sweep.GetProfileKind() == SweepProfileKind::EmbeddedSketch,
+         "Embedded sweep should expose embedded sketch profile kind.");
+  Expect(sweep.HasEmbeddedProfile(),
+         "Embedded sweep should expose embedded profile sketch.");
+  Expect(sweep.GetEmbeddedProfileSegmentCount() == 4,
+         "Embedded sweep should preserve section sketch segments.");
+  Expect(sweep.GetProfileSketchID().empty(),
+         "Embedded sweep should not require external profileSketchID.");
+  Expect(model.Validate().isValid,
+         "Embedded sketch sweep without profileSketchID should validate.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_embedded.xml");
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving embedded sweep XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("<Profile Kind=\"EmbeddedSketch\"") != std::string::npos,
+         "Embedded sweep XML should serialize profile kind.");
+  Expect(xml.find("LocalID=\"E_BOTTOM\"") != std::string::npos,
+         "Embedded sweep XML should serialize embedded section segments.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading embedded sweep XML should succeed: " + errorMessage);
+  SweepAccessor loadedSweep(loaded.GetFeature(sweepId));
+  Expect(loadedSweep.GetProfileKind() == SweepProfileKind::EmbeddedSketch,
+         "Loaded embedded sweep should preserve profile kind.");
+  Expect(loadedSweep.GetEmbeddedProfileSegmentCount() == 4,
+         "Loaded embedded sweep should preserve section sketch segments.");
+}
+
 } // namespace
 
 int main() {
@@ -244,6 +510,9 @@ int main() {
   TestRevolveAccessorExposesSharedExtentFields();
   TestLegacyRevolveXmlRejected();
   TestRevolveSketchAxisSerializesReferenceEntity();
+  TestSweepBuilderAccessorAndXmlRoundTrip();
+  TestSweepCircularProfileWithoutSketchRoundTrip();
+  TestSweepEmbeddedSketchProfileRoundTrip();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

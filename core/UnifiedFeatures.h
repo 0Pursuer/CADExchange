@@ -22,7 +22,14 @@ enum class BooleanOp { BOSS, CUT, MERGE };
 /**
  * @brief 特征类型枚举
  */
-enum class FeatureType { Unknown, Extrude, Revolve, Sketch, DatumPlane };
+enum class FeatureType {
+  Unknown,
+  Extrude,
+  Revolve,
+  Sweep,
+  Sketch,
+  DatumPlane
+};
 
 /**
  * @brief 所有特征的基类。
@@ -344,6 +351,69 @@ struct CRevolve : public CProfiledFeatureBase {
   std::optional<SweepExtent> extent2; ///< Revolve 第二方向角度值统一使用弧度
 
   CRevolve() { featureType = FeatureType::Revolve; }
+};
+
+/**
+ * @brief 扫掠路径引用链。
+ *
+ * 路径不限定为草图：可以引用草图、草图段、实体边等可解析为曲线链的实体。
+ * references 的顺序表达链顺序；起止点用于消除跨 CAD 选择方向差异。
+ */
+struct CSweepPath {
+  std::vector<std::shared_ptr<CRefEntityBase>> references;
+  std::optional<CPoint3D> startPoint;
+  std::optional<CPoint3D> endPoint;
+  bool isClosed = false;
+};
+
+/**
+ * @brief 扫掠截面相对路径的方向控制。
+ */
+enum class SweepPathOrientation {
+  FollowPath,        ///< 使用各 CAD 默认随路径更新截面方向的实体扫掠行为
+  KeepProfileNormal, ///< 尽量保持截面法向，不承诺三系统高级选项完全等价
+};
+
+enum class SweepProfileKind {
+  SketchReference, ///< 引用模型中特征树上的独立草图
+  EmbeddedSketch,  ///< 扫掠特征内部截面草绘，坐标解释依赖 sectionPlacement
+  Circular         ///< 参数圆/管截面，不需要独立草图引用
+};
+
+struct CSweepCircularProfile {
+  double outerRadius = 0.0;
+  double innerRadius = 0.0;
+};
+
+struct CSweepEmbeddedProfile {
+  CSketch sketch;
+};
+
+struct CSweepProfile {
+  SweepProfileKind kind = SweepProfileKind::SketchReference;
+  std::string sketchID;
+  std::optional<CSweepEmbeddedProfile> embedded;
+  std::optional<CSweepCircularProfile> circular;
+};
+
+enum class SweepSectionPlacement {
+  ExistingProfilePlane, ///< 截面来自已有草图平面，可能不垂直路径起点切线
+  PathNormalAtStart     ///< 截面位于路径起点法平面，适配 Creo/UG 变化扫掠/管道
+};
+
+/**
+ * @brief 扫掠特征。
+ */
+struct CSweep : public CProfiledFeatureBase {
+  CSweepProfile profile;
+  CSweepPath path;
+  std::vector<CSweepPath> guidePaths;
+  SweepPathOrientation orientation = SweepPathOrientation::FollowPath;
+  SweepSectionPlacement sectionPlacement =
+      SweepSectionPlacement::ExistingProfilePlane;
+  std::optional<double> profilePathAngleCos;
+
+  CSweep() { featureType = FeatureType::Sweep; }
 };
 
 enum class PlaneMethod {

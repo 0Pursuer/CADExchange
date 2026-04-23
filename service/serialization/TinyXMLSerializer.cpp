@@ -207,6 +207,85 @@ SweepExtentTypeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string SweepPathOrientationToString(SweepPathOrientation orientation) {
+  switch (orientation) {
+  case SweepPathOrientation::FollowPath:
+    return "FollowPath";
+  case SweepPathOrientation::KeepProfileNormal:
+    return "KeepProfileNormal";
+  }
+  return "FollowPath";
+}
+
+std::optional<SweepPathOrientation>
+SweepPathOrientationFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  std::string value = ToLower(text);
+  if (value == "followpath") {
+    return SweepPathOrientation::FollowPath;
+  }
+  if (value == "keepprofilenormal") {
+    return SweepPathOrientation::KeepProfileNormal;
+  }
+  return std::nullopt;
+}
+
+std::string SweepProfileKindToString(SweepProfileKind kind) {
+  switch (kind) {
+  case SweepProfileKind::SketchReference:
+    return "SketchReference";
+  case SweepProfileKind::EmbeddedSketch:
+    return "EmbeddedSketch";
+  case SweepProfileKind::Circular:
+    return "Circular";
+  }
+  return "SketchReference";
+}
+
+std::optional<SweepProfileKind> SweepProfileKindFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  std::string value = ToLower(text);
+  if (value == "sketchreference" || value == "sketch") {
+    return SweepProfileKind::SketchReference;
+  }
+  if (value == "embeddedsketch" || value == "embedded") {
+    return SweepProfileKind::EmbeddedSketch;
+  }
+  if (value == "circular") {
+    return SweepProfileKind::Circular;
+  }
+  return std::nullopt;
+}
+
+std::string SweepSectionPlacementToString(SweepSectionPlacement placement) {
+  switch (placement) {
+  case SweepSectionPlacement::ExistingProfilePlane:
+    return "ExistingProfilePlane";
+  case SweepSectionPlacement::PathNormalAtStart:
+    return "PathNormalAtStart";
+  }
+  return "ExistingProfilePlane";
+}
+
+std::optional<SweepSectionPlacement>
+SweepSectionPlacementFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  std::string value = ToLower(text);
+  if (value == "existingprofileplane" || value == "existing") {
+    return SweepSectionPlacement::ExistingProfilePlane;
+  }
+  if (value == "pathnormalatstart" || value == "pathnormal") {
+    return SweepSectionPlacement::PathNormalAtStart;
+  }
+  return std::nullopt;
+}
+
 std::string PlaneMethodToString(PlaneMethod method) {
   switch (method) {
   case PlaneMethod::OFFSET:
@@ -693,6 +772,10 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "Revolve");
       SaveRevolve(doc, featElem, std::static_pointer_cast<CRevolve>(feature));
       break;
+    case FeatureType::Sweep:
+      featElem->SetAttribute("Type", "Sweep");
+      SaveSweep(doc, featElem, std::static_pointer_cast<CSweep>(feature));
+      break;
     case FeatureType::DatumPlane:
       featElem->SetAttribute("Type", "DatumPlane");
       SaveDatumPlane(doc, featElem,
@@ -852,7 +935,14 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
 
   XMLElement *axisElem = doc.NewElement("Axis");
   element->InsertEndChild(axisElem);
-  axisElem->SetAttribute("RefLocalID", revolve->axis.referenceLocalID.c_str());
+  std::string axisLocalID = revolve->axis.referenceLocalID;
+  if (axisLocalID.empty()) {
+    if (auto sketchSeg =
+            std::dynamic_pointer_cast<CRefSketchSeg>(revolve->axis.referenceEntity)) {
+      axisLocalID = sketchSeg->segmentLocalID;
+    }
+  }
+  axisElem->SetAttribute("RefLocalID", axisLocalID.c_str());
   SavePoint3D(axisElem, "Origin", revolve->axis.origin);
   SaveVector3D(axisElem, "Direction", revolve->axis.direction);
   std::shared_ptr<CRefEntityBase> axis_ref = revolve->axis.referenceEntity;
@@ -874,6 +964,102 @@ void TinyXMLSerializer::SaveRevolve(XMLDocument &doc, XMLElement *element,
     twElem->SetAttribute("Covered",   revolve->thinWall->isCovered);
     twElem->SetAttribute("StartOffset", revolve->thinWall->startOffset);
     twElem->SetAttribute("EndOffset", revolve->thinWall->endOffset);
+    element->InsertEndChild(twElem);
+  }
+}
+
+void TinyXMLSerializer::SaveSweep(XMLDocument &doc, XMLElement *element,
+                                  const std::shared_ptr<CSweep> &sweep) {
+  if (!sweep->profileSketchID.empty()) {
+    element->SetAttribute("ProfileSketchID", sweep->profileSketchID.c_str());
+  }
+  element->SetAttribute("Operation",
+                        BooleanOpToString(sweep->operation).c_str());
+  element->SetAttribute(
+      "Orientation", SweepPathOrientationToString(sweep->orientation).c_str());
+  element->SetAttribute(
+      "SectionPlacement",
+      SweepSectionPlacementToString(sweep->sectionPlacement).c_str());
+  if (sweep->profilePathAngleCos) {
+    element->SetAttribute("ProfilePathAngleCos", *sweep->profilePathAngleCos);
+  }
+
+  XMLElement *profileElem = doc.NewElement("Profile");
+  profileElem->SetAttribute("Kind",
+                            SweepProfileKindToString(sweep->profile.kind).c_str());
+  switch (sweep->profile.kind) {
+  case SweepProfileKind::SketchReference:
+    profileElem->SetAttribute("SketchID",
+                              (!sweep->profile.sketchID.empty()
+                                   ? sweep->profile.sketchID
+                                   : sweep->profileSketchID)
+                                  .c_str());
+    break;
+  case SweepProfileKind::EmbeddedSketch:
+    if (sweep->profile.embedded) {
+      XMLElement *sketchElem = doc.NewElement("EmbeddedSketch");
+      auto sketchCopy =
+          std::make_shared<CSketch>(sweep->profile.embedded->sketch);
+      SaveSketch(doc, sketchElem, sketchCopy);
+      profileElem->InsertEndChild(sketchElem);
+    }
+    break;
+  case SweepProfileKind::Circular:
+    if (sweep->profile.circular) {
+      profileElem->SetAttribute("OuterRadius",
+                                sweep->profile.circular->outerRadius);
+      profileElem->SetAttribute("InnerRadius",
+                                sweep->profile.circular->innerRadius);
+    }
+    break;
+  }
+  element->InsertEndChild(profileElem);
+
+  XMLElement *pathElem = doc.NewElement("Path");
+  pathElem->SetAttribute("Closed", sweep->path.isClosed);
+  element->InsertEndChild(pathElem);
+  if (sweep->path.startPoint) {
+    XMLElement *pointElem = doc.NewElement("StartPoint");
+    SavePoint3D(pointElem, "Value", *sweep->path.startPoint);
+    pathElem->InsertEndChild(pointElem);
+  }
+  if (sweep->path.endPoint) {
+    XMLElement *pointElem = doc.NewElement("EndPoint");
+    SavePoint3D(pointElem, "Value", *sweep->path.endPoint);
+    pathElem->InsertEndChild(pointElem);
+  }
+  for (const auto &ref : sweep->path.references) {
+    SaveRefEntity(doc, pathElem, "ReferenceEntity", ref);
+  }
+
+  if (!sweep->guidePaths.empty()) {
+    XMLElement *guidesElem = doc.NewElement("GuidePaths");
+    element->InsertEndChild(guidesElem);
+    for (const auto &guidePath : sweep->guidePaths) {
+      XMLElement *guideElem = doc.NewElement("GuidePath");
+      guideElem->SetAttribute("Closed", guidePath.isClosed);
+      guidesElem->InsertEndChild(guideElem);
+      if (guidePath.startPoint) {
+        XMLElement *pointElem = doc.NewElement("StartPoint");
+        SavePoint3D(pointElem, "Value", *guidePath.startPoint);
+        guideElem->InsertEndChild(pointElem);
+      }
+      if (guidePath.endPoint) {
+        XMLElement *pointElem = doc.NewElement("EndPoint");
+        SavePoint3D(pointElem, "Value", *guidePath.endPoint);
+        guideElem->InsertEndChild(pointElem);
+      }
+      for (const auto &ref : guidePath.references) {
+        SaveRefEntity(doc, guideElem, "ReferenceEntity", ref);
+      }
+    }
+  }
+
+  if (sweep->thinWall.has_value()) {
+    XMLElement *twElem = doc.NewElement("ThinWall");
+    twElem->SetAttribute("Covered", sweep->thinWall->isCovered);
+    twElem->SetAttribute("StartOffset", sweep->thinWall->startOffset);
+    twElem->SetAttribute("EndOffset", sweep->thinWall->endOffset);
     element->InsertEndChild(twElem);
   }
 }
@@ -1041,6 +1227,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto revolve = std::make_shared<CRevolve>();
     LoadRevolve(element, revolve);
     feature = revolve;
+  } else if (type == "Sweep") {
+    auto sweep = std::make_shared<CSweep>();
+    LoadSweep(element, sweep);
+    feature = sweep;
   } else if (type == "DatumPlane") {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
@@ -1299,6 +1489,119 @@ void TinyXMLSerializer::LoadRevolve(XMLElement *element,
     } else {
       std::cerr << "[TinyXMLSerializer][WARN] Revolve '" << revolve->featureID
                 << "' ThinWall.StartOffset/EndOffset are both zero or missing — skipping.\n";
+    }
+  }
+}
+
+void TinyXMLSerializer::LoadSweep(XMLElement *element,
+                                  std::shared_ptr<CSweep> &sweep) {
+  if (const char *v = element->Attribute("ProfileSketchID")) {
+    sweep->profileSketchID = v;
+    sweep->profile.kind = SweepProfileKind::SketchReference;
+    sweep->profile.sketchID = v;
+  }
+
+  if (auto opOpt = BooleanOpFromString(element->Attribute("Operation"))) {
+    sweep->operation = *opOpt;
+  }
+  if (auto orientation =
+          SweepPathOrientationFromString(element->Attribute("Orientation"))) {
+    sweep->orientation = *orientation;
+  }
+  if (auto placement =
+          SweepSectionPlacementFromString(element->Attribute("SectionPlacement"))) {
+    sweep->sectionPlacement = *placement;
+  }
+  double angleCos = 0.0;
+  if (element->QueryDoubleAttribute("ProfilePathAngleCos", &angleCos) ==
+      XML_SUCCESS) {
+    sweep->profilePathAngleCos = angleCos;
+  }
+
+  if (auto *profileElem = element->FirstChildElement("Profile")) {
+    if (auto kind = SweepProfileKindFromString(profileElem->Attribute("Kind"))) {
+      sweep->profile.kind = *kind;
+    }
+    switch (sweep->profile.kind) {
+    case SweepProfileKind::SketchReference:
+      if (const char *id = profileElem->Attribute("SketchID")) {
+        sweep->profile.sketchID = id;
+        sweep->profileSketchID = id;
+      }
+      break;
+    case SweepProfileKind::EmbeddedSketch:
+      if (auto *sketchElem = profileElem->FirstChildElement("EmbeddedSketch")) {
+        auto embeddedSketch = std::make_shared<CSketch>();
+        LoadSketch(sketchElem, embeddedSketch);
+        CSweepEmbeddedProfile embedded;
+        embedded.sketch = *embeddedSketch;
+        sweep->profile.embedded = embedded;
+      }
+      break;
+    case SweepProfileKind::Circular: {
+      CSweepCircularProfile circular;
+      profileElem->QueryDoubleAttribute("OuterRadius", &circular.outerRadius);
+      profileElem->QueryDoubleAttribute("InnerRadius", &circular.innerRadius);
+      sweep->profile.circular = circular;
+      break;
+    }
+    }
+  }
+
+  if (auto *pathElem = element->FirstChildElement("Path")) {
+    bool closed = false;
+    pathElem->QueryBoolAttribute("Closed", &closed);
+    sweep->path.isClosed = closed;
+
+    if (auto *startElem = pathElem->FirstChildElement("StartPoint")) {
+      sweep->path.startPoint = LoadPoint3D(startElem, "Value");
+    }
+    if (auto *endElem = pathElem->FirstChildElement("EndPoint")) {
+      sweep->path.endPoint = LoadPoint3D(endElem, "Value");
+    }
+
+    for (auto *refElem = pathElem->FirstChildElement("ReferenceEntity");
+         refElem != nullptr;
+         refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+      sweep->path.references.push_back(LoadRefEntity(refElem));
+    }
+  }
+
+  if (auto *guidesElem = element->FirstChildElement("GuidePaths")) {
+    for (auto *guideElem = guidesElem->FirstChildElement("GuidePath");
+         guideElem != nullptr;
+         guideElem = guideElem->NextSiblingElement("GuidePath")) {
+      CSweepPath guidePath;
+      bool closed = false;
+      guideElem->QueryBoolAttribute("Closed", &closed);
+      guidePath.isClosed = closed;
+      if (auto *startElem = guideElem->FirstChildElement("StartPoint")) {
+        guidePath.startPoint = LoadPoint3D(startElem, "Value");
+      }
+      if (auto *endElem = guideElem->FirstChildElement("EndPoint")) {
+        guidePath.endPoint = LoadPoint3D(endElem, "Value");
+      }
+      for (auto *refElem = guideElem->FirstChildElement("ReferenceEntity");
+           refElem != nullptr;
+           refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+        guidePath.references.push_back(LoadRefEntity(refElem));
+      }
+      sweep->guidePaths.push_back(std::move(guidePath));
+    }
+  }
+
+  XMLElement *twElem = element->FirstChildElement("ThinWall");
+  if (twElem) {
+    ThinWallOption tw;
+    twElem->QueryBoolAttribute("Covered", &tw.isCovered);
+    twElem->QueryDoubleAttribute("StartOffset", &tw.startOffset);
+    twElem->QueryDoubleAttribute("EndOffset", &tw.endOffset);
+    if (std::fabs(tw.startOffset) > 1e-9 ||
+        std::fabs(tw.endOffset) > 1e-9) {
+      sweep->thinWall = tw;
+    } else {
+      std::cerr << "[TinyXMLSerializer][WARN] Sweep '" << sweep->featureID
+                << "' ThinWall.StartOffset/EndOffset are both zero or missing -- skipping.\n";
     }
   }
 }

@@ -6,6 +6,7 @@
 #include "SketchAccessor.h"
 #include "ExtrudeAccessor.h"
 #include "RevolveAccessor.h"
+#include "SweepAccessor.h"
 #include "DatumPlaneAccessor.h"
 #include "ModelAccessor.h"
 

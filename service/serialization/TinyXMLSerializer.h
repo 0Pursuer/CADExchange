@@ -91,6 +91,13 @@ private:
                           const std::shared_ptr<CRevolve> &revolve);
 
   /**
+   * @brief Serialize a `CSweep` feature.
+   */
+  static void SaveSweep(tinyxml2::XMLDocument &doc,
+                        tinyxml2::XMLElement *element,
+                        const std::shared_ptr<CSweep> &sweep);
+
+  /**
    * @brief 将 `CDatumPlane` 类型的特征序列化到给定的元素下。
    */
   static void SaveDatumPlane(tinyxml2::XMLDocument &doc,
@@ -168,6 +175,12 @@ private:
    */
   static void LoadRevolve(tinyxml2::XMLElement *element,
                           std::shared_ptr<CRevolve> &revolve);
+
+  /**
+   * @brief Restore a `CSweep` feature from XML.
+   */
+  static void LoadSweep(tinyxml2::XMLElement *element,
+                        std::shared_ptr<CSweep> &sweep);
 
   /**
    * @brief 从 XML 元素恢复 `CDatumPlane`。
