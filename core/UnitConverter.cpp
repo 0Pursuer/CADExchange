@@ -220,6 +220,21 @@ void ScaleSweep(CSweep &sweep, double factor, UnitScaleContext &ctx) {
   }
 }
 
+void ScaleChamfer(CChamfer &chamfer, double factor, UnitScaleContext &ctx) {
+  if (chamfer.params.distance1.has_value()) {
+    *chamfer.params.distance1 *= factor;
+  }
+  if (chamfer.params.distance2.has_value()) {
+    *chamfer.params.distance2 *= factor;
+  }
+  if (chamfer.params.distance3.has_value()) {
+    *chamfer.params.distance3 *= factor;
+  }
+  for (auto &ref : chamfer.references) {
+    ScaleRefEntity(ref, factor, ctx);
+  }
+}
+
 void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &ctx) {
   for (auto &ref : datumPlane.referenceEntities) {
     ScaleRefEntity(ref, factor, ctx);
@@ -281,6 +296,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Sweep:
         ScaleSweep(*std::static_pointer_cast<CSweep>(feature), factor, ctx);
+        break;
+      case FeatureType::Chamfer:
+        ScaleChamfer(*std::static_pointer_cast<CChamfer>(feature), factor, ctx);
         break;
       case FeatureType::DatumPlane:
         ScaleDatumPlane(*std::static_pointer_cast<CDatumPlane>(feature), factor, ctx);

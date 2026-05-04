@@ -1,6 +1,6 @@
-# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / Revolve / Sweep / DatumPlane）
+# CADExchange Feature Builder / Accessor 详细使用参考（Sketch / Extrude / Revolve / Sweep / Chamfer / DatumPlane）
 
-更新时间：2026-03-29
+更新时间：2026-05-04
 
 > 注：自 `2026-03-29` 起，`Extrude / Revolve` 已统一到共享的 `SweepExtent` 结构。
 > 旧的 `Revolve.AngleKind/PrimaryAngle/SecondaryAngle` 已被 `extent1/extent2` 取代，旧 XML 也不再兼容这些字段。
@@ -1157,3 +1157,141 @@ std::string fromCreoAng =
    4. Sweep: profileSketchID、path/guide reference count、reference type/localID、orientation、thinWall。
    5. DatumPlane: method、referenceCount、constraint(type/ref/value/reversed)。
 3. 对桥接模块执行你现有的 round-trip 五步校验链路。
+
+---
+
+## 12. ChamferBuilder / ChamferAccessor 详细用法
+
+### 12.1 Builder 主接口
+
+`ChamferBuilder` 第一版统一为最小结构，只保留：
+
+1. `SetMode(ChamferMode)`
+2. `SetDistance1(value)`
+3. `SetDistance2(value)`
+4. `SetDistance3(value)`
+5. `SetAngle(value)`
+6. `AddReference(Ref::...)`
+7. `SetReferences(...)`
+8. `ClearReferences()`
+9. `Build()`
+
+当前 `ChamferMode` 仅包含：
+
+1. `EQUAL_DISTANCE`
+2. `TWO_DISTANCES`
+3. `DISTANCE_ANGLE`
+4. `VERTEX_3DISTANCES`
+
+说明：
+
+1. 第一版不引入 `family / shape_or_method / reversed / tangentPropagation` 等扩展字段。
+2. Creo 原生 schema 在 Unified 层统一压缩到上述 mode。
+3. `references` 直接复用 `CRefEntityBase`，因此边倒角、顶点倒角都走同一套引用体系。
+
+### 12.2 典型写法：边倒角
+
+```cpp
+using namespace CADExchange;
+using namespace CADExchange::Builder;
+
+std::string chamferID =
+  Builder::ChamferBuilder(model, "Chamfer_Edge")
+    .SetMode(ChamferMode::DISTANCE_ANGLE)
+    .SetDistance1(0.003)
+    .SetAngle(45.0)
+    .AddReference(
+      Builder::Ref::Edge("Boss_Extrude", 0)
+        .StartPoint(CPoint3D{0.0, 0.0, 0.02})
+        .EndPoint(CPoint3D{0.05, 0.0, 0.02})
+        .MidPoint(CPoint3D{0.025, 0.0, 0.02}))
+    .Build();
+```
+
+### 12.3 典型写法：双距离倒角
+
+```cpp
+std::string chamferID =
+  Builder::ChamferBuilder(model, "Chamfer_TwoDistances")
+    .SetMode(ChamferMode::TWO_DISTANCES)
+    .SetDistance1(0.002)
+    .SetDistance2(0.004)
+    .AddReference(
+      Builder::Ref::Edge("Boss_Extrude", 1)
+        .StartPoint(CPoint3D{0.05, 0.0, 0.02})
+        .EndPoint(CPoint3D{0.05, 0.05, 0.02})
+        .MidPoint(CPoint3D{0.05, 0.025, 0.02}))
+    .Build();
+```
+
+### 12.4 典型写法：顶点三距离倒角
+
+```cpp
+std::string chamferID =
+  Builder::ChamferBuilder(model, "Chamfer_Vertex")
+    .SetMode(ChamferMode::VERTEX_3DISTANCES)
+    .SetDistance1(0.001)
+    .SetDistance2(0.002)
+    .SetDistance3(0.003)
+    .AddReference(
+      Builder::Ref::Vertex("Boss_Extrude", 0)
+        .Pos(CPoint3D{0.0, 0.0, 0.02}))
+    .Build();
+```
+
+### 12.5 ChamferAccessor 读取参考
+
+`ChamferAccessor` 主要方法：
+
+1. `GetMode()`
+2. `HasDistance1()` / `GetDistance1()`
+3. `HasDistance2()` / `GetDistance2()`
+4. `HasDistance3()` / `GetDistance3()`
+5. `HasAngle()` / `GetAngle()`
+6. `GetReferenceCount()` / `GetReference(i)` / `GetReferences()`
+
+```cpp
+using namespace CADExchange::Accessor;
+
+if (auto feat = ma.GetFeatureByID(chamferID)) {
+  auto chamferOpt = feat->As<Accessor::ChamferAccessor>();
+  if (chamferOpt.has_value()) {
+    auto chamfer = *chamferOpt;
+
+    ChamferMode mode = chamfer.GetMode();
+    double d1 = chamfer.GetDistance1();
+    double angle = chamfer.GetAngle();
+    int refCount = chamfer.GetReferenceCount();
+    auto ref0 = chamfer.GetReference(0);
+
+    (void)mode;
+    (void)d1;
+    (void)angle;
+    (void)refCount;
+    (void)ref0;
+  }
+}
+```
+
+### 12.6 Creo schema 到 Unified mode 的落地规则
+
+在 `CADExchange` 侧当前统一按以下规则压缩：
+
+1. `PRO_CHM_45_X_D -> DISTANCE_ANGLE`，并令 `angle = 45deg`
+2. `PRO_CHM_D_X_D / PRO_CHM_D1_X_D2 -> TWO_DISTANCES`
+3. `PRO_CHM_ANG_X_D -> DISTANCE_ANGLE`
+4. `PRO_CHM_O_X_O / PRO_CHM_O1_X_O2 -> TWO_DISTANCES`
+
+### 12.7 当前链路覆盖范围
+
+截至 `2026-05-04`，`CADExchange` 侧已接入：
+
+1. `UnifiedFeatures.h` 数据结构
+2. `ChamferBuilder`
+3. `ChamferAccessor`
+4. `TinyXMLSerializer` 读写
+5. `UnifiedSerialization` / `SerializationRegistry`
+6. `ModelValidator`
+7. `ConvertModelUnit`
+8. `RecommendedApproach` 示例
+9. `MigrationRegressionTest` 回归测试

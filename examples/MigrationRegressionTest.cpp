@@ -2,11 +2,14 @@
 #include "../service/accessors/RevolveAccessor.h"
 #include "../service/accessors/SketchAccessor.h"
 #include "../service/accessors/SweepAccessor.h"
+#include "../service/accessors/ChamferAccessor.h"
 #include "../service/builders/EndConditionBuilder.h"
+#include "../service/builders/ExtrudeBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
 #include "../service/builders/SketchBuilder.h"
 #include "../service/builders/SweepBuilder.h"
+#include "../service/builders/ChamferBuilder.h"
 #include "../service/serialization/CADSerializer.h"
 #include <cmath>
 #include <filesystem>
@@ -54,9 +57,30 @@ std::shared_ptr<CSketch> MakeSketch(const std::string &id,
   return sketch;
 }
 
+void AddSimpleProfileSegment(const std::shared_ptr<CSketch> &sketch,
+                             const std::string &localID = "L_PROFILE") {
+  auto line = std::make_shared<CSketchLine>();
+  line->localID = localID;
+  line->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line->endPos = CPoint3D{1.0, 0.0, 0.0};
+  sketch->segments.push_back(line);
+}
+
+std::string MakeExtrudeFromSketch(UnifiedModel &model,
+                                  const std::string &sketchID,
+                                  const std::string &name) {
+  return ExtrudeBuilder(model, name)
+      .SetProfile(sketchID)
+      .SetDirection(CVector3D{0.0, 0.0, 1.0})
+      .SetEndCondition1(EndCondition::Blind(0.02))
+      .Build();
+}
+
 void TestRevolveBuilderIgnoresUnknownExtent() {
   UnifiedModel model(UnitType::METER, "builder-red-green");
-  model.AddFeature(MakeSketch("SK-1", "Sketch1"));
+  auto sketch = MakeSketch("SK-1", "Sketch1");
+  AddSimpleProfileSegment(sketch);
+  model.AddFeature(sketch);
 
   SweepExtent invalid;
   invalid.type = SweepExtent::Type::UNKNOWN;
@@ -80,7 +104,7 @@ void TestRevolveBuilderIgnoresUnknownExtent() {
          "UNKNOWN extent2 must be ignored rather than stored.");
 
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_revolve_radians.xml");
+      std::filesystem::path("tmp") / "cadexchange_revolve_radians.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
@@ -95,7 +119,9 @@ void TestRevolveBuilderIgnoresUnknownExtent() {
 
 void TestRevolveAccessorExposesSharedExtentFields() {
   UnifiedModel model(UnitType::METER, "accessor-shared-extent");
-  model.AddFeature(MakeSketch("SK-2", "Sketch2"));
+  auto sketch = MakeSketch("SK-2", "Sketch2");
+  AddSimpleProfileSegment(sketch);
+  model.AddFeature(sketch);
 
   auto planeRef =
       RefPlaneBuilder(StandardID::PLANE_XY)
@@ -143,7 +169,7 @@ void TestRevolveAccessorExposesSharedExtentFields() {
 
 void TestLegacyRevolveXmlRejected() {
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_legacy_revolve_rejected.xml");
+      std::filesystem::path("tmp") / "cadexchange_legacy_revolve_rejected.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
 
   const char *xml = R"LEGACYXML(<?xml version="1.0" encoding="UTF-8"?>
@@ -202,7 +228,7 @@ void TestRevolveSketchAxisSerializesReferenceEntity() {
           .Build();
 
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_revolve_sketch_axis_ref.xml");
+      std::filesystem::path("tmp") / "cadexchange_revolve_sketch_axis_ref.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
@@ -316,7 +342,7 @@ void TestSweepBuilderAccessorAndXmlRoundTrip() {
   Expect(report.isValid, "Sweep model validation should pass.");
 
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_roundtrip.xml");
+      std::filesystem::path("tmp") / "cadexchange_sweep_roundtrip.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
@@ -396,7 +422,7 @@ void TestSweepCircularProfileWithoutSketchRoundTrip() {
          "Circular sweep without profileSketchID should validate.");
 
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_circular.xml");
+      std::filesystem::path("tmp") / "cadexchange_sweep_circular.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
@@ -480,7 +506,7 @@ void TestSweepEmbeddedSketchProfileRoundTrip() {
          "Embedded sketch sweep without profileSketchID should validate.");
 
   const std::filesystem::path xmlPath =
-      std::filesystem::path("E:/MyProject/tmp/cadexchange_sweep_embedded.xml");
+      std::filesystem::path("tmp") / "cadexchange_sweep_embedded.xml";
   std::filesystem::create_directories(xmlPath.parent_path());
   std::string errorMessage;
   Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
@@ -697,6 +723,146 @@ void TestConvertModelUnitScalesSketchConstraintExternalReferences() {
          "External plane reference origin should scale with model units.");
 }
 
+void TestChamferBuilderAccessorAndXmlRoundTrip() {
+  UnifiedModel model(UnitType::METER, "chamfer-builder-accessor-xml");
+  auto sketch = MakeSketch("SK-CHAMFER", "ChamferSketch");
+  auto line1 = std::make_shared<CSketchLine>();
+  line1->localID = "L_1";
+  line1->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line1->endPos = CPoint3D{0.05, 0.0, 0.0};
+  sketch->segments.push_back(line1);
+  auto line2 = std::make_shared<CSketchLine>();
+  line2->localID = "L_2";
+  line2->startPos = CPoint3D{0.05, 0.0, 0.0};
+  line2->endPos = CPoint3D{0.05, 0.05, 0.0};
+  sketch->segments.push_back(line2);
+  model.AddFeature(sketch);
+
+  const std::string extrudeID =
+      MakeExtrudeFromSketch(model, "SK-CHAMFER", "ChamferBoss");
+
+  const std::string chamferID =
+      ChamferBuilder(model, "EdgeChamfer")
+          .SetMode(ChamferMode::DISTANCE_ANGLE)
+          .SetDistance1(0.003)
+          .SetAngle(45.0)
+          .AddReference(Ref::Edge(extrudeID, 0)
+                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
+                            .EndPoint(CPoint3D{0.05, 0.0, 0.02})
+                            .MidPoint(CPoint3D{0.025, 0.0, 0.02}))
+          .Build();
+
+  ChamferAccessor chamfer(model.GetFeature(chamferID));
+  Expect(chamfer.IsValid(), "ChamferAccessor should be valid.");
+  Expect(chamfer.GetMode() == ChamferMode::DISTANCE_ANGLE,
+         "Chamfer mode should be readable.");
+  Expect(chamfer.HasDistance1() && std::abs(chamfer.GetDistance1() - 0.003) < 1e-12,
+         "Chamfer distance1 should be readable.");
+  Expect(chamfer.HasAngle() && std::abs(chamfer.GetAngle() - 45.0) < 1e-12,
+         "Chamfer angle should be readable.");
+  Expect(chamfer.GetReferenceCount() == 1,
+         "Chamfer should preserve one reference.");
+  Expect(chamfer.GetReference(0).GetRefType() == RefType::TOPO_EDGE,
+         "Chamfer reference type should remain edge.");
+
+  auto report = model.Validate();
+  Expect(report.isValid, "Chamfer model validation should pass.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("tmp") / "cadexchange_chamfer_roundtrip.xml";
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving chamfer XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("Type=\"Chamfer\"") != std::string::npos,
+         "Chamfer XML should use Feature Type=\"Chamfer\".");
+  Expect(xml.find("Mode=\"DistanceAngle\"") != std::string::npos,
+         "Chamfer XML should serialize mode.");
+  Expect(xml.find("Angle=\"45\"") != std::string::npos,
+         "Chamfer XML should serialize angle.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading chamfer XML should succeed: " + errorMessage);
+  ChamferAccessor loadedChamfer(loaded.GetFeature(chamferID));
+  Expect(loadedChamfer.IsValid(), "Loaded chamfer should be accessible.");
+  Expect(loadedChamfer.GetMode() == ChamferMode::DISTANCE_ANGLE,
+         "Loaded chamfer should preserve mode.");
+  Expect(std::abs(loadedChamfer.GetDistance1() - 0.003) < 1e-12,
+         "Loaded chamfer should preserve distance1.");
+  Expect(std::abs(loadedChamfer.GetAngle() - 45.0) < 1e-12,
+         "Loaded chamfer should preserve angle.");
+  Expect(loadedChamfer.GetReferenceCount() == 1,
+         "Loaded chamfer should preserve reference count.");
+}
+
+void TestChamferValidationAndUnitConversion() {
+  UnifiedModel validModel(UnitType::METER, "chamfer-unit-convert");
+  auto sketch = MakeSketch("SK-CHAMFER-UNIT", "ChamferSketchUnit");
+  auto line = std::make_shared<CSketchLine>();
+  line->localID = "L_1";
+  line->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line->endPos = CPoint3D{0.04, 0.0, 0.0};
+  sketch->segments.push_back(line);
+  validModel.AddFeature(sketch);
+
+  const std::string extrudeID =
+      MakeExtrudeFromSketch(validModel, "SK-CHAMFER-UNIT", "ChamferBossUnit");
+
+  const std::string chamferID =
+      ChamferBuilder(validModel, "VertexChamfer")
+          .SetMode(ChamferMode::VERTEX_3DISTANCES)
+          .SetDistance1(0.001)
+          .SetDistance2(0.002)
+          .SetDistance3(0.003)
+          .AddReference(Ref::Vertex(extrudeID, 0).Pos(CPoint3D{0.0, 0.0, 0.02}))
+          .Build();
+
+  std::string errorMessage;
+  Expect(ConvertModelUnit(validModel, UnitType::MILLIMETER, &errorMessage),
+         "ConvertModelUnit should scale chamfer distances: " + errorMessage);
+
+  ChamferAccessor converted(validModel.GetFeature(chamferID));
+  Expect(std::abs(converted.GetDistance1() - 1.0) < 1e-9,
+         "Chamfer distance1 should scale to millimeters.");
+  Expect(std::abs(converted.GetDistance2() - 2.0) < 1e-9,
+         "Chamfer distance2 should scale to millimeters.");
+  Expect(std::abs(converted.GetDistance3() - 3.0) < 1e-9,
+         "Chamfer distance3 should scale to millimeters.");
+
+  UnifiedModel invalid(UnitType::METER, "chamfer-invalid");
+  invalid.AddFeature(MakeSketch("SK-CHAMFER-BAD", "ChamferBadSketch"));
+  auto badChamfer = std::make_shared<CChamfer>();
+  badChamfer->featureID = "CH_BAD";
+  badChamfer->featureName = "BadChamfer";
+  badChamfer->mode = ChamferMode::DISTANCE_ANGLE;
+  badChamfer->params.distance1 = 0.002;
+  invalid.AddFeature(badChamfer);
+
+  const auto report = invalid.Validate();
+  Expect(!report.isValid,
+         "Validation should fail when a chamfer misses required fields.");
+  bool foundMissingAngle = false;
+  bool foundMissingRefs = false;
+  for (const auto &err : report.errors) {
+    if (err.find("angle") != std::string::npos) {
+      foundMissingAngle = true;
+    }
+    if (err.find("no references") != std::string::npos) {
+      foundMissingRefs = true;
+    }
+  }
+  Expect(foundMissingAngle,
+         "Missing chamfer angle should be reported by validation.");
+  Expect(foundMissingRefs,
+         "Missing chamfer references should be reported by validation.");
+}
+
 } // namespace
 
 int main() {
@@ -711,6 +877,8 @@ int main() {
   TestSketchBuilderAndAccessorSupportRefBasedConstraints();
   TestSketchConstraintValidationRejectsMissingSketchEntityRef();
   TestConvertModelUnitScalesSketchConstraintExternalReferences();
+  TestChamferBuilderAccessorAndXmlRoundTrip();
+  TestChamferValidationAndUnitConversion();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

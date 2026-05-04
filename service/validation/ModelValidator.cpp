@@ -73,6 +73,28 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
     report.warnings.push_back(msg);
   };
 
+  auto checkPositiveDistance = [&](const std::optional<double> &value,
+                                   const std::string &featureID,
+                                   const char *label) {
+    if (!value.has_value()) {
+      addError(std::string("[CHAMFER_003] Chamfer '") + featureID +
+               "' missing required parameter " + label + ".");
+      return;
+    }
+    if (*value <= 0.0) {
+      addError(std::string("[CHAMFER_004] Chamfer '") + featureID + "' " +
+               label + "=" + std::to_string(*value) + " (must be > 0).");
+      return;
+    }
+    const double valueM = toMeter(*value);
+    if (valueM < 1e-6 || valueM > 100.0) {
+      addWarn(std::string("[SCALE_002] Chamfer '") + featureID + "' " + label +
+              "=" + std::to_string(*value) + " (~" +
+              std::to_string(valueM * 1000.0) +
+              "mm) is out of normal range -- check unit system.");
+    }
+  };
+
   auto checkExtent = [&](const SweepExtent &extent,
                          const std::string &featureID,
                          const std::string &side,
@@ -420,6 +442,70 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
           std::fabs(sweep->thinWall->endOffset) <= 1e-9) {
         addError("[SWEEP_006] Sweep '" + sweep->featureID +
                  "' has ThinWall but StartOffset/EndOffset are both zero.");
+      }
+    }
+    // ---- CChamfer ----
+    else if (auto chamfer = std::dynamic_pointer_cast<CChamfer>(feature)) {
+      if (chamfer->mode == ChamferMode::UNKNOWN) {
+        addError("[CHAMFER_001] Chamfer '" + chamfer->featureID +
+                 "' mode is UNKNOWN.");
+      }
+      if (chamfer->references.empty()) {
+        addError("[CHAMFER_002] Chamfer '" + chamfer->featureID +
+                 "' has no references.");
+      }
+
+      switch (chamfer->mode) {
+      case ChamferMode::EQUAL_DISTANCE:
+        checkPositiveDistance(chamfer->params.distance1, chamfer->featureID,
+                              "distance1");
+        break;
+      case ChamferMode::TWO_DISTANCES:
+        checkPositiveDistance(chamfer->params.distance1, chamfer->featureID,
+                              "distance1");
+        checkPositiveDistance(chamfer->params.distance2, chamfer->featureID,
+                              "distance2");
+        break;
+      case ChamferMode::DISTANCE_ANGLE:
+        checkPositiveDistance(chamfer->params.distance1, chamfer->featureID,
+                              "distance1");
+        if (!chamfer->params.angle.has_value()) {
+          addError("[CHAMFER_003] Chamfer '" + chamfer->featureID +
+                   "' missing required parameter angle.");
+        } else if (std::abs(*chamfer->params.angle) < GeoUtils::EPSILON) {
+          addWarn("[CHAMFER_005] Chamfer '" + chamfer->featureID +
+                  "' angle is near zero.");
+        }
+        break;
+      case ChamferMode::VERTEX_3DISTANCES:
+        checkPositiveDistance(chamfer->params.distance1, chamfer->featureID,
+                              "distance1");
+        checkPositiveDistance(chamfer->params.distance2, chamfer->featureID,
+                              "distance2");
+        checkPositiveDistance(chamfer->params.distance3, chamfer->featureID,
+                              "distance3");
+        break;
+      case ChamferMode::UNKNOWN:
+        break;
+      }
+
+      for (size_t i = 0; i < chamfer->references.size(); ++i) {
+        const auto &ref = chamfer->references[i];
+        if (!ref) {
+          addError("[CHAMFER_006] Chamfer '" + chamfer->featureID +
+                   "' reference[" + std::to_string(i) + "] is null.");
+          continue;
+        }
+        if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_006] Chamfer '" + chamfer->featureID +
+                    "' reference[" + std::to_string(i) +
+                    "] parent feature '" + subTopo->parentFeatureID +
+                    "' has not been defined yet.");
+          }
+        }
       }
     }
     // ---- CDatumPlane ----

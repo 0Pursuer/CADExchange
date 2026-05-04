@@ -98,6 +98,13 @@ private:
                         const std::shared_ptr<CSweep> &sweep);
 
   /**
+   * @brief Serialize a `CChamfer` feature.
+   */
+  static void SaveChamfer(tinyxml2::XMLDocument &doc,
+                          tinyxml2::XMLElement *element,
+                          const std::shared_ptr<CChamfer> &chamfer);
+
+  /**
    * @brief 将 `CDatumPlane` 类型的特征序列化到给定的元素下。
    */
   static void SaveDatumPlane(tinyxml2::XMLDocument &doc,
@@ -181,6 +188,12 @@ private:
    */
   static void LoadSweep(tinyxml2::XMLElement *element,
                         std::shared_ptr<CSweep> &sweep);
+
+  /**
+   * @brief Restore a `CChamfer` feature from XML.
+   */
+  static void LoadChamfer(tinyxml2::XMLElement *element,
+                          std::shared_ptr<CChamfer> &chamfer);
 
   /**
    * @brief 从 XML 元素恢复 `CDatumPlane`。

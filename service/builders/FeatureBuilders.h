@@ -9,6 +9,7 @@
 #include "ExtrudeBuilder.h"
 #include "RevolveBuilder.h"
 #include "SweepBuilder.h"
+#include "ChamferBuilder.h"
 #include "DatumPlaneBuilder.h"
 
 // clang-format on

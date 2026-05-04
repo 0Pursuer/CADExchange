@@ -28,6 +28,7 @@ enum class FeatureType {
   Extrude,
   Revolve,
   Sweep,
+  Chamfer,
   Sketch,
   DatumPlane
 };
@@ -569,6 +570,67 @@ struct CSweep : public CProfiledFeatureBase {
   std::optional<double> profilePathAngleCos;
 
   CSweep() { featureType = FeatureType::Sweep; }
+};
+
+/**
+ * @brief 统一倒角参数模式。
+ *
+ * 第一版 unified chamfer 仅保留跨系统共同参数语义，不直接镜像各 CAD
+ * 原生 feature family 或行为控制选项。
+ *
+ * 当前统一规则：
+ * - EQUAL_DISTANCE: 等距倒角
+ * - TWO_DISTANCES: 双距离倒角
+ * - DISTANCE_ANGLE: 距离 + 角度倒角
+ * - VERTEX_3DISTANCES: 顶点倒角，三边距离
+ *
+ * 其中 Creo 原生 schema 建议在读侧归一化映射为上述通用模式，例如：
+ * - PRO_CHM_45_X_D -> DISTANCE_ANGLE, 且 angle = 45deg
+ * - PRO_CHM_D_X_D / PRO_CHM_D1_X_D2 -> TWO_DISTANCES
+ * - PRO_CHM_ANG_X_D -> DISTANCE_ANGLE
+ * - PRO_CHM_O_X_O / PRO_CHM_O1_X_O2 -> TWO_DISTANCES
+ */
+enum class ChamferMode {
+  UNKNOWN = 0,
+  EQUAL_DISTANCE,    ///< 等距倒角
+  TWO_DISTANCES,     ///< 双距离倒角
+  DISTANCE_ANGLE,    ///< 距离 + 角度倒角
+  VERTEX_3DISTANCES  ///< 顶点倒角，三边距离
+};
+
+/**
+ * @brief 统一倒角数值参数。
+ *
+ * 字段是否生效由 `ChamferMode` 决定：
+ * - EQUAL_DISTANCE: distance1
+ * - TWO_DISTANCES: distance1 + distance2
+ * - DISTANCE_ANGLE: distance1 + angle
+ * - VERTEX_3DISTANCES: distance1 + distance2 + distance3
+ */
+struct CChamferParams {
+  std::optional<double> distance1;
+  std::optional<double> distance2;
+  std::optional<double> distance3;
+  std::optional<double> angle;
+};
+
+/**
+ * @brief 倒角特征。
+ *
+ * 第一版统一结构只保留：
+ * - `mode`：参数解释方式
+ * - `params`：统一数值参数
+ * - `references`：参与倒角定义的引用对象数组
+ *
+ * 当前不引入 reversed / flipped、tangent propagation、shape/method 等
+ * 更偏 CAD 原生行为控制的字段，避免将写回补偿语义提前混入统一模型。
+ */
+struct CChamfer : public CFeatureBase {
+  ChamferMode mode{ChamferMode::UNKNOWN};
+  CChamferParams params;
+  std::vector<std::shared_ptr<CRefEntityBase>> references;
+
+  CChamfer() { featureType = FeatureType::Chamfer; }
 };
 
 enum class PlaneMethod {

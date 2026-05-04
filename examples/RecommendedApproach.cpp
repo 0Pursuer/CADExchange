@@ -14,6 +14,7 @@
 #include "../service/builders/SketchBuilder.h"
 #include "../service/builders/ExtrudeBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
+#include "../service/builders/ChamferBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/EndConditionBuilder.h"
 #include "../core/UnifiedModel.h"
@@ -168,6 +169,21 @@ std::string BuildExtrudeFeature(UnifiedModel& model,
     return builder.Build();
 }
 
+std::string BuildChamferFeature(UnifiedModel& model,
+                                const std::string& featureName,
+                                const std::string& parentFeatureID) {
+    return ChamferBuilder(model, featureName)
+        .SetMode(ChamferMode::DISTANCE_ANGLE)
+        .SetDistance1(2.0)
+        .SetAngle(45.0)
+        .AddReference(
+            Ref::Edge(parentFeatureID, 0)
+                .StartPoint(CPoint3D{0.0, 0.0, 20.0})
+                .EndPoint(CPoint3D{100.0, 0.0, 20.0})
+                .MidPoint(CPoint3D{50.0, 0.0, 20.0}))
+        .Build();
+}
+
 int main() {
     try {
         // Initialize model
@@ -244,9 +260,16 @@ int main() {
         DemoImprovedExtrudeBuilder(model);
 
         // =========================================================================
+        // FEATURE 8: Chamfer feature
+        // =========================================================================
+        std::cout << "\n[8] Creating chamfer feature...\n";
+        const auto chamferID = BuildChamferFeature(model, "Chamfer_Edge", extrudeID);
+        PrintResult("Chamfer Feature", chamferID);
+
+        // =========================================================================
         // Save the model
         // =========================================================================
-        std::cout << "\n[8] Saving model...\n";
+        std::cout << "\n[9] Saving model...\n";
         try {
             std::string errorMsg;
             bool saveOk = SaveModel(model, "RecommendedApproach_Output.xml", &errorMsg, SerializationFormat::TINYXML);
@@ -276,8 +299,9 @@ int main() {
         std::cout << "   - SetProfileByName(name) - direct name-based lookup\n";
         std::cout << "   - EndConditionHelper::UpToVertex() - simplified vertex refs\n";
         std::cout << "   - EndConditionHelper::UpToRefPlane() - simplified plane refs\n";
-        std::cout << "5. Chain builder calls for fluent interface\n";
-        std::cout << "6. Use convenience methods (AddLine, AddCircle, etc.) for sketches\n";
+        std::cout << "5. Use ChamferBuilder with mode + params + references\n";
+        std::cout << "6. Chain builder calls for fluent interface\n";
+        std::cout << "7. Use convenience methods (AddLine, AddCircle, etc.) for sketches\n";
         std::cout << "\nAdvantages:\n";
         std::cout << "- Type-safe: Each builder handles its own type\n";
         std::cout << "- Fluent: Easy to read and write\n";

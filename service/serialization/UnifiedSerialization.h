@@ -354,6 +354,26 @@ template <class Archive> void serialize(Archive &ar, CSweep &sweep) {
 }
 
 /**
+ * @brief 序列化倒角参数。
+ */
+template <class Archive> void serialize(Archive &ar, CChamferParams &params) {
+  ar(cereal::make_nvp("Distance1", params.distance1),
+     cereal::make_nvp("Distance2", params.distance2),
+     cereal::make_nvp("Distance3", params.distance3),
+     cereal::make_nvp("Angle", params.angle));
+}
+
+/**
+ * @brief 序列化倒角特征。
+ */
+template <class Archive> void serialize(Archive &ar, CChamfer &chamfer) {
+  ar(cereal::base_class<CFeatureBase>(&chamfer),
+     cereal::make_nvp("Mode", chamfer.mode),
+     cereal::make_nvp("Params", chamfer.params),
+     cereal::make_nvp("References", chamfer.references));
+}
+
+/**
  * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
  */
 template <class Archive>

@@ -5,7 +5,7 @@
 
 ## 0. 跨模块统一术语与口径（本轮收敛）
 
-- **FeatureType**：统一指 `CADExchange::FeatureType`（`Sketch/Extrude/Revolve/Sweep/DatumPlane`）；各 CAD 侧类型先映射到该枚举后再进入流程。
+- **FeatureType**：统一指 `CADExchange::FeatureType`（`Sketch/Extrude/Revolve/Sweep/Chamfer/DatumPlane`）；各 CAD 侧类型先映射到该枚举后再进入流程。
 - **Extent（SweepExtent）**：统一按 `Type + Value + Offset + Reference` 描述终止条件。  
 - **Reference**：统一指 `CRef*` 引用实体（标准基准/拓扑几何/草图段），Read 与 Write 均按 `RefType + 几何指纹` 落地。  
 - **ThinWall**：统一指薄壁选项（`HasThinWall + Thickness + Side/Direction`）。  
@@ -61,7 +61,7 @@
 ## 2.2 core
 
 - `core/UnifiedTypes.h`：基础几何类型、单位、标准基准 ID、向量运算工具。  
-- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CSweep/CDatumPlane`、`SweepExtent` 等）。
+- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CSweep/CChamfer/CDatumPlane`、`SweepExtent` 等）。
 - `core/UnifiedModel.h`：`UnifiedModel` 容器、索引、查找、校验入口声明。  
 - `core/UnitConverter.cpp`：`ConvertModelUnit` 及特征/引用的单位缩放实现。  
 - `core/TypeAdapters.h`：`PointAdapter/VectorAdapter` 与反向 `PointWriter/VectorWriter`。  
@@ -77,6 +77,7 @@
 - `ExtrudeBuilder.h`：拉伸构造（轮廓、方向、`extent1/extent2`、薄壁、拔模）。  
 - `RevolveBuilder.h`：旋转构造（轮廓、轴、`extent1/extent2`、薄壁）。  
 - `SweepBuilder.h`：扫掠构造（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁）。
+- `ChamferBuilder.h`：倒角构造（mode、参数、引用对象）。
 - `DatumPlaneBuilder.h`：基准面构造（方法、引用、约束）。  
 - `FeatureBuilders.h`：Builder 聚合头。  
 - `StringHelper.h`：UUID（递增串）与 UTF8/宽字串路径处理。  
@@ -90,6 +91,7 @@
 - `ExtrudeAccessor.h`：拉伸访问（共享 `SweepExtent` 字段读取）。  
 - `RevolveAccessor.h`：旋转访问（共享 `SweepExtent` 字段读取）。  
 - `SweepAccessor.h`：扫掠访问（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁读取）。
+- `ChamferAccessor.h`：倒角访问（mode、参数、引用对象读取）。
 - `DatumPlaneAccessor.h`：基准面访问。  
 - `ModelAccessor.h`：模型访问入口（按索引/ID 取特征）。  
 - `FeatureAccessors.h`：Accessor 聚合头。  
@@ -115,7 +117,7 @@
 
 - `examples/RecommendedApproach.cpp`：推荐构建路径演示（Builder + SaveModel）。  
 - `examples/PartReconstructionDemo.cpp`：加载/遍历/提取/依赖分析/重建模拟演示。  
-- `examples/MigrationRegressionTest.cpp`：旋转/扫掠特征迁移回归测试（尤其 `SweepExtent` 与 sweep path 引用语义）。
+- `examples/MigrationRegressionTest.cpp`：旋转/扫掠/倒角特征迁移回归测试（尤其 `SweepExtent`、sweep path 引用语义与倒角 mode/参数链路）。
 
 ## 2.9 thirdParty
 

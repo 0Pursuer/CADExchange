@@ -261,6 +261,42 @@ std::optional<SweepProfileKind> SweepProfileKindFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string ChamferModeToString(ChamferMode mode) {
+  switch (mode) {
+  case ChamferMode::EQUAL_DISTANCE:
+    return "EqualDistance";
+  case ChamferMode::TWO_DISTANCES:
+    return "TwoDistances";
+  case ChamferMode::DISTANCE_ANGLE:
+    return "DistanceAngle";
+  case ChamferMode::VERTEX_3DISTANCES:
+    return "Vertex3Distances";
+  case ChamferMode::UNKNOWN:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<ChamferMode> ChamferModeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "equaldistance") {
+    return ChamferMode::EQUAL_DISTANCE;
+  }
+  if (value == "twodistances") {
+    return ChamferMode::TWO_DISTANCES;
+  }
+  if (value == "distanceangle") {
+    return ChamferMode::DISTANCE_ANGLE;
+  }
+  if (value == "vertex3distances") {
+    return ChamferMode::VERTEX_3DISTANCES;
+  }
+  return std::nullopt;
+}
+
 std::string SweepSectionPlacementToString(SweepSectionPlacement placement) {
   switch (placement) {
   case SweepSectionPlacement::ExistingProfilePlane:
@@ -831,6 +867,10 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "Sweep");
       SaveSweep(doc, featElem, std::static_pointer_cast<CSweep>(feature));
       break;
+    case FeatureType::Chamfer:
+      featElem->SetAttribute("Type", "Chamfer");
+      SaveChamfer(doc, featElem, std::static_pointer_cast<CChamfer>(feature));
+      break;
     case FeatureType::DatumPlane:
       featElem->SetAttribute("Type", "DatumPlane");
       SaveDatumPlane(doc, featElem,
@@ -1155,6 +1195,32 @@ void TinyXMLSerializer::SaveDatumPlane(
   }
 }
 
+void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
+                                    const std::shared_ptr<CChamfer> &chamfer) {
+  element->SetAttribute("Mode", ChamferModeToString(chamfer->mode).c_str());
+
+  XMLElement *paramsElem = doc.NewElement("Parameters");
+  element->InsertEndChild(paramsElem);
+  if (chamfer->params.distance1.has_value()) {
+    paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+  }
+  if (chamfer->params.distance2.has_value()) {
+    paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+  }
+  if (chamfer->params.distance3.has_value()) {
+    paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+  }
+  if (chamfer->params.angle.has_value()) {
+    paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+  }
+
+  XMLElement *refsElem = doc.NewElement("References");
+  element->InsertEndChild(refsElem);
+  for (const auto &ref : chamfer->references) {
+    SaveRefEntity(doc, refsElem, "ReferenceEntity", ref);
+  }
+}
+
 // =================================================================================================
 // Load Implementation
 // =================================================================================================
@@ -1295,6 +1361,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto sweep = std::make_shared<CSweep>();
     LoadSweep(element, sweep);
     feature = sweep;
+  } else if (type == "Chamfer") {
+    auto chamfer = std::make_shared<CChamfer>();
+    LoadChamfer(element, chamfer);
+    feature = chamfer;
   } else if (type == "DatumPlane") {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
@@ -1728,6 +1798,40 @@ void TinyXMLSerializer::LoadDatumPlane(
       }
       datumPlane->constraints.push_back(constraint);
       constraintElem = constraintElem->NextSiblingElement("Constraint");
+    }
+  }
+}
+
+void TinyXMLSerializer::LoadChamfer(XMLElement *element,
+                                    std::shared_ptr<CChamfer> &chamfer) {
+  if (auto mode = ChamferModeFromString(element->Attribute("Mode"))) {
+    chamfer->mode = *mode;
+  }
+
+  if (XMLElement *paramsElem = element->FirstChildElement("Parameters")) {
+    double value = 0.0;
+    if (paramsElem->QueryDoubleAttribute("Distance1", &value) == XML_SUCCESS) {
+      chamfer->params.distance1 = value;
+    }
+    if (paramsElem->QueryDoubleAttribute("Distance2", &value) == XML_SUCCESS) {
+      chamfer->params.distance2 = value;
+    }
+    if (paramsElem->QueryDoubleAttribute("Distance3", &value) == XML_SUCCESS) {
+      chamfer->params.distance3 = value;
+    }
+    if (paramsElem->QueryDoubleAttribute("Angle", &value) == XML_SUCCESS) {
+      chamfer->params.angle = value;
+    }
+  }
+
+  if (XMLElement *refsElem = element->FirstChildElement("References")) {
+    XMLElement *refElem = refsElem->FirstChildElement("ReferenceEntity");
+    while (refElem) {
+      auto ref = LoadRefEntity(refElem);
+      if (ref) {
+        chamfer->references.push_back(ref);
+      }
+      refElem = refElem->NextSiblingElement("ReferenceEntity");
     }
   }
 }
