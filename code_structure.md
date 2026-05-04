@@ -155,7 +155,7 @@
   - 本文件以数据结构为主，核心逻辑主要在构造函数（设置 `featureType`）与字段语义约束（如 `SweepExtent`、`ThinWallOption`）。
 - **其他函数分组**
   - 枚举定义：`FeatureType/RefType/PlaneMethod/PlaneConstraintType`。
-  - 约束与选项结构：`DraftOption/ThinWallOption/PlaneConstraint`。
+  - 约束与选项结构：`DraftOption/ThinWallOption/PlaneConstraint`、`SketchConstraintRefKind/SketchConstraintSubEntity/SketchConstraintRef/CSketchConstraint`。
 
 ### `core/UnifiedModel.h`
 - **核心类**
@@ -237,8 +237,10 @@
   - `SetCSys(...)`：设置局部坐标系并强制 `IsValid()`。
   - `AddLine/AddCircle/AddArc/AddPoint`：添加几何段并返回 localID。
   - `AddCoincident/AddHorizontal/AddVertical/AddTangent/AddDistanceDimension`：添加约束。
+  - `AddConstraint(const CSketchConstraint&)`：直接追加完整统一约束对象。
 - **其他函数分组**
   - 约束内部实现：`AddConstraint(...)`。
+  - 约束引用兼容层：字符串版重载会自动包装成 `SketchConstraintRef::ForSketchEntity(localID, Whole)`；显式 `SketchConstraintRef` 重载可表达 `Start/End/Center/Midpoint` 与外部引用。
   - LocalID 生成：`GenerateLocalID(...)`。
 
 ### `service/builders/EndConditionBuilder.h`
@@ -348,12 +350,13 @@
 
 ### `service/accessors/SketchAccessor.h`
 - **核心类**
-  - `SketchSegmentAccessor`、`SketchAccessor`
+  - `SketchConstraintAccessor`、`SketchSegmentAccessor`、`SketchAccessor`
 - **核心函数详列**
   - 段读取：`GetSegmentCount()`、`GetSegment(index)`、`GetSegmentByLocalID(...)`。
   - 坐标系读取：`GetCSys(...)`（含模板重载）。
   - 参考面读取：`GetReferencePlane()`、`HasReferencePlane()`。
-  - 约束读取：`GetConstraintCount()`、`GetConstraint(...)`。
+  - 约束读取：`GetConstraintCount()`、`GetConstraint(...)`、`GetConstraintAccessor(...)`。
+  - 约束细节读取：`SketchConstraintAccessor::GetType/GetRefCount/GetRefKind/GetRefSubEntity/GetSketchEntityLocalID/GetReference/HasValue/GetValue`。
   - 段细节读取：`GetLineCoords/GetCircleParams/GetArcParams/GetPointCoord`。
 - **其他函数分组**
   - 访问增强：`SketchSegmentAccessor::As<T>()`。

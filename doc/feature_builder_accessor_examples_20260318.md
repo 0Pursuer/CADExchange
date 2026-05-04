@@ -50,7 +50,9 @@
 
 1. `AddLine/AddCircle/AddArc/AddPoint` 返回 localID，约束通常依赖 localID，所以草图会是“链式+局部变量”混合写法。
 2. `SetReferencePlane` 支持 `Ref::XY()/YZ()/ZX()`、`Ref::Plane(...)`、`Ref::Face(...)`。
-3. 对草图来说，`Build()` 前完全不落局部变量通常不可行；只要 localID 捕获是为了继续链式加约束，这仍然属于推荐写法。
+3. `CSketchConstraint` 现在统一使用 `refs + optional value` 表达，不再使用旧的 `entityLocalIDs + dimensionValue`。
+4. 如果约束落在端点、圆心、中点，或者引用外部边/面/基准对象，应优先使用 `SketchConstraintRef` 显式表达，而不是只传裸 `localID`。
+5. 对草图来说，`Build()` 前完全不落局部变量通常不可行；只要 localID 捕获是为了继续链式加约束，这仍然属于推荐写法。
 
 ### 3.1 完整草图示例（Line + Circle + Arc + Point）
 
@@ -93,6 +95,46 @@ sk.AddHorizontal(l1)
 std::string sketchID = sk.Build();
 ```
 
+### 3.1.1 推荐写法：显式 `SketchConstraintRef`
+
+当约束不是“整个图元对整个图元”时，建议显式构造 `SketchConstraintRef`。这样可以表达：
+
+1. 草图内部子实体：`Whole / Start / End / Center / Midpoint`
+2. 外部引用对象：`Ref::Plane(...)`、`Ref::Edge(...)`、`Ref::Axis(...)`、`Ref::SketchSegment(...)`
+
+```cpp
+using namespace CADExchange;
+using namespace CADExchange::Builder;
+
+UnifiedModel model(UnitType::METER, "sketch_constraint_ref_demo");
+
+SketchBuilder sk(model, "Sketch_With_Explicit_Constraint_Refs");
+sk.SetReferencePlane(Ref::XY())
+  .SetCSys(CPoint3D{0, 0, 0},
+           CVector3D{1, 0, 0},
+           CVector3D{0, 1, 0},
+           CVector3D{0, 0, 1});
+
+std::string l1 = sk.AddLine(CPoint3D{0.00, 0.00, 0}, CPoint3D{0.05, 0.00, 0});
+std::string l2 = sk.AddLine(CPoint3D{0.05, 0.00, 0}, CPoint3D{0.05, 0.03, 0});
+
+sk.AddCoincident(
+     SketchConstraintRef::ForSketchEntity(l1, SketchConstraintSubEntity::End),
+     SketchConstraintRef::ForSketchEntity(l2, SketchConstraintSubEntity::Start))
+  .AddDistanceDimension(
+     SketchConstraintRef::ForSketchEntity(l1, SketchConstraintSubEntity::Whole),
+     SketchConstraintRef::ForExternalReference(Ref::XY()),
+     0.010);
+
+std::string sketchID = sk.Build();
+```
+
+说明：
+
+1. `ForSketchEntity(localID, subEntity)` 用于本草图内部图元。
+2. `ForExternalReference(refEntity, subEntity)` 用于外部参考对象。
+3. 距离/角度/半径/直径这类尺寸约束通过 `value` 存值，几何约束通常不带 `value`。
+
 ### 3.2 SketchAccessor 读取参考
 
 `SketchAccessor` 主要方法：
@@ -100,7 +142,7 @@ std::string sketchID = sk.Build();
 1. `HasReferencePlane()` / `GetReferencePlane()`
 2. `GetCSys(...)`
 3. `GetSegmentCount()` / `GetSegment(i)` / `GetSegmentByLocalID(id)`
-4. `GetConstraintCount()` / `GetConstraint(i)`
+4. `GetConstraintCount()` / `GetConstraint(i)` / `GetConstraintAccessor(i)`
 
 `SketchSegmentAccessor` 主要方法：
 
@@ -110,6 +152,14 @@ std::string sketchID = sk.Build();
 4. `GetArcParams(...)`
 5. `GetPointCoord(...)`
 6. `As<CSketchLine/CSketchCircle/CSketchArc/CSketchPoint>()`
+
+`SketchConstraintAccessor` 主要方法：
+
+1. `GetType()`
+2. `GetRefCount()`
+3. `GetRefKind(i)` / `GetRefSubEntity(i)`
+4. `GetSketchEntityLocalID(i)` / `GetReference(i)`
+5. `HasValue()` / `GetValue()`
 
 ```cpp
 using namespace CADExchange::Accessor;
@@ -131,6 +181,35 @@ if (auto feat = ma.GetFeatureByID(sketchID)) {
         CPoint3D c; double s, e, r; bool cw;
         seg.GetArcParams(c, s, e, r, cw);
       }
+    }
+
+    int constraintN = skAcc.GetConstraintCount();
+    for (int i = 0; i < constraintN; ++i) {
+      auto c = skAcc.GetConstraintAccessor(i);
+      if (!c.IsValid()) continue;
+
+      auto type = c.GetType();
+      int refN = c.GetRefCount();
+      bool hasValue = c.HasValue();
+      double value = c.GetValue();
+
+      for (int r = 0; r < refN; ++r) {
+        if (c.GetRefKind(r) == SketchConstraintRefKind::SketchEntity) {
+          std::string localID = c.GetSketchEntityLocalID(r);
+          auto subEntity = c.GetRefSubEntity(r);
+          (void)localID;
+          (void)subEntity;
+        } else {
+          auto ref = c.GetReference(r);
+          auto subEntity = c.GetRefSubEntity(r);
+          (void)ref;
+          (void)subEntity;
+        }
+      }
+
+      (void)type;
+      (void)hasValue;
+      (void)value;
     }
   }
 }

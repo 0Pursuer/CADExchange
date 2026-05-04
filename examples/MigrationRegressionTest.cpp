@@ -1,9 +1,11 @@
 #include "../core/UnifiedModel.h"
 #include "../service/accessors/RevolveAccessor.h"
+#include "../service/accessors/SketchAccessor.h"
 #include "../service/accessors/SweepAccessor.h"
 #include "../service/builders/EndConditionBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
+#include "../service/builders/SketchBuilder.h"
 #include "../service/builders/SweepBuilder.h"
 #include "../service/serialization/CADSerializer.h"
 #include <cmath>
@@ -503,6 +505,198 @@ void TestSweepEmbeddedSketchProfileRoundTrip() {
          "Loaded embedded sweep should preserve section sketch segments.");
 }
 
+void TestSketchConstraintSupportsSubEntityAndExternalReference() {
+  UnifiedModel model(UnitType::METER, "sketch-constraint-ref");
+
+  auto sketch = MakeSketch("SK-CONSTRAINT", "SketchConstraint");
+  auto line1 = std::make_shared<CSketchLine>();
+  line1->localID = "L_1";
+  line1->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line1->endPos = CPoint3D{1.0, 0.0, 0.0};
+  sketch->segments.push_back(line1);
+
+  auto line2 = std::make_shared<CSketchLine>();
+  line2->localID = "L_2";
+  line2->startPos = CPoint3D{1.0, 0.0, 0.0};
+  line2->endPos = CPoint3D{1.0, 1.0, 0.0};
+  sketch->segments.push_back(line2);
+
+  CSketchConstraint coincident;
+  coincident.type = CSketchConstraint::ConstraintType::COINCIDENT;
+  coincident.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_1", SketchConstraintSubEntity::End));
+  coincident.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_2", SketchConstraintSubEntity::Start));
+  sketch->constraints.push_back(coincident);
+
+  CSketchConstraint distance;
+  distance.type = CSketchConstraint::ConstraintType::DISTANCE;
+  distance.value = 12.5;
+  distance.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_1", SketchConstraintSubEntity::Whole));
+  distance.refs.push_back(
+      SketchConstraintRef::ForExternalReference(
+          RefPlaneBuilder(StandardID::PLANE_XY)
+              .Origin(StandardID::kOrigin)
+              .XDir(StandardID::kAxisX)
+              .YDir(StandardID::kAxisY)
+              .Normal(StandardID::kPlaneXYNormal)
+              .Build(),
+          SketchConstraintSubEntity::Whole));
+  sketch->constraints.push_back(distance);
+
+  model.AddFeature(sketch);
+
+  Expect(model.GetFeature("SK-CONSTRAINT") != nullptr,
+         "Sketch with constraint refs should be addable to model.");
+  Expect(sketch->constraints.size() == 2,
+         "Sketch should preserve two constraints.");
+  Expect(sketch->constraints[0].refs.size() == 2,
+         "Coincident constraint should preserve two refs.");
+  Expect(sketch->constraints[0].refs[0].subEntity ==
+             SketchConstraintSubEntity::End,
+         "First coincident ref should preserve sub-entity End.");
+  Expect(sketch->constraints[0].refs[1].subEntity ==
+             SketchConstraintSubEntity::Start,
+         "Second coincident ref should preserve sub-entity Start.");
+  Expect(sketch->constraints[1].refs[1].refEntity != nullptr,
+         "External reference should be preserved on sketch constraint.");
+}
+
+void TestSketchBuilderAndAccessorSupportRefBasedConstraints() {
+  UnifiedModel model(UnitType::METER, "sketch-builder-accessor-ref-based");
+
+  SketchBuilder sk(model, "SketchRefBased");
+  sk.SetReferencePlane(Ref::XY())
+      .SetCSys(CPoint3D{0, 0, 0}, CVector3D{1, 0, 0}, CVector3D{0, 1, 0},
+               CVector3D{0, 0, 1});
+
+  const std::string l1 =
+      sk.AddLine(CPoint3D{0.0, 0.0, 0.0}, CPoint3D{1.0, 0.0, 0.0});
+  const std::string l2 =
+      sk.AddLine(CPoint3D{1.0, 0.0, 0.0}, CPoint3D{1.0, 1.0, 0.0});
+
+  sk.AddCoincident(
+        SketchConstraintRef::ForSketchEntity(
+            l1, SketchConstraintSubEntity::End),
+        SketchConstraintRef::ForSketchEntity(
+            l2, SketchConstraintSubEntity::Start))
+    .AddDistanceDimension(
+        SketchConstraintRef::ForSketchEntity(
+            l1, SketchConstraintSubEntity::Whole),
+        SketchConstraintRef::ForExternalReference(Ref::XY()),
+        0.25);
+
+  const std::string sketchID = sk.Build();
+
+  SketchAccessor sketch(model.GetFeature(sketchID));
+  Expect(sketch.IsValid(), "SketchAccessor should be valid for ref-based sketch.");
+  Expect(sketch.GetConstraintCount() == 2,
+         "Sketch should preserve two ref-based constraints.");
+
+  auto c0 = sketch.GetConstraintAccessor(0);
+  Expect(c0.IsValid(), "Constraint accessor should be valid.");
+  Expect(c0.GetRefCount() == 2,
+         "Coincident constraint should expose two refs.");
+  Expect(c0.GetRefSubEntity(0) == SketchConstraintSubEntity::End,
+         "Coincident ref[0] should preserve End sub-entity.");
+  Expect(c0.GetRefSubEntity(1) == SketchConstraintSubEntity::Start,
+         "Coincident ref[1] should preserve Start sub-entity.");
+
+  auto c1 = sketch.GetConstraintAccessor(1);
+  Expect(c1.HasValue(), "Distance constraint should expose a numeric value.");
+  Expect(std::abs(c1.GetValue() - 0.25) < 1e-12,
+         "Distance constraint value should round-trip through accessor.");
+  Expect(c1.GetRefKind(1) == SketchConstraintRefKind::ExternalReference,
+         "Distance constraint ref[1] should expose external reference kind.");
+  Expect(c1.GetReference(1).IsValid(),
+         "Distance constraint external ref should be readable via accessor.");
+}
+
+void TestSketchConstraintValidationRejectsMissingSketchEntityRef() {
+  UnifiedModel model(UnitType::METER, "sketch-constraint-validation");
+
+  auto sketch = MakeSketch("SK-INVALID-CONSTRAINT", "SketchInvalidConstraint");
+  auto line = std::make_shared<CSketchLine>();
+  line->localID = "L_1";
+  line->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line->endPos = CPoint3D{1.0, 0.0, 0.0};
+  sketch->segments.push_back(line);
+
+  CSketchConstraint invalid;
+  invalid.type = CSketchConstraint::ConstraintType::COINCIDENT;
+  invalid.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_1", SketchConstraintSubEntity::End));
+  invalid.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_MISSING", SketchConstraintSubEntity::Start));
+  sketch->constraints.push_back(invalid);
+  model.AddFeature(sketch);
+
+  const auto report = model.Validate();
+  Expect(!report.isValid,
+         "Validation should fail when a sketch constraint references a missing localID.");
+  bool foundConstraintError = false;
+  for (const auto &err : report.errors) {
+    if (err.find("[SKETCH_002]") != std::string::npos) {
+      foundConstraintError = true;
+      break;
+    }
+  }
+  Expect(foundConstraintError,
+         "Missing sketch-entity constraint ref should report SKETCH_002.");
+}
+
+void TestConvertModelUnitScalesSketchConstraintExternalReferences() {
+  UnifiedModel model(UnitType::METER, "sketch-constraint-unit-convert");
+
+  auto sketch = MakeSketch("SK-UNIT-CONSTRAINT", "SketchUnitConstraint");
+  auto line = std::make_shared<CSketchLine>();
+  line->localID = "L_1";
+  line->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line->endPos = CPoint3D{0.5, 0.0, 0.0};
+  sketch->segments.push_back(line);
+
+  auto planeRef =
+      RefPlaneBuilder("DATUM_TEST")
+          .Origin(CPoint3D{0.1, 0.2, 0.3})
+          .XDir(StandardID::kAxisX)
+          .YDir(StandardID::kAxisY)
+          .Normal(StandardID::kPlaneXYNormal)
+          .Build();
+
+  CSketchConstraint distance;
+  distance.type = CSketchConstraint::ConstraintType::DISTANCE;
+  distance.value = 0.25;
+  distance.refs.push_back(
+      SketchConstraintRef::ForSketchEntity("L_1", SketchConstraintSubEntity::Whole));
+  distance.refs.push_back(SketchConstraintRef::ForExternalReference(planeRef));
+  sketch->constraints.push_back(distance);
+  model.AddFeature(sketch);
+
+  std::string errorMessage;
+  Expect(ConvertModelUnit(model, UnitType::MILLIMETER, &errorMessage),
+         "ConvertModelUnit should succeed for sketch constraint refs: " +
+             errorMessage);
+
+  SketchAccessor sketchAcc(model.GetFeature("SK-UNIT-CONSTRAINT"));
+  Expect(sketchAcc.IsValid(), "Converted sketch should still be accessible.");
+  auto constraint = sketchAcc.GetConstraintAccessor(0);
+  Expect(constraint.IsValid(), "Converted constraint should still be accessible.");
+  Expect(constraint.HasValue(), "Converted distance constraint should keep value.");
+  Expect(std::abs(constraint.GetValue() - 250.0) < 1e-9,
+         "Distance constraint value should scale from meters to millimeters.");
+
+  auto ref = constraint.GetReference(1);
+  Expect(ref.IsValid(), "Converted external reference should remain readable.");
+  CPoint3D origin;
+  Expect(ref.GetPlaneOrigin(origin),
+         "Converted external plane reference should expose origin.");
+  Expect(std::abs(origin.x - 100.0) < 1e-9 &&
+             std::abs(origin.y - 200.0) < 1e-9 &&
+             std::abs(origin.z - 300.0) < 1e-9,
+         "External plane reference origin should scale with model units.");
+}
+
 } // namespace
 
 int main() {
@@ -513,6 +707,10 @@ int main() {
   TestSweepBuilderAccessorAndXmlRoundTrip();
   TestSweepCircularProfileWithoutSketchRoundTrip();
   TestSweepEmbeddedSketchProfileRoundTrip();
+  TestSketchConstraintSupportsSubEntityAndExternalReference();
+  TestSketchBuilderAndAccessorSupportRefBasedConstraints();
+  TestSketchConstraintValidationRejectsMissingSketchEntityRef();
+  TestConvertModelUnitScalesSketchConstraintExternalReferences();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

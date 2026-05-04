@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 // clang-format on
 
@@ -208,22 +209,176 @@ struct CSketchPoint : public CSketchSeg {
 };
 
 /**
- * @brief 约束类型定义。
+ * @brief 草图约束引用的来源类别。
+ *
+ * `CSketchConstraint` 的每个参与对象都通过 `SketchConstraintRef` 表达。
+ * 这里区分“本草图内部图元”与“外部引用实体”两大来源：
+ *
+ * - `SketchEntity`
+ *   表示引用当前草图中的某个图元，使用 `sketchEntityLocalID` 定位。
+ * - `ExternalReference`
+ *   表示引用草图外部对象，统一复用 `CRefEntityBase` 体系表达，
+ *   可指向外部边、面、轴、点、基准面、其他草图段等。
+ */
+enum class SketchConstraintRefKind {
+  SketchEntity,      ///< 当前草图内部图元，由 `sketchEntityLocalID` 定位
+  ExternalReference  ///< 草图外部引用对象，由 `refEntity` 定位
+};
+
+/**
+ * @brief 约束引用落在实体上的哪个子位置。
+ *
+ * 仅保存“对象身份”不足以表达草图约束语义，因为很多约束并不是作用于
+ * 整个实体，而是作用于实体上的特定位置，例如线段起点、终点、圆心、
+ * 中点等。
+ *
+ * 该枚举用于补充这些位点级语义：
+ *
+ * - `Whole`
+ *   约束作用于整个实体，例如水平、垂直、平行、相切中的整条线/整段圆弧。
+ * - `Start` / `End`
+ *   约束作用于曲线端点，常用于点重合、点在线上等端点级约束。
+ * - `Center`
+ *   约束作用于圆/圆弧的圆心，常用于同心、半径/直径等场景。
+ * - `Midpoint`
+ *   约束作用于线段中点，常用于中点约束或某些对称辅助语义。
+ */
+enum class SketchConstraintSubEntity {
+  Whole,     ///< 整个实体
+  Start,     ///< 起点
+  End,       ///< 终点
+  Center,    ///< 圆心/中心点
+  Midpoint   ///< 中点
+};
+
+/**
+ * @brief 草图约束中的单个参与引用。
+ *
+ * 这是草图约束引用的统一载体，用来表达：
+ *
+ * 1. 约束引用的是“本草图内部图元”还是“外部引用对象”
+ * 2. 若引用的是某个对象，约束具体落在该对象的哪一部分
+ *
+ * 设计原则：
+ *
+ * - 内部草图图元：
+ *   使用 `kind=SketchEntity` + `sketchEntityLocalID`
+ * - 外部引用对象：
+ *   使用 `kind=ExternalReference` + `refEntity`
+ * - 子实体定位：
+ *   始终通过 `subEntity` 明确约束作用位点
+ *
+ * 这样可以统一覆盖如下场景：
+ *
+ * - 草图内两条线端点重合
+ * - 草图线与外部边重合/平行/垂直
+ * - 圆弧与外部轴/边相切
+ * - 圆与圆的同心
+ * - 中点、圆心、端点等位点级约束
+ */
+struct SketchConstraintRef {
+  SketchConstraintRefKind kind{SketchConstraintRefKind::SketchEntity};
+  ///< 引用来源类别：内部草图图元或外部引用实体。
+
+  SketchConstraintSubEntity subEntity{SketchConstraintSubEntity::Whole};
+  ///< 约束落在该对象上的哪个子位置。
+
+  std::string sketchEntityLocalID;
+  ///< `kind == SketchEntity` 时使用的草图局部图元 ID。
+
+  std::shared_ptr<CRefEntityBase> refEntity;
+  ///< `kind == ExternalReference` 时使用的外部引用对象。
+
+  /**
+   * @brief 创建一个指向当前草图内部图元的约束引用。
+   * @param localID 草图图元 localID。
+   * @param subEntity 约束落点，默认为整个实体。
+   * @return 构造好的 `SketchConstraintRef`。
+   */
+  static SketchConstraintRef ForSketchEntity(
+      std::string localID,
+      SketchConstraintSubEntity subEntity = SketchConstraintSubEntity::Whole) {
+    SketchConstraintRef ref;
+    ref.kind = SketchConstraintRefKind::SketchEntity;
+    ref.subEntity = subEntity;
+    ref.sketchEntityLocalID = std::move(localID);
+    return ref;
+  }
+
+  /**
+   * @brief 创建一个指向草图外部引用对象的约束引用。
+   * @param reference 外部引用对象，通常为 `CRefEntityBase` 派生类实例。
+   * @param subEntity 约束落点，默认为整个实体。
+   * @return 构造好的 `SketchConstraintRef`。
+   */
+  static SketchConstraintRef ForExternalReference(
+      std::shared_ptr<CRefEntityBase> reference,
+      SketchConstraintSubEntity subEntity = SketchConstraintSubEntity::Whole) {
+    SketchConstraintRef ref;
+    ref.kind = SketchConstraintRefKind::ExternalReference;
+    ref.subEntity = subEntity;
+    ref.refEntity = std::move(reference);
+    return ref;
+  }
+};
+
+/**
+ * @brief 统一草图约束定义。
+ *
+ * `CSketchConstraint` 是 CADExchange 草图约束的统一表达，目标是同时支持：
+ *
+ * - 草图内部图元之间的约束
+ * - 草图图元与外部引用实体之间的约束
+ * - 常见几何约束
+ * - 常见尺寸约束
+ * - 原生 CAD 系统附加元数据保真
+ *
+ * 该结构的核心字段为：
+ *
+ * - `type`
+ *   统一语义层的约束类型
+ * - `refs`
+ *   参与该约束的一个或多个引用对象
+ * - `value`
+ *   尺寸类约束的数值参数；非尺寸类通常为空
+ * 当前结构只保留统一语义本身，不再额外保存 CAD 原生系统级元数据。
  */
 struct CSketchConstraint {
+  /**
+   * @brief 统一约束类型枚举。
+   *
+   * 设计上将“几何关系约束”与“尺寸约束”分开，而不是继续使用一个粗粒度
+   * 的 `DIMENSIONAL`。这样更有利于对接 SolidWorks、Creo、UG/NX
+   * 各自的原生 API 能力。
+   */
   enum class ConstraintType {
-    HORIZONTAL, // 水平约束
-    VERTICAL,
-    COINCIDENT,
-    CONCENTRIC,
-    TANGENT,
-    EQUAL,
-    PARALLEL,
-    PERPENDICULAR,
-    DIMENSIONAL
-  } type;
-  std::vector<std::string> entityLocalIDs;
-  double dimensionValue = 0.0;
+    COINCIDENT,    ///< 重合
+    HORIZONTAL,    ///< 水平
+    VERTICAL,      ///< 垂直（方向约束）
+    PARALLEL,      ///< 平行
+    PERPENDICULAR, ///< 垂直（两对象关系）
+    TANGENT,       ///< 相切
+    CONCENTRIC,    ///< 同心
+    EQUAL,         ///< 等值（如等长、等半径等统一入口）
+    DISTANCE,      ///< 距离尺寸
+    ANGLE,         ///< 角度尺寸
+    RADIUS,        ///< 半径尺寸
+    DIAMETER,      ///< 直径尺寸
+    SYMMETRIC,     ///< 对称
+    MIDPOINT,      ///< 中点
+    COLLINEAR,     ///< 共线
+    FIXED,         ///< 固定
+    UNKNOWN        ///< 未知/未归一化约束
+  };
+
+  ConstraintType type{ConstraintType::UNKNOWN};
+  ///< 统一层约束类型。
+
+  std::vector<SketchConstraintRef> refs;
+  ///< 参与该约束的引用对象列表。
+
+  std::optional<double> value;
+  ///< 尺寸类约束的数值；非尺寸类一般为空。
 };
 
 /**

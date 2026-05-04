@@ -129,8 +129,22 @@ void ScaleSketch(CSketch &sketch, double factor, UnitScaleContext &ctx) {
   }
 
   for (auto &constraint : sketch.constraints) {
-    if (constraint.type == CSketchConstraint::ConstraintType::DIMENSIONAL) {
-      constraint.dimensionValue *= factor;
+    for (auto &ref : constraint.refs) {
+      if (ref.kind == SketchConstraintRefKind::ExternalReference) {
+        ScaleRefEntity(ref.refEntity, factor, ctx);
+      }
+    }
+    if (!constraint.value.has_value()) {
+      continue;
+    }
+    switch (constraint.type) {
+    case CSketchConstraint::ConstraintType::DISTANCE:
+    case CSketchConstraint::ConstraintType::RADIUS:
+    case CSketchConstraint::ConstraintType::DIAMETER:
+      *constraint.value *= factor;
+      break;
+    default:
+      break;
     }
   }
 }

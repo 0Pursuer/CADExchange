@@ -247,6 +247,71 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
           }
         }
       }
+
+      std::unordered_set<std::string> segmentIDs;
+      for (const auto &seg : sketch->segments) {
+        if (seg && !seg->localID.empty()) {
+          segmentIDs.insert(seg->localID);
+        }
+      }
+
+      for (size_t i = 0; i < sketch->constraints.size(); ++i) {
+        const auto &constraint = sketch->constraints[i];
+        const std::string idx = std::to_string(i);
+
+        if (constraint.type == CSketchConstraint::ConstraintType::UNKNOWN) {
+          addError("[SKETCH_004] Sketch '" + sketch->featureID +
+                   "' constraint[" + idx + "] type is UNKNOWN.");
+        }
+
+        if (constraint.refs.empty()) {
+          addError("[SKETCH_003] Sketch '" + sketch->featureID +
+                   "' constraint[" + idx + "] has no refs.");
+        }
+
+        for (size_t refIndex = 0; refIndex < constraint.refs.size(); ++refIndex) {
+          const auto &ref = constraint.refs[refIndex];
+          const std::string refIdx = std::to_string(refIndex);
+          if (ref.kind == SketchConstraintRefKind::SketchEntity) {
+            if (ref.sketchEntityLocalID.empty() ||
+                segmentIDs.find(ref.sketchEntityLocalID) == segmentIDs.end()) {
+              addError("[SKETCH_002] Sketch '" + sketch->featureID +
+                       "' constraint[" + idx + "] ref[" + refIdx +
+                       "] references missing sketch entity localID '" +
+                       ref.sketchEntityLocalID + "'.");
+            }
+          } else if (!ref.refEntity) {
+            addError("[SKETCH_005] Sketch '" + sketch->featureID +
+                     "' constraint[" + idx + "] ref[" + refIdx +
+                     "] external reference is null.");
+          } else if (auto subTopo =
+                         std::dynamic_pointer_cast<CRefSubTopo>(ref.refEntity)) {
+            if (!subTopo->parentFeatureID.empty() &&
+                !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+                seen.find(subTopo->parentFeatureID) == seen.end()) {
+              addWarn("[REF_005] Sketch '" + sketch->featureID +
+                      "' constraint[" + idx + "] ref[" + refIdx +
+                      "] parent feature '" + subTopo->parentFeatureID +
+                      "' has not been defined yet.");
+            }
+          }
+        }
+
+        const bool requiresValue =
+            constraint.type == CSketchConstraint::ConstraintType::DISTANCE ||
+            constraint.type == CSketchConstraint::ConstraintType::ANGLE ||
+            constraint.type == CSketchConstraint::ConstraintType::RADIUS ||
+            constraint.type == CSketchConstraint::ConstraintType::DIAMETER;
+        if (requiresValue && !constraint.value.has_value()) {
+          addError("[SKETCH_006] Sketch '" + sketch->featureID +
+                   "' constraint[" + idx + "] requires numeric value.");
+        }
+        if (!requiresValue && constraint.value.has_value()) {
+          addWarn("[SKETCH_007] Sketch '" + sketch->featureID +
+                  "' constraint[" + idx +
+                  "] stores numeric value but type is non-dimensional.");
+        }
+      }
     }
 
     // ---- CRevolve ----

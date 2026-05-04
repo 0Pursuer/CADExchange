@@ -10,6 +10,67 @@ namespace CADExchange {
 namespace Accessor {
 
 /**
+ * @brief 草图约束访问器（辅助类）。
+ *
+ * 用于读取 `CSketchConstraint` 的统一语义字段，避免调用者直接处理底层结构。
+ */
+class SketchConstraintAccessor {
+private:
+  const CSketchConstraint *m_constraint = nullptr;
+
+public:
+  explicit SketchConstraintAccessor(const CSketchConstraint *constraint = nullptr)
+      : m_constraint(constraint) {}
+
+  bool IsValid() const { return m_constraint != nullptr; }
+
+  CSketchConstraint::ConstraintType GetType() const {
+    return IsValid() ? m_constraint->type
+                     : CSketchConstraint::ConstraintType::UNKNOWN;
+  }
+
+  int GetRefCount() const {
+    return IsValid() ? static_cast<int>(m_constraint->refs.size()) : 0;
+  }
+
+  SketchConstraintRefKind GetRefKind(int index) const {
+    if (!IsValid() || index < 0 || index >= static_cast<int>(m_constraint->refs.size())) {
+      return SketchConstraintRefKind::SketchEntity;
+    }
+    return m_constraint->refs[static_cast<size_t>(index)].kind;
+  }
+
+  SketchConstraintSubEntity GetRefSubEntity(int index) const {
+    if (!IsValid() || index < 0 || index >= static_cast<int>(m_constraint->refs.size())) {
+      return SketchConstraintSubEntity::Whole;
+    }
+    return m_constraint->refs[static_cast<size_t>(index)].subEntity;
+  }
+
+  std::string GetSketchEntityLocalID(int index) const {
+    if (!IsValid() || index < 0 || index >= static_cast<int>(m_constraint->refs.size())) {
+      return "";
+    }
+    return m_constraint->refs[static_cast<size_t>(index)].sketchEntityLocalID;
+  }
+
+  ReferenceAccessor GetReference(int index) const {
+    if (!IsValid() || index < 0 || index >= static_cast<int>(m_constraint->refs.size())) {
+      return ReferenceAccessor(nullptr);
+    }
+    return ReferenceAccessor(m_constraint->refs[static_cast<size_t>(index)].refEntity);
+  }
+
+  bool HasValue() const { return IsValid() && m_constraint->value.has_value(); }
+
+  double GetValue(double defaultValue = 0.0) const {
+    return HasValue() ? *m_constraint->value : defaultValue;
+  }
+
+  const CSketchConstraint *GetRaw() const { return m_constraint; }
+};
+
+/**
  * @brief 草图几何段访问器（辅助类）。
  *
  * 用于逐个访问草图中的各个几何段（直线、圆、圆弧、点等）。
@@ -245,6 +306,10 @@ public:
       return nullptr;
     }
     return &m_sketch->constraints[index];
+  }
+
+  SketchConstraintAccessor GetConstraintAccessor(int index) const {
+    return SketchConstraintAccessor(GetConstraint(index));
   }
 };
 

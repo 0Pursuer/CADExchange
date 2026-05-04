@@ -184,10 +184,18 @@ template <class Archive> void serialize(Archive &ar, CSketchPoint &point) {
  * @brief 序列化草图约束，包含约束类型、参与实体和尺寸值。
  */
 template <class Archive>
+void serialize(Archive &ar, SketchConstraintRef &ref) {
+  ar(cereal::make_nvp("Kind", ref.kind),
+     cereal::make_nvp("SubEntity", ref.subEntity),
+     cereal::make_nvp("SketchEntityLocalID", ref.sketchEntityLocalID),
+     cereal::make_nvp("ReferenceEntity", ref.refEntity));
+}
+
+template <class Archive>
 void serialize(Archive &ar, CSketchConstraint &constraint) {
   ar(cereal::make_nvp("Type", constraint.type),
-     cereal::make_nvp("Entities", constraint.entityLocalIDs),
-     cereal::make_nvp("Dimension", constraint.dimensionValue));
+     cereal::make_nvp("Refs", constraint.refs),
+     cereal::make_nvp("Value", constraint.value));
 }
 
 /**

@@ -41,6 +41,63 @@ std::string FormatNumber(double value) {
   return oss.str();
 }
 
+std::string SketchConstraintTypeLabel(CSketchConstraint::ConstraintType type) {
+  switch (type) {
+  case CSketchConstraint::ConstraintType::COINCIDENT:
+    return "COINCIDENT";
+  case CSketchConstraint::ConstraintType::HORIZONTAL:
+    return "HORIZONTAL";
+  case CSketchConstraint::ConstraintType::VERTICAL:
+    return "VERTICAL";
+  case CSketchConstraint::ConstraintType::PARALLEL:
+    return "PARALLEL";
+  case CSketchConstraint::ConstraintType::PERPENDICULAR:
+    return "PERPENDICULAR";
+  case CSketchConstraint::ConstraintType::TANGENT:
+    return "TANGENT";
+  case CSketchConstraint::ConstraintType::CONCENTRIC:
+    return "CONCENTRIC";
+  case CSketchConstraint::ConstraintType::EQUAL:
+    return "EQUAL";
+  case CSketchConstraint::ConstraintType::DISTANCE:
+    return "DISTANCE";
+  case CSketchConstraint::ConstraintType::ANGLE:
+    return "ANGLE";
+  case CSketchConstraint::ConstraintType::RADIUS:
+    return "RADIUS";
+  case CSketchConstraint::ConstraintType::DIAMETER:
+    return "DIAMETER";
+  case CSketchConstraint::ConstraintType::SYMMETRIC:
+    return "SYMMETRIC";
+  case CSketchConstraint::ConstraintType::MIDPOINT:
+    return "MIDPOINT";
+  case CSketchConstraint::ConstraintType::COLLINEAR:
+    return "COLLINEAR";
+  case CSketchConstraint::ConstraintType::FIXED:
+    return "FIXED";
+  case CSketchConstraint::ConstraintType::UNKNOWN:
+  default:
+    return "UNKNOWN";
+  }
+}
+
+std::string SketchConstraintSubEntityLabel(SketchConstraintSubEntity subEntity) {
+  switch (subEntity) {
+  case SketchConstraintSubEntity::Whole:
+    return "Whole";
+  case SketchConstraintSubEntity::Start:
+    return "Start";
+  case SketchConstraintSubEntity::End:
+    return "End";
+  case SketchConstraintSubEntity::Center:
+    return "Center";
+  case SketchConstraintSubEntity::Midpoint:
+    return "Midpoint";
+  default:
+    return "Whole";
+  }
+}
+
 std::string SweepExtentTypeLabel(SweepExtent::Type type) {
   switch (type) {
   case SweepExtent::Type::VALUE:
@@ -352,6 +409,41 @@ void ExtractSketchData(const std::string &xmlPath) {
           std::cout << "Unknown type";
         }
         std::cout << std::endl;
+      }
+
+      std::cout << "\n约束信息 (总计 " << sketch->GetConstraintCount()
+                << " 条):" << std::endl;
+      for (int j = 0; j < sketch->GetConstraintCount(); ++j) {
+        auto constraint = sketch->GetConstraintAccessor(j);
+        if (!constraint.IsValid()) {
+          continue;
+        }
+
+        std::cout << "  [约束 " << j
+                  << "] Type=" << SketchConstraintTypeLabel(constraint.GetType());
+        if (constraint.HasValue()) {
+          std::cout << ", Value=" << constraint.GetValue();
+        }
+        std::cout << std::endl;
+
+        for (int k = 0; k < constraint.GetRefCount(); ++k) {
+          std::cout << "    - Ref[" << k << "] ";
+          if (constraint.GetRefKind(k) == SketchConstraintRefKind::SketchEntity) {
+            std::cout << "SketchEntity localID="
+                      << constraint.GetSketchEntityLocalID(k);
+          } else {
+            auto ref = constraint.GetReference(k);
+            std::cout << "ExternalReference type="
+                      << static_cast<int>(ref.GetRefType());
+            if (!ref.GetParentFeatureID().empty()) {
+              std::cout << ", parent=" << ref.GetParentFeatureID();
+            }
+          }
+          std::cout << ", subEntity="
+                    << SketchConstraintSubEntityLabel(
+                           constraint.GetRefSubEntity(k))
+                    << std::endl;
+        }
       }
     }
   }

@@ -135,6 +135,15 @@ public:
   }
 
   /**
+   * @brief 添加重合约束（支持端点/外部引用）。
+   */
+  SketchBuilder &AddCoincident(const SketchConstraintRef &ref1,
+                               const SketchConstraintRef &ref2) {
+    return AddConstraint(CSketchConstraint::ConstraintType::COINCIDENT,
+                         {ref1, ref2});
+  }
+
+  /**
    * @brief 添加水平约束。
    */
   SketchBuilder &AddHorizontal(const std::string &lineID) {
@@ -143,10 +152,24 @@ public:
   }
 
   /**
+   * @brief 添加水平约束（支持显式子实体/外部引用）。
+   */
+  SketchBuilder &AddHorizontal(const SketchConstraintRef &ref) {
+    return AddConstraint(CSketchConstraint::ConstraintType::HORIZONTAL, {ref});
+  }
+
+  /**
    * @brief 添加垂直约束。
    */
   SketchBuilder &AddVertical(const std::string &lineID) {
     return AddConstraint(CSketchConstraint::ConstraintType::VERTICAL, {lineID});
+  }
+
+  /**
+   * @brief 添加垂直约束（支持显式子实体/外部引用）。
+   */
+  SketchBuilder &AddVertical(const SketchConstraintRef &ref) {
+    return AddConstraint(CSketchConstraint::ConstraintType::VERTICAL, {ref});
   }
 
   /**
@@ -159,13 +182,40 @@ public:
   }
 
   /**
+   * @brief 添加相切约束（支持显式子实体/外部引用）。
+   */
+  SketchBuilder &AddTangent(const SketchConstraintRef &ref1,
+                            const SketchConstraintRef &ref2) {
+    return AddConstraint(CSketchConstraint::ConstraintType::TANGENT,
+                         {ref1, ref2});
+  }
+
+  /**
    * @brief 添加尺寸约束。
    */
   SketchBuilder &AddDistanceDimension(const std::string &entityID1,
                                       const std::string &entityID2,
                                       double value) {
-    return AddConstraint(CSketchConstraint::ConstraintType::DIMENSIONAL,
+    return AddConstraint(CSketchConstraint::ConstraintType::DISTANCE,
                          {entityID1, entityID2}, value);
+  }
+
+  /**
+   * @brief 添加距离尺寸约束（支持显式子实体/外部引用）。
+   */
+  SketchBuilder &AddDistanceDimension(const SketchConstraintRef &ref1,
+                                      const SketchConstraintRef &ref2,
+                                      double value) {
+    return AddConstraint(CSketchConstraint::ConstraintType::DISTANCE,
+                         {ref1, ref2}, value);
+  }
+
+  /**
+   * @brief 直接追加完整约束对象。
+   */
+  SketchBuilder &AddConstraint(const CSketchConstraint &constraint) {
+    m_feature->constraints.push_back(constraint);
+    return *this;
   }
 
 private:
@@ -180,8 +230,31 @@ private:
                                double value = 0.0) {
     CSketchConstraint constraint;
     constraint.type = type;
-    constraint.entityLocalIDs.assign(ids);
-    constraint.dimensionValue = value;
+    for (const auto &id : ids) {
+      constraint.refs.push_back(SketchConstraintRef::ForSketchEntity(id));
+    }
+    if (type == CSketchConstraint::ConstraintType::DISTANCE ||
+        type == CSketchConstraint::ConstraintType::ANGLE ||
+        type == CSketchConstraint::ConstraintType::RADIUS ||
+        type == CSketchConstraint::ConstraintType::DIAMETER) {
+      constraint.value = value;
+    }
+    m_feature->constraints.push_back(constraint);
+    return *this;
+  }
+
+  SketchBuilder &AddConstraint(CSketchConstraint::ConstraintType type,
+                               std::initializer_list<SketchConstraintRef> refs,
+                               double value = 0.0) {
+    CSketchConstraint constraint;
+    constraint.type = type;
+    constraint.refs.assign(refs.begin(), refs.end());
+    if (type == CSketchConstraint::ConstraintType::DISTANCE ||
+        type == CSketchConstraint::ConstraintType::ANGLE ||
+        type == CSketchConstraint::ConstraintType::RADIUS ||
+        type == CSketchConstraint::ConstraintType::DIAMETER) {
+      constraint.value = value;
+    }
     m_feature->constraints.push_back(constraint);
     return *this;
   }

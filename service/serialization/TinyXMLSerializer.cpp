@@ -433,36 +433,91 @@ CVector3D ComputePlaneYAxis(const CVector3D &normal, const CVector3D &xDir) {
 // ConstraintType <-> string (human-readable; integer fallback for old files).
 const char *ConstraintTypeToString(CSketchConstraint::ConstraintType t) {
   switch (t) {
+  case CSketchConstraint::ConstraintType::COINCIDENT:    return "Coincident";
   case CSketchConstraint::ConstraintType::HORIZONTAL:    return "Horizontal";
   case CSketchConstraint::ConstraintType::VERTICAL:      return "Vertical";
-  case CSketchConstraint::ConstraintType::COINCIDENT:    return "Coincident";
-  case CSketchConstraint::ConstraintType::CONCENTRIC:    return "Concentric";
-  case CSketchConstraint::ConstraintType::TANGENT:       return "Tangent";
-  case CSketchConstraint::ConstraintType::EQUAL:         return "Equal";
   case CSketchConstraint::ConstraintType::PARALLEL:      return "Parallel";
   case CSketchConstraint::ConstraintType::PERPENDICULAR: return "Perpendicular";
-  case CSketchConstraint::ConstraintType::DIMENSIONAL:   return "Dimensional";
+  case CSketchConstraint::ConstraintType::TANGENT:       return "Tangent";
+  case CSketchConstraint::ConstraintType::CONCENTRIC:    return "Concentric";
+  case CSketchConstraint::ConstraintType::EQUAL:         return "Equal";
+  case CSketchConstraint::ConstraintType::DISTANCE:      return "Distance";
+  case CSketchConstraint::ConstraintType::ANGLE:         return "Angle";
+  case CSketchConstraint::ConstraintType::RADIUS:        return "Radius";
+  case CSketchConstraint::ConstraintType::DIAMETER:      return "Diameter";
+  case CSketchConstraint::ConstraintType::SYMMETRIC:     return "Symmetric";
+  case CSketchConstraint::ConstraintType::MIDPOINT:      return "Midpoint";
+  case CSketchConstraint::ConstraintType::COLLINEAR:     return "Collinear";
+  case CSketchConstraint::ConstraintType::FIXED:         return "Fixed";
+  case CSketchConstraint::ConstraintType::UNKNOWN:       return "Unknown";
   default:                                               return "Unknown";
   }
 }
 
 CSketchConstraint::ConstraintType ConstraintTypeFromString(const char *text) {
-  if (!text) return CSketchConstraint::ConstraintType::HORIZONTAL;
+  if (!text) return CSketchConstraint::ConstraintType::UNKNOWN;
   std::string v = ToLower(text);
+  if (v == "coincident")    return CSketchConstraint::ConstraintType::COINCIDENT;
   if (v == "horizontal")    return CSketchConstraint::ConstraintType::HORIZONTAL;
   if (v == "vertical")      return CSketchConstraint::ConstraintType::VERTICAL;
-  if (v == "coincident")    return CSketchConstraint::ConstraintType::COINCIDENT;
-  if (v == "concentric")    return CSketchConstraint::ConstraintType::CONCENTRIC;
-  if (v == "tangent")       return CSketchConstraint::ConstraintType::TANGENT;
-  if (v == "equal")         return CSketchConstraint::ConstraintType::EQUAL;
   if (v == "parallel")      return CSketchConstraint::ConstraintType::PARALLEL;
   if (v == "perpendicular") return CSketchConstraint::ConstraintType::PERPENDICULAR;
-  if (v == "dimensional")   return CSketchConstraint::ConstraintType::DIMENSIONAL;
+  if (v == "tangent")       return CSketchConstraint::ConstraintType::TANGENT;
+  if (v == "concentric")    return CSketchConstraint::ConstraintType::CONCENTRIC;
+  if (v == "equal")         return CSketchConstraint::ConstraintType::EQUAL;
+  if (v == "distance" || v == "dimensional") {
+    return CSketchConstraint::ConstraintType::DISTANCE;
+  }
+  if (v == "angle")         return CSketchConstraint::ConstraintType::ANGLE;
+  if (v == "radius")        return CSketchConstraint::ConstraintType::RADIUS;
+  if (v == "diameter")      return CSketchConstraint::ConstraintType::DIAMETER;
+  if (v == "symmetric")     return CSketchConstraint::ConstraintType::SYMMETRIC;
+  if (v == "midpoint")      return CSketchConstraint::ConstraintType::MIDPOINT;
+  if (v == "collinear")     return CSketchConstraint::ConstraintType::COLLINEAR;
+  if (v == "fixed")         return CSketchConstraint::ConstraintType::FIXED;
+  if (v == "unknown")       return CSketchConstraint::ConstraintType::UNKNOWN;
   // Backward-compat: integer fallback for files written by older versions.
   try { return static_cast<CSketchConstraint::ConstraintType>(std::stoi(text)); }
   catch (...) {}
-  return CSketchConstraint::ConstraintType::HORIZONTAL;
-}} // namespace
+  return CSketchConstraint::ConstraintType::UNKNOWN;
+}
+
+const char *SketchConstraintRefKindToString(SketchConstraintRefKind kind) {
+  switch (kind) {
+  case SketchConstraintRefKind::SketchEntity:      return "SketchEntity";
+  case SketchConstraintRefKind::ExternalReference: return "ExternalReference";
+  default:                                         return "SketchEntity";
+  }
+}
+
+SketchConstraintRefKind SketchConstraintRefKindFromString(const char *text) {
+  if (!text) return SketchConstraintRefKind::SketchEntity;
+  return ToLower(text) == "externalreference"
+             ? SketchConstraintRefKind::ExternalReference
+             : SketchConstraintRefKind::SketchEntity;
+}
+
+const char *SketchConstraintSubEntityToString(SketchConstraintSubEntity sub) {
+  switch (sub) {
+  case SketchConstraintSubEntity::Whole:    return "Whole";
+  case SketchConstraintSubEntity::Start:    return "Start";
+  case SketchConstraintSubEntity::End:      return "End";
+  case SketchConstraintSubEntity::Center:   return "Center";
+  case SketchConstraintSubEntity::Midpoint: return "Midpoint";
+  default:                                  return "Whole";
+  }
+}
+
+SketchConstraintSubEntity SketchConstraintSubEntityFromString(const char *text) {
+  if (!text) return SketchConstraintSubEntity::Whole;
+  std::string v = ToLower(text);
+  if (v == "start") return SketchConstraintSubEntity::Start;
+  if (v == "end") return SketchConstraintSubEntity::End;
+  if (v == "center") return SketchConstraintSubEntity::Center;
+  if (v == "midpoint") return SketchConstraintSubEntity::Midpoint;
+  return SketchConstraintSubEntity::Whole;
+}
+} // namespace
 
 // =================================================================================================
 // Save Implementation
@@ -848,15 +903,24 @@ void TinyXMLSerializer::SaveConstraint(XMLDocument &doc, XMLElement *parent,
   XMLElement *conElem = doc.NewElement("Constraint");
   parent->InsertEndChild(conElem);
   conElem->SetAttribute("Type", ConstraintTypeToString(constraint.type));
-  conElem->SetAttribute("Dimension", constraint.dimensionValue);
-
-  std::string ids;
-  for (size_t i = 0; i < constraint.entityLocalIDs.size(); ++i) {
-    ids += constraint.entityLocalIDs[i];
-    if (i < constraint.entityLocalIDs.size() - 1)
-      ids += ",";
+  if (constraint.value.has_value()) {
+    conElem->SetAttribute("Value", *constraint.value);
   }
-  conElem->SetAttribute("Entities", ids.c_str());
+
+  XMLElement *refsElem = doc.NewElement("Refs");
+  conElem->InsertEndChild(refsElem);
+  for (const auto &ref : constraint.refs) {
+    XMLElement *refElem = doc.NewElement("Ref");
+    refElem->SetAttribute("Kind", SketchConstraintRefKindToString(ref.kind));
+    refElem->SetAttribute("SubEntity",
+                          SketchConstraintSubEntityToString(ref.subEntity));
+    if (ref.kind == SketchConstraintRefKind::SketchEntity) {
+      refElem->SetAttribute("SketchEntityLocalID", ref.sketchEntityLocalID.c_str());
+    } else if (ref.refEntity) {
+      SaveRefEntity(doc, refElem, "ReferenceEntity", ref.refEntity);
+    }
+    refsElem->InsertEndChild(refElem);
+  }
 }
 
 void TinyXMLSerializer::SaveExtrude(XMLDocument &doc, XMLElement *element,
@@ -1341,14 +1405,40 @@ TinyXMLSerializer::LoadSketchSeg(XMLElement *element) {
 CSketchConstraint TinyXMLSerializer::LoadConstraint(XMLElement *element) {
   CSketchConstraint con;
   con.type = ConstraintTypeFromString(element->Attribute("Type"));
-  element->QueryDoubleAttribute("Dimension", &con.dimensionValue);
 
-  const char *ents = element->Attribute("Entities");
-  if (ents) {
-    std::stringstream ss(ents);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-      con.entityLocalIDs.push_back(item);
+  double value = 0.0;
+  if (element->QueryDoubleAttribute("Value", &value) == XML_SUCCESS) {
+    con.value = value;
+  } else if (element->QueryDoubleAttribute("Dimension", &value) == XML_SUCCESS) {
+    // Backward compatibility with legacy dimensional constraints.
+    con.value = value;
+  }
+
+  if (XMLElement *refsElem = element->FirstChildElement("Refs")) {
+    for (XMLElement *refElem = refsElem->FirstChildElement("Ref"); refElem;
+         refElem = refElem->NextSiblingElement("Ref")) {
+      SketchConstraintRef ref;
+      ref.kind = SketchConstraintRefKindFromString(refElem->Attribute("Kind"));
+      ref.subEntity =
+          SketchConstraintSubEntityFromString(refElem->Attribute("SubEntity"));
+      if (ref.kind == SketchConstraintRefKind::SketchEntity) {
+        if (const char *localID = refElem->Attribute("SketchEntityLocalID")) {
+          ref.sketchEntityLocalID = localID;
+        }
+      } else if (XMLElement *refEntityElem =
+                     refElem->FirstChildElement("ReferenceEntity")) {
+        ref.refEntity = LoadRefEntity(refEntityElem);
+      }
+      con.refs.push_back(std::move(ref));
+    }
+  } else {
+    const char *ents = element->Attribute("Entities");
+    if (ents) {
+      std::stringstream ss(ents);
+      std::string item;
+      while (std::getline(ss, item, ',')) {
+        con.refs.push_back(SketchConstraintRef::ForSketchEntity(item));
+      }
     }
   }
   return con;
