@@ -3,5 +3,7 @@ build_ninja/
 build_msvc/
 build_shared/
 .cache/
+tmp/
+**/tmp/
 
 **/demo/
