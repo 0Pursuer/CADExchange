@@ -1211,23 +1211,68 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
 
   XMLElement *paramsElem = doc.NewElement("Parameters");
   element->InsertEndChild(paramsElem);
-  if (chamfer->params.distance1.has_value()) {
-    paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
-  }
-  if (chamfer->params.distance2.has_value()) {
-    paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
-  }
-  if (chamfer->params.distance3.has_value()) {
-    paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
-  }
-  if (chamfer->params.offset1.has_value()) {
-    paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
-  }
-  if (chamfer->params.offset2.has_value()) {
-    paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
-  }
-  if (chamfer->params.angle.has_value()) {
-    paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+  switch (chamfer->mode) {
+  case ChamferMode::EQUAL_DISTANCE:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    break;
+  case ChamferMode::TWO_DISTANCES:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    break;
+  case ChamferMode::TWO_OFFSETS:
+    if (chamfer->params.offset1.has_value()) {
+      paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
+    }
+    if (chamfer->params.offset2.has_value()) {
+      paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
+    }
+    break;
+  case ChamferMode::DISTANCE_ANGLE:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.angle.has_value()) {
+      paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+    }
+    break;
+  case ChamferMode::VERTEX_3DISTANCES:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    if (chamfer->params.distance3.has_value()) {
+      paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+    }
+    break;
+  case ChamferMode::UNKNOWN:
+  default:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    if (chamfer->params.distance3.has_value()) {
+      paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+    }
+    if (chamfer->params.offset1.has_value()) {
+      paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
+    }
+    if (chamfer->params.offset2.has_value()) {
+      paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
+    }
+    if (chamfer->params.angle.has_value()) {
+      paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+    }
+    break;
   }
 
   XMLElement *refsElem = doc.NewElement("References");
