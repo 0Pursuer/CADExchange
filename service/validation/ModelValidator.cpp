@@ -466,6 +466,12 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         checkPositiveDistance(chamfer->params.distance2, chamfer->featureID,
                               "distance2");
         break;
+      case ChamferMode::TWO_OFFSETS:
+        checkPositiveDistance(chamfer->params.offset1, chamfer->featureID,
+                              "offset1");
+        checkPositiveDistance(chamfer->params.offset2, chamfer->featureID,
+                              "offset2");
+        break;
       case ChamferMode::DISTANCE_ANGLE:
         checkPositiveDistance(chamfer->params.distance1, chamfer->featureID,
                               "distance1");

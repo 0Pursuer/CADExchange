@@ -267,6 +267,8 @@ std::string ChamferModeToString(ChamferMode mode) {
     return "EqualDistance";
   case ChamferMode::TWO_DISTANCES:
     return "TwoDistances";
+  case ChamferMode::TWO_OFFSETS:
+    return "TwoOffsets";
   case ChamferMode::DISTANCE_ANGLE:
     return "DistanceAngle";
   case ChamferMode::VERTEX_3DISTANCES:
@@ -287,6 +289,9 @@ std::optional<ChamferMode> ChamferModeFromString(const char *text) {
   }
   if (value == "twodistances") {
     return ChamferMode::TWO_DISTANCES;
+  }
+  if (value == "twooffsets") {
+    return ChamferMode::TWO_OFFSETS;
   }
   if (value == "distanceangle") {
     return ChamferMode::DISTANCE_ANGLE;
@@ -1198,6 +1203,9 @@ void TinyXMLSerializer::SaveDatumPlane(
 void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
                                     const std::shared_ptr<CChamfer> &chamfer) {
   element->SetAttribute("Mode", ChamferModeToString(chamfer->mode).c_str());
+  if (chamfer->firstEndFaceMarker.has_value()) {
+    SavePoint3D(element, "FirstEndFaceMarker", *chamfer->firstEndFaceMarker);
+  }
 
   XMLElement *paramsElem = doc.NewElement("Parameters");
   element->InsertEndChild(paramsElem);
@@ -1209,6 +1217,12 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
   }
   if (chamfer->params.distance3.has_value()) {
     paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+  }
+  if (chamfer->params.offset1.has_value()) {
+    paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
+  }
+  if (chamfer->params.offset2.has_value()) {
+    paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
   }
   if (chamfer->params.angle.has_value()) {
     paramsElem->SetAttribute("Angle", *chamfer->params.angle);
@@ -1807,6 +1821,10 @@ void TinyXMLSerializer::LoadChamfer(XMLElement *element,
   if (auto mode = ChamferModeFromString(element->Attribute("Mode"))) {
     chamfer->mode = *mode;
   }
+  if (element->Attribute("FirstEndFaceMarker")) {
+    chamfer->firstEndFaceMarker =
+        LoadPoint3D(element, "FirstEndFaceMarker");
+  }
 
   if (XMLElement *paramsElem = element->FirstChildElement("Parameters")) {
     double value = 0.0;
@@ -1818,6 +1836,12 @@ void TinyXMLSerializer::LoadChamfer(XMLElement *element,
     }
     if (paramsElem->QueryDoubleAttribute("Distance3", &value) == XML_SUCCESS) {
       chamfer->params.distance3 = value;
+    }
+    if (paramsElem->QueryDoubleAttribute("Offset1", &value) == XML_SUCCESS) {
+      chamfer->params.offset1 = value;
+    }
+    if (paramsElem->QueryDoubleAttribute("Offset2", &value) == XML_SUCCESS) {
+      chamfer->params.offset2 = value;
     }
     if (paramsElem->QueryDoubleAttribute("Angle", &value) == XML_SUCCESS) {
       chamfer->params.angle = value;

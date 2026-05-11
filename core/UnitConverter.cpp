@@ -230,6 +230,15 @@ void ScaleChamfer(CChamfer &chamfer, double factor, UnitScaleContext &ctx) {
   if (chamfer.params.distance3.has_value()) {
     *chamfer.params.distance3 *= factor;
   }
+  if (chamfer.params.offset1.has_value()) {
+    *chamfer.params.offset1 *= factor;
+  }
+  if (chamfer.params.offset2.has_value()) {
+    *chamfer.params.offset2 *= factor;
+  }
+  if (chamfer.firstEndFaceMarker.has_value()) {
+    ScalePoint(*chamfer.firstEndFaceMarker, factor);
+  }
   for (auto &ref : chamfer.references) {
     ScaleRefEntity(ref, factor, ctx);
   }

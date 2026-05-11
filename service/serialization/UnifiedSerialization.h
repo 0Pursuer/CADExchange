@@ -360,6 +360,8 @@ template <class Archive> void serialize(Archive &ar, CChamferParams &params) {
   ar(cereal::make_nvp("Distance1", params.distance1),
      cereal::make_nvp("Distance2", params.distance2),
      cereal::make_nvp("Distance3", params.distance3),
+     cereal::make_nvp("Offset1", params.offset1),
+     cereal::make_nvp("Offset2", params.offset2),
      cereal::make_nvp("Angle", params.angle));
 }
 
@@ -370,7 +372,8 @@ template <class Archive> void serialize(Archive &ar, CChamfer &chamfer) {
   ar(cereal::base_class<CFeatureBase>(&chamfer),
      cereal::make_nvp("Mode", chamfer.mode),
      cereal::make_nvp("Params", chamfer.params),
-     cereal::make_nvp("References", chamfer.references));
+     cereal::make_nvp("References", chamfer.references),
+     cereal::make_nvp("FirstEndFaceMarker", chamfer.firstEndFaceMarker));
 }
 
 /**

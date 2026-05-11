@@ -66,9 +66,34 @@ public:
     return HasDistance3() ? *Data()->params.distance3 : 0.0;
   }
 
+  bool HasOffset1() const {
+    return IsValid() && Data()->params.offset1.has_value();
+  }
+
+  double GetOffset1() const {
+    return HasOffset1() ? *Data()->params.offset1 : 0.0;
+  }
+
+  bool HasOffset2() const {
+    return IsValid() && Data()->params.offset2.has_value();
+  }
+
+  double GetOffset2() const {
+    return HasOffset2() ? *Data()->params.offset2 : 0.0;
+  }
+
   bool HasAngle() const { return IsValid() && Data()->params.angle.has_value(); }
 
   double GetAngle() const { return HasAngle() ? *Data()->params.angle : 0.0; }
+
+  bool HasFirstEndFaceMarker() const {
+    return IsValid() && Data()->firstEndFaceMarker.has_value();
+  }
+
+  CPoint3D GetFirstEndFaceMarker() const {
+    return HasFirstEndFaceMarker() ? *Data()->firstEndFaceMarker
+                                   : CPoint3D{0.0, 0.0, 0.0};
+  }
 
   int GetReferenceCount() const {
     return IsValid() ? static_cast<int>(Data()->references.size()) : 0;
