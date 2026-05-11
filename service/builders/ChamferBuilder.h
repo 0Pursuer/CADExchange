@@ -52,10 +52,42 @@ public:
   }
 
   /**
+   * @brief Set the first chamfer offset.
+   */
+  ChamferBuilder &SetOffset1(double value) {
+    m_feature->params.offset1 = value;
+    return *this;
+  }
+
+  /**
+   * @brief Set the second chamfer offset.
+   */
+  ChamferBuilder &SetOffset2(double value) {
+    m_feature->params.offset2 = value;
+    return *this;
+  }
+
+  /**
    * @brief Set the chamfer angle.
    */
   ChamferBuilder &SetAngle(double value) {
     m_feature->params.angle = value;
+    return *this;
+  }
+
+  /**
+   * @brief Set a geometric marker point for the first chamfer end face.
+   */
+  ChamferBuilder &SetFirstEndFaceMarker(const CPoint3D &point) {
+    m_feature->firstEndFaceMarker = point;
+    return *this;
+  }
+
+  /**
+   * @brief Clear the marker point for the first chamfer end face.
+   */
+  ChamferBuilder &ClearFirstEndFaceMarker() {
+    m_feature->firstEndFaceMarker.reset();
     return *this;
   }
 

@@ -581,6 +581,7 @@ struct CSweep : public CProfiledFeatureBase {
  * 当前统一规则：
  * - EQUAL_DISTANCE: 等距倒角
  * - TWO_DISTANCES: 双距离倒角
+ * - TWO_OFFSETS: 双偏移倒角
  * - DISTANCE_ANGLE: 距离 + 角度倒角
  * - VERTEX_3DISTANCES: 顶点倒角，三边距离
  *
@@ -588,12 +589,13 @@ struct CSweep : public CProfiledFeatureBase {
  * - PRO_CHM_45_X_D -> DISTANCE_ANGLE, 且 angle = 45deg
  * - PRO_CHM_D_X_D / PRO_CHM_D1_X_D2 -> TWO_DISTANCES
  * - PRO_CHM_ANG_X_D -> DISTANCE_ANGLE
- * - PRO_CHM_O_X_O / PRO_CHM_O1_X_O2 -> TWO_DISTANCES
+ * - PRO_CHM_O_X_O / PRO_CHM_O1_X_O2 -> TWO_OFFSETS
  */
 enum class ChamferMode {
   UNKNOWN = 0,
   EQUAL_DISTANCE,    ///< 等距倒角
   TWO_DISTANCES,     ///< 双距离倒角
+  TWO_OFFSETS,       ///< 双偏移倒角
   DISTANCE_ANGLE,    ///< 距离 + 角度倒角
   VERTEX_3DISTANCES  ///< 顶点倒角，三边距离
 };
@@ -604,6 +606,7 @@ enum class ChamferMode {
  * 字段是否生效由 `ChamferMode` 决定：
  * - EQUAL_DISTANCE: distance1
  * - TWO_DISTANCES: distance1 + distance2
+ * - TWO_OFFSETS: offset1 + offset2
  * - DISTANCE_ANGLE: distance1 + angle
  * - VERTEX_3DISTANCES: distance1 + distance2 + distance3
  */
@@ -611,6 +614,8 @@ struct CChamferParams {
   std::optional<double> distance1;
   std::optional<double> distance2;
   std::optional<double> distance3;
+  std::optional<double> offset1;
+  std::optional<double> offset2;
   std::optional<double> angle;
 };
 
@@ -621,6 +626,7 @@ struct CChamferParams {
  * - `mode`：参数解释方式
  * - `params`：统一数值参数
  * - `references`：参与倒角定义的引用对象数组
+ * - `firstEndFaceMarker`：用于标识倒角第一端面的几何点
  *
  * 当前不引入 reversed / flipped、tangent propagation、shape/method 等
  * 更偏 CAD 原生行为控制的字段，避免将写回补偿语义提前混入统一模型。
@@ -629,6 +635,7 @@ struct CChamfer : public CFeatureBase {
   ChamferMode mode{ChamferMode::UNKNOWN};
   CChamferParams params;
   std::vector<std::shared_ptr<CRefEntityBase>> references;
+  std::optional<CPoint3D> firstEndFaceMarker;
 
   CChamfer() { featureType = FeatureType::Chamfer; }
 };

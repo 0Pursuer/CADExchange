@@ -746,6 +746,7 @@ void TestChamferBuilderAccessorAndXmlRoundTrip() {
           .SetMode(ChamferMode::DISTANCE_ANGLE)
           .SetDistance1(0.003)
           .SetAngle(45.0)
+          .SetFirstEndFaceMarker(CPoint3D{0.05, 0.01, 0.02})
           .AddReference(Ref::Edge(extrudeID, 0)
                             .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.05, 0.0, 0.02})
@@ -760,6 +761,13 @@ void TestChamferBuilderAccessorAndXmlRoundTrip() {
          "Chamfer distance1 should be readable.");
   Expect(chamfer.HasAngle() && std::abs(chamfer.GetAngle() - 45.0) < 1e-12,
          "Chamfer angle should be readable.");
+  Expect(chamfer.HasFirstEndFaceMarker(),
+         "Chamfer first end face marker should be readable.");
+  const CPoint3D marker = chamfer.GetFirstEndFaceMarker();
+  Expect(std::abs(marker.x - 0.05) < 1e-12 &&
+             std::abs(marker.y - 0.01) < 1e-12 &&
+             std::abs(marker.z - 0.02) < 1e-12,
+         "Chamfer first end face marker should preserve coordinates.");
   Expect(chamfer.GetReferenceCount() == 1,
          "Chamfer should preserve one reference.");
   Expect(chamfer.GetReference(0).GetRefType() == RefType::TOPO_EDGE,
@@ -784,6 +792,8 @@ void TestChamferBuilderAccessorAndXmlRoundTrip() {
          "Chamfer XML should serialize mode.");
   Expect(xml.find("Angle=\"45\"") != std::string::npos,
          "Chamfer XML should serialize angle.");
+  Expect(xml.find("FirstEndFaceMarker=\"(0.05,0.01,0.02)\"") != std::string::npos,
+         "Chamfer XML should serialize first end face marker.");
 
   UnifiedModel loaded;
   errorMessage.clear();
@@ -797,8 +807,77 @@ void TestChamferBuilderAccessorAndXmlRoundTrip() {
          "Loaded chamfer should preserve distance1.");
   Expect(std::abs(loadedChamfer.GetAngle() - 45.0) < 1e-12,
          "Loaded chamfer should preserve angle.");
+  Expect(loadedChamfer.HasFirstEndFaceMarker(),
+         "Loaded chamfer should preserve first end face marker.");
+  const CPoint3D loadedMarker = loadedChamfer.GetFirstEndFaceMarker();
+  Expect(std::abs(loadedMarker.x - 0.05) < 1e-12 &&
+             std::abs(loadedMarker.y - 0.01) < 1e-12 &&
+             std::abs(loadedMarker.z - 0.02) < 1e-12,
+         "Loaded chamfer should preserve first end face marker coordinates.");
   Expect(loadedChamfer.GetReferenceCount() == 1,
          "Loaded chamfer should preserve reference count.");
+}
+
+void TestChamferOffsetModeRoundTrip() {
+  UnifiedModel model(UnitType::METER, "chamfer-offset-roundtrip");
+  auto sketch = MakeSketch("SK-CHAMFER-OFFSET", "ChamferSketchOffset");
+  auto line = std::make_shared<CSketchLine>();
+  line->localID = "L_1";
+  line->startPos = CPoint3D{0.0, 0.0, 0.0};
+  line->endPos = CPoint3D{0.04, 0.0, 0.0};
+  sketch->segments.push_back(line);
+  model.AddFeature(sketch);
+
+  const std::string extrudeID =
+      MakeExtrudeFromSketch(model, "SK-CHAMFER-OFFSET", "ChamferBossOffset");
+
+  const std::string chamferID =
+      ChamferBuilder(model, "OffsetChamfer")
+          .SetMode(ChamferMode::TWO_OFFSETS)
+          .SetOffset1(0.0015)
+          .SetOffset2(0.0025)
+          .AddReference(Ref::Edge(extrudeID, 0)
+                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
+                            .EndPoint(CPoint3D{0.04, 0.0, 0.02})
+                            .MidPoint(CPoint3D{0.02, 0.0, 0.02}))
+          .Build();
+
+  ChamferAccessor chamfer(model.GetFeature(chamferID));
+  Expect(chamfer.GetMode() == ChamferMode::TWO_OFFSETS,
+         "Chamfer offset mode should be readable.");
+  Expect(chamfer.HasOffset1() && std::abs(chamfer.GetOffset1() - 0.0015) < 1e-12,
+         "Chamfer offset1 should be readable.");
+  Expect(chamfer.HasOffset2() && std::abs(chamfer.GetOffset2() - 0.0025) < 1e-12,
+         "Chamfer offset2 should be readable.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("tmp") / "cadexchange_chamfer_offset_roundtrip.xml";
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving offset chamfer XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("Mode=\"TwoOffsets\"") != std::string::npos,
+         "Chamfer XML should serialize offset mode.");
+  Expect(xml.find("Offset1=\"0.0015") != std::string::npos,
+         "Chamfer XML should serialize offset1.");
+  Expect(xml.find("Offset2=\"0.0025") != std::string::npos,
+         "Chamfer XML should serialize offset2.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading offset chamfer XML should succeed: " + errorMessage);
+  ChamferAccessor loadedChamfer(loaded.GetFeature(chamferID));
+  Expect(loadedChamfer.GetMode() == ChamferMode::TWO_OFFSETS,
+         "Loaded chamfer should preserve offset mode.");
+  Expect(std::abs(loadedChamfer.GetOffset1() - 0.0015) < 1e-12,
+         "Loaded chamfer should preserve offset1.");
+  Expect(std::abs(loadedChamfer.GetOffset2() - 0.0025) < 1e-12,
+         "Loaded chamfer should preserve offset2.");
 }
 
 void TestChamferValidationAndUnitConversion() {
@@ -834,6 +913,46 @@ void TestChamferValidationAndUnitConversion() {
          "Chamfer distance2 should scale to millimeters.");
   Expect(std::abs(converted.GetDistance3() - 3.0) < 1e-9,
          "Chamfer distance3 should scale to millimeters.");
+
+  UnifiedModel offsetModel(UnitType::METER, "chamfer-offset-unit-convert");
+  auto offsetSketch = MakeSketch("SK-CHAMFER-OFFSET-UNIT", "ChamferOffsetSketchUnit");
+  auto offsetLine = std::make_shared<CSketchLine>();
+  offsetLine->localID = "L_1";
+  offsetLine->startPos = CPoint3D{0.0, 0.0, 0.0};
+  offsetLine->endPos = CPoint3D{0.04, 0.0, 0.0};
+  offsetSketch->segments.push_back(offsetLine);
+  offsetModel.AddFeature(offsetSketch);
+
+  const std::string offsetExtrudeID =
+      MakeExtrudeFromSketch(offsetModel, "SK-CHAMFER-OFFSET-UNIT", "ChamferBossOffsetUnit");
+  const std::string offsetChamferID =
+      ChamferBuilder(offsetModel, "OffsetChamferUnit")
+          .SetMode(ChamferMode::TWO_OFFSETS)
+          .SetOffset1(0.004)
+          .SetOffset2(0.005)
+          .SetFirstEndFaceMarker(CPoint3D{0.004, 0.005, 0.006})
+          .AddReference(Ref::Edge(offsetExtrudeID, 0)
+                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
+                            .EndPoint(CPoint3D{0.04, 0.0, 0.02})
+                            .MidPoint(CPoint3D{0.02, 0.0, 0.02}))
+          .Build();
+
+  errorMessage.clear();
+  Expect(ConvertModelUnit(offsetModel, UnitType::CENTIMETER, &errorMessage),
+         "ConvertModelUnit should scale chamfer offsets: " + errorMessage);
+
+  ChamferAccessor convertedOffset(offsetModel.GetFeature(offsetChamferID));
+  Expect(std::abs(convertedOffset.GetOffset1() - 0.4) < 1e-9,
+         "Chamfer offset1 should scale to centimeters.");
+  Expect(std::abs(convertedOffset.GetOffset2() - 0.5) < 1e-9,
+         "Chamfer offset2 should scale to centimeters.");
+  Expect(convertedOffset.HasFirstEndFaceMarker(),
+         "Chamfer first end face marker should remain after unit conversion.");
+  const CPoint3D convertedMarker = convertedOffset.GetFirstEndFaceMarker();
+  Expect(std::abs(convertedMarker.x - 0.4) < 1e-9 &&
+             std::abs(convertedMarker.y - 0.5) < 1e-9 &&
+             std::abs(convertedMarker.z - 0.6) < 1e-9,
+         "Chamfer first end face marker should scale with model units.");
 
   UnifiedModel invalid(UnitType::METER, "chamfer-invalid");
   invalid.AddFeature(MakeSketch("SK-CHAMFER-BAD", "ChamferBadSketch"));
@@ -878,6 +997,7 @@ int main() {
   TestSketchConstraintValidationRejectsMissingSketchEntityRef();
   TestConvertModelUnitScalesSketchConstraintExternalReferences();
   TestChamferBuilderAccessorAndXmlRoundTrip();
+  TestChamferOffsetModeRoundTrip();
   TestChamferValidationAndUnitConversion();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
