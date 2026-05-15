@@ -354,6 +354,7 @@ struct CSketchConstraint {
    */
   enum class ConstraintType {
     COINCIDENT,    ///< 重合
+    USEEDGE,       ///< 使用边线/转换实体
     HORIZONTAL,    ///< 水平
     VERTICAL,      ///< 垂直（方向约束）
     PARALLEL,      ///< 平行

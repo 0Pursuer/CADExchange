@@ -45,6 +45,8 @@ std::string SketchConstraintTypeLabel(CSketchConstraint::ConstraintType type) {
   switch (type) {
   case CSketchConstraint::ConstraintType::COINCIDENT:
     return "COINCIDENT";
+  case CSketchConstraint::ConstraintType::USEEDGE:
+    return "USEEDGE";
   case CSketchConstraint::ConstraintType::HORIZONTAL:
     return "HORIZONTAL";
   case CSketchConstraint::ConstraintType::VERTICAL:

@@ -475,6 +475,7 @@ CVector3D ComputePlaneYAxis(const CVector3D &normal, const CVector3D &xDir) {
 const char *ConstraintTypeToString(CSketchConstraint::ConstraintType t) {
   switch (t) {
   case CSketchConstraint::ConstraintType::COINCIDENT:    return "Coincident";
+  case CSketchConstraint::ConstraintType::USEEDGE:       return "UseEdge";
   case CSketchConstraint::ConstraintType::HORIZONTAL:    return "Horizontal";
   case CSketchConstraint::ConstraintType::VERTICAL:      return "Vertical";
   case CSketchConstraint::ConstraintType::PARALLEL:      return "Parallel";
@@ -499,6 +500,7 @@ CSketchConstraint::ConstraintType ConstraintTypeFromString(const char *text) {
   if (!text) return CSketchConstraint::ConstraintType::UNKNOWN;
   std::string v = ToLower(text);
   if (v == "coincident")    return CSketchConstraint::ConstraintType::COINCIDENT;
+  if (v == "useedge")       return CSketchConstraint::ConstraintType::USEEDGE;
   if (v == "horizontal")    return CSketchConstraint::ConstraintType::HORIZONTAL;
   if (v == "vertical")      return CSketchConstraint::ConstraintType::VERTICAL;
   if (v == "parallel")      return CSketchConstraint::ConstraintType::PARALLEL;
