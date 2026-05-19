@@ -228,7 +228,7 @@
   - `Ref::XY/YZ/ZX`：内置标准平面引用工厂。
   - 名称解析重载：`Ref::Plane(model,name)` 等，内部通过 `GetFeatureIdByName`。
 - **其他函数分组**
-  - 各 Builder 的几何字段 setter（`Origin/Normal/StartPoint/...`）。
+  - 各 Builder 的几何字段 setter（`Origin/Normal/StartPoint/.../CurveType`）。
   - 各 Builder 的 `Build()` 与 `operator std::shared_ptr<...>()`。
 
 ### `service/builders/SketchBuilder.h`
@@ -345,7 +345,7 @@
 - **核心函数详列**
   - 类型/标识：`GetRefType()`、`GetParentFeatureID()`、`GetTargetFeatureID()`、`GetTopologyIndex()`、`GetSketchSegmentLocalID()`。
   - 标准基准判断：`IsStandard()`。
-  - 几何读取：`GetFace*`、`GetEdge*`、`GetVertexPosition`、`GetPlane*`、`GetAxis*`、`GetPointPosition`。
+  - 几何读取：`GetFace*`、`GetEdge*`、`GetEdgeCurveType()`、`GetVertexPosition`、`GetPlane*`、`GetAxis*`、`GetPointPosition`。
 - **其他函数分组**
   - 泛型输出重载（模板版本）。
   - 原始指针与类型提取：`Data()/GetRaw()/GetAs<T>()`。
@@ -522,10 +522,10 @@
 
 ### `service/geometry/GeometryCollectorBase.h`
 - **核心类**
-  - `template<class Derived, class EdgeT> GeometryCollectorBase`
+  - `template<class Derived, class EdgeT = CRefEdge> GeometryCollectorBase`
 - **核心函数详列**
   - `Collect(...)`：清空容器后调用派生类 `CollectImpl(...)`。
-  - `SaveEdgesToJson(...)`：导出边与辅助基准面为 JSON。
+  - `SaveEdgesToJson(...)`：导出边与辅助基准面为 JSON；边数据直接来自 `CRefEdge`，包含 `curveType`。
   - 只读访问：`GetEdges()/GetDatumPlanes()/EdgeCount()/DatumPlaneCount()`。
 - **其他函数分组**
   - 派生类写入口：`AddEdge(...)`、`AddDatumPlane(...)`。

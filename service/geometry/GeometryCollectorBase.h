@@ -21,7 +21,7 @@ namespace Geometry {
  * 1) 派生类实现 `CollectImpl(...)`
  * 2) 通过基类 `Collect(...)` 触发采集（先清空，再调用派生实现）
  */
-template <typename Derived, typename EdgeT = CGeoEdge>
+template <typename Derived, typename EdgeT = CRefEdge>
 class GeometryCollectorBase {
 public:
   using EdgeType = EdgeT;

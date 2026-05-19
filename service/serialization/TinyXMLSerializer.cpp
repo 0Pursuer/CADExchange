@@ -126,6 +126,56 @@ std::optional<BooleanOp> BooleanOpFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string CurveTypeToString(CGeoCurveType type) {
+  switch (type) {
+  case CGeoCurveType::LINE:
+    return "Line";
+  case CGeoCurveType::CIRCLE:
+    return "Circle";
+  case CGeoCurveType::ELLIPSE:
+    return "Ellipse";
+  case CGeoCurveType::INTERSECTION:
+    return "Intersection";
+  case CGeoCurveType::BCURVE:
+    return "BCurve";
+  case CGeoCurveType::SPCURVE:
+    return "SPCurve";
+  case CGeoCurveType::CONSTPARAM:
+    return "ConstParam";
+  case CGeoCurveType::TRIMMED:
+    return "Trimmed";
+  case CGeoCurveType::UNKNOWN:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<CGeoCurveType> CurveTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "line")
+    return CGeoCurveType::LINE;
+  if (value == "circle")
+    return CGeoCurveType::CIRCLE;
+  if (value == "ellipse")
+    return CGeoCurveType::ELLIPSE;
+  if (value == "intersection")
+    return CGeoCurveType::INTERSECTION;
+  if (value == "bcurve")
+    return CGeoCurveType::BCURVE;
+  if (value == "spcurve")
+    return CGeoCurveType::SPCURVE;
+  if (value == "constparam")
+    return CGeoCurveType::CONSTPARAM;
+  if (value == "trimmed")
+    return CGeoCurveType::TRIMMED;
+  if (value == "unknown")
+    return CGeoCurveType::UNKNOWN;
+  return std::nullopt;
+}
+
 std::string SegTypeToString(CSketchSeg::SegType type) {
   switch (type) {
   case CSketchSeg::SegType::LINE:
@@ -727,6 +777,8 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           element->SetAttribute("StartPoint", FormatPoint(edge->startPoint).c_str());
           element->SetAttribute("EndPoint", FormatPoint(edge->endPoint).c_str());
           element->SetAttribute("MidPoint", FormatPoint(edge->midPoint).c_str());
+          element->SetAttribute("CurveType",
+                                CurveTypeToString(edge->curveType).c_str());
         }
       },
       [](XMLElement *element) {
@@ -740,6 +792,17 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
         edge->startPoint = ParsePointAttribute(element, "StartPoint");
         edge->endPoint = ParsePointAttribute(element, "EndPoint");
         edge->midPoint = ParsePointAttribute(element, "MidPoint");
+        if (const char *curveTypeText = element->Attribute("CurveType")) {
+          if (auto mapped = CurveTypeFromString(curveTypeText)) {
+            edge->curveType = *mapped;
+          } else {
+            char *end = nullptr;
+            const long curveTypeValue = std::strtol(curveTypeText, &end, 10);
+            if (end != curveTypeText && end != nullptr && *end == '\0') {
+              edge->curveType = static_cast<CGeoCurveType>(curveTypeValue);
+            }
+          }
+        }
         return edge;
       }},
     {RefType::TOPO_VERTEX, "Vertex", "vertex",

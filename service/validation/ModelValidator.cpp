@@ -512,6 +512,20 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                     "' has not been defined yet.");
           }
         }
+        if (auto edge = std::dynamic_pointer_cast<CRefEdge>(ref)) {
+          const bool hasGeometry =
+              std::fabs(edge->startPoint.x - edge->endPoint.x) > GeoUtils::EPSILON ||
+              std::fabs(edge->startPoint.y - edge->endPoint.y) > GeoUtils::EPSILON ||
+              std::fabs(edge->startPoint.z - edge->endPoint.z) > GeoUtils::EPSILON ||
+              std::fabs(edge->startPoint.x - edge->midPoint.x) > GeoUtils::EPSILON ||
+              std::fabs(edge->startPoint.y - edge->midPoint.y) > GeoUtils::EPSILON ||
+              std::fabs(edge->startPoint.z - edge->midPoint.z) > GeoUtils::EPSILON;
+          if (hasGeometry && edge->curveType == CGeoCurveType::UNKNOWN) {
+            addWarn("[REF_007] Chamfer '" + chamfer->featureID +
+                    "' reference[" + std::to_string(i) +
+                    "] is an edge with geometry fingerprint but curveType is UNKNOWN.");
+          }
+        }
       }
     }
     // ---- CDatumPlane ----

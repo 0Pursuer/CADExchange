@@ -69,7 +69,7 @@
     <Feature ID="FB-11" Name="Chamfer_Edge" Suppressed="false" Type="Chamfer" Mode="DistanceAngle">
         <Parameters Distance1="2" Angle="45"/>
         <References>
-            <ReferenceEntity ParentFeatureID="FB-2" TopologyIndex="0" StartPoint="(0,0,20)" EndPoint="(100,0,20)" MidPoint="(50,0,20)" Type="Edge"/>
+            <ReferenceEntity ParentFeatureID="FB-2" TopologyIndex="0" StartPoint="(0,0,20)" EndPoint="(100,0,20)" MidPoint="(50,0,20)" CurveType="Line" Type="Edge"/>
         </References>
     </Feature>
 </UnifiedModel>

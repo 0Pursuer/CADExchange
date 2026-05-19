@@ -126,6 +126,14 @@ public:
    */
   BUILDER_ADD_POINT_SETTER(RefEdgeBuilder, midPoint, MidPoint)
 
+  /**
+   * @brief 设置边的曲线类型。
+   */
+  RefEdgeBuilder &CurveType(CGeoCurveType type) {
+    m_ptr->curveType = type;
+    return *this;
+  }
+
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; }
   operator std::shared_ptr<CRefEdge>() const { return m_ptr; }
 };

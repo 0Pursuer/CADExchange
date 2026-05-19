@@ -102,6 +102,8 @@ std::string sketchID = sk.Build();
 1. 草图内部子实体：`Whole / Start / End / Center / Midpoint`
 2. 外部引用对象：`Ref::Plane(...)`、`Ref::Edge(...)`、`Ref::Axis(...)`、`Ref::SketchSegment(...)`
 
+其中 `Ref::Edge(...)` 现在直接携带 `curveType`，不再依赖单独的 `CGeoEdge` 包装类型。
+
 ```cpp
 using namespace CADExchange;
 using namespace CADExchange::Builder;
@@ -750,7 +752,8 @@ std::string sweepByEdge =
       Builder::Ref::Edge("Base_Extrude", 3)
         .StartPoint(CPoint3D{0.0, 0.0, 0.0})
         .EndPoint(CPoint3D{0.05, 0.0, 0.0})
-        .MidPoint(CPoint3D{0.025, 0.0, 0.0}))
+        .MidPoint(CPoint3D{0.025, 0.0, 0.0})
+        .CurveType(CGeoCurveType::LINE))
     .SetPathStartPoint(CPoint3D{0.0, 0.0, 0.0})
     .SetPathEndPoint(CPoint3D{0.05, 0.0, 0.0})
     .Build();
@@ -1204,7 +1207,8 @@ std::string chamferID =
       Builder::Ref::Edge("Boss_Extrude", 0)
         .StartPoint(CPoint3D{0.0, 0.0, 0.02})
         .EndPoint(CPoint3D{0.05, 0.0, 0.02})
-        .MidPoint(CPoint3D{0.025, 0.0, 0.02}))
+        .MidPoint(CPoint3D{0.025, 0.0, 0.02})
+        .CurveType(CGeoCurveType::LINE))
     .Build();
 ```
 
@@ -1220,7 +1224,8 @@ std::string chamferID =
       Builder::Ref::Edge("Boss_Extrude", 1)
         .StartPoint(CPoint3D{0.05, 0.0, 0.02})
         .EndPoint(CPoint3D{0.05, 0.05, 0.02})
-        .MidPoint(CPoint3D{0.05, 0.025, 0.02}))
+        .MidPoint(CPoint3D{0.05, 0.025, 0.02})
+        .CurveType(CGeoCurveType::LINE))
     .Build();
 ```
 

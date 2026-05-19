@@ -180,7 +180,8 @@ std::string BuildChamferFeature(UnifiedModel& model,
             Ref::Edge(parentFeatureID, 0)
                 .StartPoint(CPoint3D{0.0, 0.0, 20.0})
                 .EndPoint(CPoint3D{100.0, 0.0, 20.0})
-                .MidPoint(CPoint3D{50.0, 0.0, 20.0}))
+                .MidPoint(CPoint3D{50.0, 0.0, 20.0})
+                .CurveType(CGeoCurveType::LINE))
         .Build();
 }
 

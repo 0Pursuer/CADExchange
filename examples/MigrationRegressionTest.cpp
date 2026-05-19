@@ -750,7 +750,8 @@ void TestChamferBuilderAccessorAndXmlRoundTrip() {
           .AddReference(Ref::Edge(extrudeID, 0)
                             .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.05, 0.0, 0.02})
-                            .MidPoint(CPoint3D{0.025, 0.0, 0.02}))
+                            .MidPoint(CPoint3D{0.025, 0.0, 0.02})
+                            .CurveType(CGeoCurveType::LINE))
           .Build();
 
   ChamferAccessor chamfer(model.GetFeature(chamferID));
@@ -839,7 +840,8 @@ void TestChamferOffsetModeRoundTrip() {
           .AddReference(Ref::Edge(extrudeID, 0)
                             .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.04, 0.0, 0.02})
-                            .MidPoint(CPoint3D{0.02, 0.0, 0.02}))
+                            .MidPoint(CPoint3D{0.02, 0.0, 0.02})
+                            .CurveType(CGeoCurveType::LINE))
           .Build();
 
   ChamferAccessor chamfer(model.GetFeature(chamferID));
@@ -934,7 +936,8 @@ void TestChamferValidationAndUnitConversion() {
           .AddReference(Ref::Edge(offsetExtrudeID, 0)
                             .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.04, 0.0, 0.02})
-                            .MidPoint(CPoint3D{0.02, 0.0, 0.02}))
+                            .MidPoint(CPoint3D{0.02, 0.0, 0.02})
+                            .CurveType(CGeoCurveType::LINE))
           .Build();
 
   errorMessage.clear();
@@ -982,6 +985,75 @@ void TestChamferValidationAndUnitConversion() {
          "Missing chamfer references should be reported by validation.");
 }
 
+void TestRefEdgeCurveTypeRoundTripAndUnitConversion() {
+  UnifiedModel model(UnitType::METER, "edge-curve-type-roundtrip");
+  auto sketch = MakeSketch("SK-EDGE-CURVE", "EdgeCurveSketch");
+  AddSimpleProfileSegment(sketch);
+  model.AddFeature(sketch);
+
+  const std::string extrudeID =
+      MakeExtrudeFromSketch(model, "SK-EDGE-CURVE", "EdgeCurveBoss");
+
+  const std::string chamferID =
+      ChamferBuilder(model, "EdgeCurveChamfer")
+          .SetMode(ChamferMode::DISTANCE_ANGLE)
+          .SetDistance1(0.003)
+          .SetAngle(45.0)
+          .AddReference(Ref::Edge(extrudeID, 0)
+                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
+                            .EndPoint(CPoint3D{0.05, 0.0, 0.02})
+                            .MidPoint(CPoint3D{0.025, 0.0, 0.02})
+                            .CurveType(CGeoCurveType::LINE))
+          .Build();
+
+  ChamferAccessor chamfer(model.GetFeature(chamferID));
+  Expect(chamfer.IsValid(), "ChamferAccessor should be valid for edge curve type test.");
+  Expect(chamfer.GetReferenceCount() == 1,
+         "Chamfer should preserve one edge reference in curve type test.");
+
+  auto edgeRef = chamfer.GetReference(0);
+  Expect(edgeRef.GetRefType() == RefType::TOPO_EDGE,
+         "Chamfer reference should remain an edge.");
+  Expect(edgeRef.GetEdgeCurveType() == CGeoCurveType::LINE,
+         "Accessor should expose the edge curve type set by builder.");
+
+  std::string errorMessage;
+  Expect(ConvertModelUnit(model, UnitType::MILLIMETER, &errorMessage),
+         "ConvertModelUnit should preserve edge curve type: " + errorMessage);
+  ChamferAccessor converted(model.GetFeature(chamferID));
+  Expect(converted.GetReference(0).GetEdgeCurveType() == CGeoCurveType::LINE,
+         "Unit conversion must not alter edge curve type.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("tmp") / "cadexchange_edge_curve_type_roundtrip.xml";
+  std::filesystem::create_directories(xmlPath.parent_path());
+  errorMessage.clear();
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving edge curve type XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  const auto curveTypePos = xml.find("CurveType=\"");
+  const std::string curveTypeSnippet =
+      curveTypePos == std::string::npos
+          ? std::string("<missing>")
+          : xml.substr(curveTypePos, std::min<std::size_t>(32, xml.size() - curveTypePos));
+  Expect(xml.find("CurveType=\"Line\"") != std::string::npos,
+         "Edge XML should serialize curve type as stable text token. actual=" +
+             curveTypeSnippet);
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading edge curve type XML should succeed: " + errorMessage);
+  ChamferAccessor loadedChamfer(loaded.GetFeature(chamferID));
+  Expect(loadedChamfer.IsValid(),
+         "Loaded chamfer should remain accessible for edge curve type test.");
+  Expect(loadedChamfer.GetReference(0).GetEdgeCurveType() == CGeoCurveType::LINE,
+         "Loaded edge reference should preserve curve type.");
+}
+
 } // namespace
 
 int main() {
@@ -999,6 +1071,7 @@ int main() {
   TestChamferBuilderAccessorAndXmlRoundTrip();
   TestChamferOffsetModeRoundTrip();
   TestChamferValidationAndUnitConversion();
+  TestRefEdgeCurveTypeRoundTripAndUnitConversion();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

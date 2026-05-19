@@ -238,6 +238,16 @@ public:
   }
 
   /**
+   * @brief 获取边的曲线类型；若当前不是边引用则返回 UNKNOWN。
+   */
+  CGeoCurveType GetEdgeCurveType() const {
+    if (auto edge = std::dynamic_pointer_cast<const CRefEdge>(m_ref)) {
+      return edge->curveType;
+    }
+    return CGeoCurveType::UNKNOWN;
+  }
+
+  /**
    * @brief 尝试获取顶点位置（如果是顶点引用）。
    */
   bool GetVertexPosition(CPoint3D &outPos) const {

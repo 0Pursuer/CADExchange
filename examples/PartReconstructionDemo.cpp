@@ -550,6 +550,8 @@ void ExtractExtrudeData(const std::string &xmlPath) {
               std::cout << "    边中点: (" << midPoint[0] << ", " << midPoint[1]
                         << ", " << midPoint[2] << ")" << std::endl;
             }
+            std::cout << "    边曲线类型: "
+                      << static_cast<int>(ref1.GetEdgeCurveType()) << std::endl;
           } else if (refType == RefType::FEATURE_DATUM_PLANE) {
             std::array<double, 3> origin{};
             std::array<double, 3> normal{}, xDir{};
@@ -617,6 +619,9 @@ void ExtractExtrudeData(const std::string &xmlPath) {
                           << midPoint[1] << ", " << midPoint[2] << ")"
                           << std::endl;
               }
+              std::cout << "    边曲线类型: "
+                        << static_cast<int>(ref2.GetEdgeCurveType())
+                        << std::endl;
             }
           } else {
             std::cout << "  参考实体: (无效或未设置)" << std::endl;

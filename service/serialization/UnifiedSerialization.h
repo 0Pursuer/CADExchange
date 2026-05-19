@@ -111,7 +111,8 @@ template <class Archive> void serialize(Archive &ar, CRefEdge &edge) {
   ar(cereal::base_class<CRefSubTopo>(&edge),
      cereal::make_nvp("StartPoint", edge.startPoint),
      cereal::make_nvp("EndPoint", edge.endPoint),
-     cereal::make_nvp("MidPoint", edge.midPoint));
+     cereal::make_nvp("MidPoint", edge.midPoint),
+     cereal::make_nvp("CurveType", edge.curveType));
 }
 
 /**
