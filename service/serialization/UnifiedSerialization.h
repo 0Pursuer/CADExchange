@@ -354,6 +354,41 @@ template <class Archive> void serialize(Archive &ar, CSweep &sweep) {
      cereal::make_nvp("ProfilePathAngleCos", sweep.profilePathAngleCos));
 }
 
+template <class Archive> void serialize(Archive &ar, CFilletRadiusItem &item) {
+  ar(cereal::make_nvp("Position", item.position),
+     cereal::make_nvp("Radius1", item.radius1),
+     cereal::make_nvp("Radius2", item.radius2),
+     cereal::make_nvp("RefEdge", item.refEdge));
+}
+
+template <class Archive> void serialize(Archive &ar, CFilletParams &params) {
+  ar(cereal::make_nvp("CrossSection", params.crossSection),
+     cereal::make_nvp("ReferenceMode", params.referenceMode),
+     cereal::make_nvp("DefaultRadius", params.defaultRadius),
+     cereal::make_nvp("DefaultRadius2", params.defaultRadius2),
+     cereal::make_nvp("IsAsymmetric", params.isAsymmetric),
+     cereal::make_nvp("TangentPropagation", params.tangentPropagation),
+     cereal::make_nvp("CurvatureContinuous", params.curvatureContinuous),
+     cereal::make_nvp("ConicValue", params.conicValue),
+     cereal::make_nvp("ConicValueMode", params.conicValueMode),
+     cereal::make_nvp("RadiusItems", params.radiusItems));
+}
+
+template <class Archive> void serialize(Archive &ar, CFillet &fillet) {
+  ar(cereal::base_class<CFeatureBase>(&fillet),
+     cereal::make_nvp("Mode", fillet.mode),
+     cereal::make_nvp("Params", fillet.params),
+     cereal::make_nvp("References", fillet.references),
+     cereal::make_nvp("Side1Faces", fillet.side1Faces),
+     cereal::make_nvp("Side2Faces", fillet.side2Faces),
+     cereal::make_nvp("CenterFaces", fillet.centerFaces),
+     cereal::make_nvp("FirstEndFaceMarker", fillet.firstEndFaceMarker),
+     cereal::make_nvp("SwOverflowType", fillet.swOverflowType),
+     cereal::make_nvp("SwKeepFeatures", fillet.swKeepFeatures),
+     cereal::make_nvp("CreoAttachType", fillet.creoAttachType),
+     cereal::make_nvp("CreoConicDepOption", fillet.creoConicDepOption));
+}
+
 /**
  * @brief 序列化倒角参数。
  */

@@ -9,6 +9,7 @@
 #include "ExtrudeBuilder.h"
 #include "RevolveBuilder.h"
 #include "SweepBuilder.h"
+#include "FilletBuilder.h"
 #include "ChamferBuilder.h"
 #include "DatumPlaneBuilder.h"
 

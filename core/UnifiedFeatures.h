@@ -28,6 +28,7 @@ enum class FeatureType {
   Extrude,
   Revolve,
   Sweep,
+  Fillet,
   Chamfer,
   Sketch,
   DatumPlane
@@ -565,6 +566,72 @@ struct CSweep : public CProfiledFeatureBase {
   std::optional<double> profilePathAngleCos;
 
   CSweep() { featureType = FeatureType::Sweep; }
+};
+
+enum class FilletMode {
+  UNKNOWN = 0,
+  CONSTANT_RADIUS,
+  VARIABLE_RADIUS,
+  FACE_FILLET,
+  FULL_ROUND,
+  CHORDAL
+};
+
+enum class FilletCrossSection {
+  UNKNOWN = 0,
+  CIRCULAR,
+  CONIC,
+  CURVATURE_CONTINUOUS
+};
+
+enum class FilletReferenceMode {
+  UNKNOWN = 0,
+  EDGE_CHAIN,
+  FACE_FACE,
+  FULL_ROUND_THREE_FACES
+};
+
+enum class FilletConicValueMode {
+  NONE = 0,
+  RHO,
+  RADIUS,
+  GENERIC_VALUE
+};
+
+struct CFilletRadiusItem {
+  std::optional<double> position;
+  std::optional<double> radius1;
+  std::optional<double> radius2;
+  std::shared_ptr<CRefEdge> refEdge;
+};
+
+struct CFilletParams {
+  FilletCrossSection crossSection{FilletCrossSection::UNKNOWN};
+  FilletReferenceMode referenceMode{FilletReferenceMode::UNKNOWN};
+  std::optional<double> defaultRadius;
+  std::optional<double> defaultRadius2;
+  bool isAsymmetric = false;
+  bool tangentPropagation = false;
+  bool curvatureContinuous = false;
+  std::optional<double> conicValue;
+  FilletConicValueMode conicValueMode{FilletConicValueMode::NONE};
+  std::vector<CFilletRadiusItem> radiusItems;
+};
+
+struct CFillet : public CFeatureBase {
+  FilletMode mode{FilletMode::UNKNOWN};
+  CFilletParams params;
+  std::vector<std::shared_ptr<CRefEntityBase>> references;
+  std::vector<std::shared_ptr<CRefFace>> side1Faces;
+  std::vector<std::shared_ptr<CRefFace>> side2Faces;
+  std::vector<std::shared_ptr<CRefFace>> centerFaces;
+  std::optional<CPoint3D> firstEndFaceMarker;
+  std::optional<std::string> swOverflowType;
+  bool swKeepFeatures = false;
+  std::optional<int> creoAttachType;
+  std::optional<int> creoConicDepOption;
+
+  CFillet() { featureType = FeatureType::Fillet; }
 };
 
 /**

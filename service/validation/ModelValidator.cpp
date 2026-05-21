@@ -528,6 +528,122 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         }
       }
     }
+    // ---- CFillet ----
+    else if (auto fillet = std::dynamic_pointer_cast<CFillet>(feature)) {
+      if (fillet->mode == FilletMode::UNKNOWN) {
+        addError("[FILLET_001] Fillet '" + fillet->featureID +
+                 "' mode is UNKNOWN.");
+      }
+      if (fillet->params.referenceMode == FilletReferenceMode::UNKNOWN) {
+        addError("[FILLET_002] Fillet '" + fillet->featureID +
+                 "' referenceMode is UNKNOWN.");
+      }
+
+      switch (fillet->params.referenceMode) {
+        case FilletReferenceMode::EDGE_CHAIN:
+          if (fillet->references.empty()) {
+            addError("[FILLET_003] Fillet '" + fillet->featureID +
+                     "' has no edge references.");
+          }
+          break;
+        case FilletReferenceMode::FACE_FACE:
+          if (fillet->side1Faces.empty() || fillet->side2Faces.empty()) {
+            addError("[FILLET_004] Fillet '" + fillet->featureID +
+                     "' face-face mode requires side1Faces and side2Faces.");
+          }
+          break;
+        case FilletReferenceMode::FULL_ROUND_THREE_FACES:
+          if (fillet->side1Faces.empty() || fillet->side2Faces.empty() ||
+              fillet->centerFaces.empty()) {
+            addError("[FILLET_005] Fillet '" + fillet->featureID +
+                     "' full-round mode requires side1Faces, centerFaces, and side2Faces.");
+          }
+          break;
+        case FilletReferenceMode::UNKNOWN:
+          break;
+      }
+
+      if (fillet->mode == FilletMode::CONSTANT_RADIUS ||
+          fillet->mode == FilletMode::CHORDAL) {
+        if (!fillet->params.defaultRadius.has_value()) {
+          addError("[FILLET_006] Fillet '" + fillet->featureID +
+                   "' missing required defaultRadius.");
+        } else if (*fillet->params.defaultRadius <= 0.0) {
+          addError("[FILLET_007] Fillet '" + fillet->featureID +
+                   "' defaultRadius=" + std::to_string(*fillet->params.defaultRadius) +
+                   " (must be > 0).");
+        }
+      }
+
+      if (fillet->mode == FilletMode::VARIABLE_RADIUS &&
+          fillet->params.radiusItems.empty()) {
+        addError("[FILLET_008] Fillet '" + fillet->featureID +
+                 "' variable-radius mode requires radiusItems.");
+      }
+
+      if (fillet->params.defaultRadius2.has_value() &&
+          *fillet->params.defaultRadius2 <= 0.0) {
+        addError("[FILLET_009] Fillet '" + fillet->featureID +
+                 "' defaultRadius2=" + std::to_string(*fillet->params.defaultRadius2) +
+                 " (must be > 0).");
+      }
+
+      for (size_t i = 0; i < fillet->params.radiusItems.size(); ++i) {
+        const auto& item = fillet->params.radiusItems[i];
+        if (!item.radius1.has_value()) {
+          addError("[FILLET_010] Fillet '" + fillet->featureID +
+                   "' radiusItems[" + std::to_string(i) + "] missing radius1.");
+        } else if (*item.radius1 <= 0.0) {
+          addError("[FILLET_011] Fillet '" + fillet->featureID +
+                   "' radiusItems[" + std::to_string(i) + "].radius1=" +
+                   std::to_string(*item.radius1) + " (must be > 0).");
+        }
+        if (item.radius2.has_value() && *item.radius2 <= 0.0) {
+          addError("[FILLET_012] Fillet '" + fillet->featureID +
+                   "' radiusItems[" + std::to_string(i) + "].radius2=" +
+                   std::to_string(*item.radius2) + " (must be > 0).");
+        }
+        if (item.position.has_value() &&
+            (*item.position < 0.0 || *item.position > 1.0)) {
+          addWarn("[FILLET_013] Fillet '" + fillet->featureID +
+                  "' radiusItems[" + std::to_string(i) + "].position=" +
+                  std::to_string(*item.position) +
+                  " is outside [0, 1] -- check edge parameter normalization.");
+        }
+      }
+
+      auto checkFilletRef = [&](const std::shared_ptr<CRefEntityBase>& ref,
+                                const std::string& role,
+                                size_t index) {
+        if (!ref) {
+          addError("[FILLET_014] Fillet '" + fillet->featureID + "' " + role +
+                   "[" + std::to_string(index) + "] is null.");
+          return;
+        }
+        if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_007] Fillet '" + fillet->featureID + "' " + role +
+                    "[" + std::to_string(index) + "] parent feature '" +
+                    subTopo->parentFeatureID + "' has not been defined yet.");
+          }
+        }
+      };
+
+      for (size_t i = 0; i < fillet->references.size(); ++i) {
+        checkFilletRef(fillet->references[i], "references", i);
+      }
+      for (size_t i = 0; i < fillet->side1Faces.size(); ++i) {
+        checkFilletRef(fillet->side1Faces[i], "side1Faces", i);
+      }
+      for (size_t i = 0; i < fillet->side2Faces.size(); ++i) {
+        checkFilletRef(fillet->side2Faces[i], "side2Faces", i);
+      }
+      for (size_t i = 0; i < fillet->centerFaces.size(); ++i) {
+        checkFilletRef(fillet->centerFaces[i], "centerFaces", i);
+      }
+    }
     // ---- CDatumPlane ----
     else if (auto datumPlane = std::dynamic_pointer_cast<CDatumPlane>(feature)) {
       if (datumPlane->method == PlaneMethod::UNKNOWN) {

@@ -98,6 +98,13 @@ private:
                         const std::shared_ptr<CSweep> &sweep);
 
   /**
+   * @brief Serialize a `CFillet` feature.
+   */
+  static void SaveFillet(tinyxml2::XMLDocument &doc,
+                         tinyxml2::XMLElement *element,
+                         const std::shared_ptr<CFillet> &fillet);
+
+  /**
    * @brief Serialize a `CChamfer` feature.
    */
   static void SaveChamfer(tinyxml2::XMLDocument &doc,
@@ -188,6 +195,12 @@ private:
    */
   static void LoadSweep(tinyxml2::XMLElement *element,
                         std::shared_ptr<CSweep> &sweep);
+
+  /**
+   * @brief Restore a `CFillet` feature from XML.
+   */
+  static void LoadFillet(tinyxml2::XMLElement *element,
+                         std::shared_ptr<CFillet> &fillet);
 
   /**
    * @brief Restore a `CChamfer` feature from XML.

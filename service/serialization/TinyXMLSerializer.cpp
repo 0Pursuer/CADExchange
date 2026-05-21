@@ -352,6 +352,155 @@ std::optional<ChamferMode> ChamferModeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string FilletModeToString(FilletMode mode) {
+  switch (mode) {
+  case FilletMode::CONSTANT_RADIUS:
+    return "ConstantRadius";
+  case FilletMode::VARIABLE_RADIUS:
+    return "VariableRadius";
+  case FilletMode::FACE_FILLET:
+    return "FaceFillet";
+  case FilletMode::FULL_ROUND:
+    return "FullRound";
+  case FilletMode::CHORDAL:
+    return "Chordal";
+  case FilletMode::UNKNOWN:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<FilletMode> FilletModeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "constantradius") {
+    return FilletMode::CONSTANT_RADIUS;
+  }
+  if (value == "variableradius") {
+    return FilletMode::VARIABLE_RADIUS;
+  }
+  if (value == "facefillet") {
+    return FilletMode::FACE_FILLET;
+  }
+  if (value == "fullround") {
+    return FilletMode::FULL_ROUND;
+  }
+  if (value == "chordal") {
+    return FilletMode::CHORDAL;
+  }
+  if (value == "unknown") {
+    return FilletMode::UNKNOWN;
+  }
+  return std::nullopt;
+}
+
+std::string FilletCrossSectionToString(FilletCrossSection crossSection) {
+  switch (crossSection) {
+  case FilletCrossSection::CIRCULAR:
+    return "Circular";
+  case FilletCrossSection::CONIC:
+    return "Conic";
+  case FilletCrossSection::CURVATURE_CONTINUOUS:
+    return "CurvatureContinuous";
+  case FilletCrossSection::UNKNOWN:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<FilletCrossSection>
+FilletCrossSectionFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "circular") {
+    return FilletCrossSection::CIRCULAR;
+  }
+  if (value == "conic") {
+    return FilletCrossSection::CONIC;
+  }
+  if (value == "curvaturecontinuous") {
+    return FilletCrossSection::CURVATURE_CONTINUOUS;
+  }
+  if (value == "unknown") {
+    return FilletCrossSection::UNKNOWN;
+  }
+  return std::nullopt;
+}
+
+std::string FilletReferenceModeToString(FilletReferenceMode referenceMode) {
+  switch (referenceMode) {
+  case FilletReferenceMode::EDGE_CHAIN:
+    return "EdgeChain";
+  case FilletReferenceMode::FACE_FACE:
+    return "FaceFace";
+  case FilletReferenceMode::FULL_ROUND_THREE_FACES:
+    return "FullRoundThreeFaces";
+  case FilletReferenceMode::UNKNOWN:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<FilletReferenceMode>
+FilletReferenceModeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "edgechain") {
+    return FilletReferenceMode::EDGE_CHAIN;
+  }
+  if (value == "faceface") {
+    return FilletReferenceMode::FACE_FACE;
+  }
+  if (value == "fullroundthreefaces") {
+    return FilletReferenceMode::FULL_ROUND_THREE_FACES;
+  }
+  if (value == "unknown") {
+    return FilletReferenceMode::UNKNOWN;
+  }
+  return std::nullopt;
+}
+
+std::string FilletConicValueModeToString(FilletConicValueMode mode) {
+  switch (mode) {
+  case FilletConicValueMode::RHO:
+    return "Rho";
+  case FilletConicValueMode::RADIUS:
+    return "Radius";
+  case FilletConicValueMode::GENERIC_VALUE:
+    return "GenericValue";
+  case FilletConicValueMode::NONE:
+    return "None";
+  }
+  return "None";
+}
+
+std::optional<FilletConicValueMode>
+FilletConicValueModeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "rho") {
+    return FilletConicValueMode::RHO;
+  }
+  if (value == "radius") {
+    return FilletConicValueMode::RADIUS;
+  }
+  if (value == "genericvalue") {
+    return FilletConicValueMode::GENERIC_VALUE;
+  }
+  if (value == "none") {
+    return FilletConicValueMode::NONE;
+  }
+  return std::nullopt;
+}
+
 std::string SweepSectionPlacementToString(SweepSectionPlacement placement) {
   switch (placement) {
   case SweepSectionPlacement::ExistingProfilePlane:
@@ -937,6 +1086,10 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "Sweep");
       SaveSweep(doc, featElem, std::static_pointer_cast<CSweep>(feature));
       break;
+    case FeatureType::Fillet:
+      featElem->SetAttribute("Type", "Fillet");
+      SaveFillet(doc, featElem, std::static_pointer_cast<CFillet>(feature));
+      break;
     case FeatureType::Chamfer:
       featElem->SetAttribute("Type", "Chamfer");
       SaveChamfer(doc, featElem, std::static_pointer_cast<CChamfer>(feature));
@@ -1274,23 +1427,68 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
 
   XMLElement *paramsElem = doc.NewElement("Parameters");
   element->InsertEndChild(paramsElem);
-  if (chamfer->params.distance1.has_value()) {
-    paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
-  }
-  if (chamfer->params.distance2.has_value()) {
-    paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
-  }
-  if (chamfer->params.distance3.has_value()) {
-    paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
-  }
-  if (chamfer->params.offset1.has_value()) {
-    paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
-  }
-  if (chamfer->params.offset2.has_value()) {
-    paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
-  }
-  if (chamfer->params.angle.has_value()) {
-    paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+  switch (chamfer->mode) {
+  case ChamferMode::EQUAL_DISTANCE:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    break;
+  case ChamferMode::TWO_DISTANCES:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    break;
+  case ChamferMode::TWO_OFFSETS:
+    if (chamfer->params.offset1.has_value()) {
+      paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
+    }
+    if (chamfer->params.offset2.has_value()) {
+      paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
+    }
+    break;
+  case ChamferMode::DISTANCE_ANGLE:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.angle.has_value()) {
+      paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+    }
+    break;
+  case ChamferMode::VERTEX_3DISTANCES:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    if (chamfer->params.distance3.has_value()) {
+      paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+    }
+    break;
+  case ChamferMode::UNKNOWN:
+  default:
+    if (chamfer->params.distance1.has_value()) {
+      paramsElem->SetAttribute("Distance1", *chamfer->params.distance1);
+    }
+    if (chamfer->params.distance2.has_value()) {
+      paramsElem->SetAttribute("Distance2", *chamfer->params.distance2);
+    }
+    if (chamfer->params.distance3.has_value()) {
+      paramsElem->SetAttribute("Distance3", *chamfer->params.distance3);
+    }
+    if (chamfer->params.offset1.has_value()) {
+      paramsElem->SetAttribute("Offset1", *chamfer->params.offset1);
+    }
+    if (chamfer->params.offset2.has_value()) {
+      paramsElem->SetAttribute("Offset2", *chamfer->params.offset2);
+    }
+    if (chamfer->params.angle.has_value()) {
+      paramsElem->SetAttribute("Angle", *chamfer->params.angle);
+    }
+    break;
   }
 
   XMLElement *refsElem = doc.NewElement("References");
@@ -1298,6 +1496,99 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
   for (const auto &ref : chamfer->references) {
     SaveRefEntity(doc, refsElem, "ReferenceEntity", ref);
   }
+}
+
+void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
+                                   const std::shared_ptr<CFillet> &fillet) {
+  element->SetAttribute("Mode", FilletModeToString(fillet->mode).c_str());
+  if (fillet->params.isAsymmetric && fillet->firstEndFaceMarker.has_value()) {
+    SavePoint3D(element, "FirstEndFaceMarker",
+                *fillet->firstEndFaceMarker);
+  }
+  const bool hasRadiusItems = !fillet->params.radiusItems.empty();
+  const bool emitDefaultRadius =
+      fillet->params.defaultRadius.has_value() ||
+      fillet->params.defaultRadius2.has_value() ||
+      fillet->mode != FilletMode::VARIABLE_RADIUS || !hasRadiusItems;
+
+  XMLElement *paramsElem = doc.NewElement("Parameters");
+  if (fillet->params.crossSection != FilletCrossSection::UNKNOWN) {
+    paramsElem->SetAttribute(
+        "CrossSection",
+        FilletCrossSectionToString(fillet->params.crossSection).c_str());
+  }
+  if (fillet->params.referenceMode != FilletReferenceMode::UNKNOWN) {
+    paramsElem->SetAttribute(
+        "ReferenceMode",
+        FilletReferenceModeToString(fillet->params.referenceMode).c_str());
+  }
+  paramsElem->SetAttribute("IsAsymmetric", fillet->params.isAsymmetric);
+  if (emitDefaultRadius && fillet->params.defaultRadius.has_value()) {
+    paramsElem->SetAttribute("DefaultRadius", *fillet->params.defaultRadius);
+  }
+  if (emitDefaultRadius && fillet->params.defaultRadius2.has_value()) {
+    paramsElem->SetAttribute("DefaultRadius2", *fillet->params.defaultRadius2);
+  }
+  if (fillet->params.crossSection == FilletCrossSection::CONIC &&
+      fillet->params.conicValueMode != FilletConicValueMode::NONE) {
+    paramsElem->SetAttribute(
+        "ConicValueMode",
+        FilletConicValueModeToString(fillet->params.conicValueMode).c_str());
+  }
+  if (fillet->params.crossSection == FilletCrossSection::CONIC &&
+      fillet->params.conicValue.has_value()) {
+    paramsElem->SetAttribute("ConicValue", *fillet->params.conicValue);
+  }
+  element->InsertEndChild(paramsElem);
+
+  XMLElement *radiusItemsElem = doc.NewElement("RadiusItems");
+  for (const auto &item : fillet->params.radiusItems) {
+    XMLElement *itemElem = doc.NewElement("RadiusItem");
+    if (item.position.has_value()) {
+      itemElem->SetAttribute("Position", *item.position);
+    }
+    if (item.radius1.has_value()) {
+      itemElem->SetAttribute("Radius1", *item.radius1);
+    }
+    if (item.radius2.has_value()) {
+      itemElem->SetAttribute("Radius2", *item.radius2);
+    }
+    if (item.refEdge) {
+      SaveRefEntity(doc, itemElem, "ReferenceEntity", item.refEdge);
+    }
+    radiusItemsElem->InsertEndChild(itemElem);
+  }
+  if (radiusItemsElem->FirstChildElement("RadiusItem") != nullptr) {
+    element->InsertEndChild(radiusItemsElem);
+  } else {
+    doc.DeleteNode(radiusItemsElem);
+  }
+
+  XMLElement *refsElem = doc.NewElement("References");
+  for (const auto &ref : fillet->references) {
+    SaveRefEntity(doc, refsElem, "ReferenceEntity", ref);
+  }
+  if (refsElem->FirstChildElement("ReferenceEntity") != nullptr) {
+    element->InsertEndChild(refsElem);
+  } else {
+    doc.DeleteNode(refsElem);
+  }
+
+  auto saveFaceGroup = [&](const char *name,
+                           const std::vector<std::shared_ptr<CRefFace>> &faces) {
+    XMLElement *groupElem = doc.NewElement(name);
+    for (const auto &face : faces) {
+      SaveRefEntity(doc, groupElem, "ReferenceEntity", face);
+    }
+    if (groupElem->FirstChildElement("ReferenceEntity") != nullptr) {
+      element->InsertEndChild(groupElem);
+    } else {
+      doc.DeleteNode(groupElem);
+    }
+  };
+  saveFaceGroup("Side1Faces", fillet->side1Faces);
+  saveFaceGroup("Side2Faces", fillet->side2Faces);
+  saveFaceGroup("CenterFaces", fillet->centerFaces);
 }
 
 // =================================================================================================
@@ -1440,6 +1731,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto sweep = std::make_shared<CSweep>();
     LoadSweep(element, sweep);
     feature = sweep;
+  } else if (type == "Fillet") {
+    auto fillet = std::make_shared<CFillet>();
+    LoadFillet(element, fillet);
+    feature = fillet;
   } else if (type == "Chamfer") {
     auto chamfer = std::make_shared<CChamfer>();
     LoadChamfer(element, chamfer);
@@ -1921,6 +2216,135 @@ void TinyXMLSerializer::LoadChamfer(XMLElement *element,
         chamfer->references.push_back(ref);
       }
       refElem = refElem->NextSiblingElement("ReferenceEntity");
+    }
+  }
+}
+
+void TinyXMLSerializer::LoadFillet(XMLElement *element,
+                                   std::shared_ptr<CFillet> &fillet) {
+  int intValue = 0;
+  if (auto mode = FilletModeFromString(element->Attribute("Mode"))) {
+    fillet->mode = *mode;
+  } else if (element->QueryIntAttribute("Mode", &intValue) == XML_SUCCESS) {
+    fillet->mode = static_cast<FilletMode>(intValue);
+  }
+  if (element->Attribute("FirstEndFaceMarker")) {
+    fillet->firstEndFaceMarker =
+        LoadPoint3D(element, "FirstEndFaceMarker");
+  }
+
+  if (XMLElement *paramsElem = element->FirstChildElement("Parameters")) {
+    if (auto crossSection =
+            FilletCrossSectionFromString(paramsElem->Attribute("CrossSection"))) {
+      fillet->params.crossSection = *crossSection;
+    } else if (paramsElem->QueryIntAttribute("CrossSection", &intValue) ==
+               XML_SUCCESS) {
+      fillet->params.crossSection = static_cast<FilletCrossSection>(intValue);
+    }
+    if (auto referenceMode =
+            FilletReferenceModeFromString(paramsElem->Attribute("ReferenceMode"))) {
+      fillet->params.referenceMode = *referenceMode;
+    } else if (paramsElem->QueryIntAttribute("ReferenceMode", &intValue) ==
+               XML_SUCCESS) {
+      fillet->params.referenceMode =
+          static_cast<FilletReferenceMode>(intValue);
+    }
+    paramsElem->QueryBoolAttribute("IsAsymmetric",
+                                   &fillet->params.isAsymmetric);
+    paramsElem->QueryBoolAttribute("TangentPropagation",
+                                   &fillet->params.tangentPropagation);
+    paramsElem->QueryBoolAttribute("CurvatureContinuous",
+                                   &fillet->params.curvatureContinuous);
+    if (auto conicValueMode =
+            FilletConicValueModeFromString(paramsElem->Attribute("ConicValueMode"))) {
+      fillet->params.conicValueMode = *conicValueMode;
+    } else if (paramsElem->QueryIntAttribute("ConicValueMode", &intValue) ==
+               XML_SUCCESS) {
+      fillet->params.conicValueMode =
+          static_cast<FilletConicValueMode>(intValue);
+    }
+    double doubleValue = 0.0;
+    if (paramsElem->QueryDoubleAttribute("DefaultRadius", &doubleValue) ==
+        XML_SUCCESS) {
+      fillet->params.defaultRadius = doubleValue;
+    }
+    if (paramsElem->QueryDoubleAttribute("DefaultRadius2", &doubleValue) ==
+        XML_SUCCESS) {
+      fillet->params.defaultRadius2 = doubleValue;
+    }
+    if (paramsElem->QueryDoubleAttribute("ConicValue", &doubleValue) ==
+        XML_SUCCESS) {
+      fillet->params.conicValue = doubleValue;
+    }
+  }
+
+  if (!fillet->params.isAsymmetric) {
+    fillet->firstEndFaceMarker.reset();
+  }
+
+  if (XMLElement *itemsElem = element->FirstChildElement("RadiusItems")) {
+    for (XMLElement *itemElem = itemsElem->FirstChildElement("RadiusItem");
+         itemElem != nullptr;
+         itemElem = itemElem->NextSiblingElement("RadiusItem")) {
+      CFilletRadiusItem item;
+      double doubleValue = 0.0;
+      if (itemElem->QueryDoubleAttribute("Position", &doubleValue) ==
+          XML_SUCCESS) {
+        item.position = doubleValue;
+      }
+      if (itemElem->QueryDoubleAttribute("Radius1", &doubleValue) ==
+          XML_SUCCESS) {
+        item.radius1 = doubleValue;
+      }
+      if (itemElem->QueryDoubleAttribute("Radius2", &doubleValue) ==
+          XML_SUCCESS) {
+        item.radius2 = doubleValue;
+      }
+      if (auto *edgeElem = itemElem->FirstChildElement("ReferenceEntity")) {
+        item.refEdge =
+            std::dynamic_pointer_cast<CRefEdge>(LoadRefEntity(edgeElem));
+      }
+      fillet->params.radiusItems.push_back(std::move(item));
+    }
+  }
+
+  if (XMLElement *refsElem = element->FirstChildElement("References")) {
+    for (XMLElement *refElem = refsElem->FirstChildElement("ReferenceEntity");
+         refElem != nullptr;
+         refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+      if (auto ref = LoadRefEntity(refElem)) {
+        fillet->references.push_back(ref);
+      }
+    }
+  }
+
+  auto loadFaceGroup = [&](const char *name,
+                           std::vector<std::shared_ptr<CRefFace>> &target) {
+    if (XMLElement *groupElem = element->FirstChildElement(name)) {
+      for (XMLElement *faceElem = groupElem->FirstChildElement("ReferenceEntity");
+           faceElem != nullptr; faceElem = faceElem->NextSiblingElement("ReferenceEntity")) {
+        auto face = std::dynamic_pointer_cast<CRefFace>(LoadRefEntity(faceElem));
+        if (face) {
+          target.push_back(std::move(face));
+        }
+      }
+    }
+  };
+  loadFaceGroup("Side1Faces", fillet->side1Faces);
+  loadFaceGroup("Side2Faces", fillet->side2Faces);
+  loadFaceGroup("CenterFaces", fillet->centerFaces);
+
+  if (XMLElement *extElem = element->FirstChildElement("VendorExtensions")) {
+    extElem->QueryBoolAttribute("SwKeepFeatures", &fillet->swKeepFeatures);
+    if (const char *text = extElem->Attribute("SwOverflowType")) {
+      fillet->swOverflowType = text;
+    }
+    if (extElem->QueryIntAttribute("CreoAttachType", &intValue) == XML_SUCCESS) {
+      fillet->creoAttachType = intValue;
+    }
+    if (extElem->QueryIntAttribute("CreoConicDepOption", &intValue) ==
+        XML_SUCCESS) {
+      fillet->creoConicDepOption = intValue;
     }
   }
 }

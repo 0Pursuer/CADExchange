@@ -244,6 +244,44 @@ void ScaleChamfer(CChamfer &chamfer, double factor, UnitScaleContext &ctx) {
   }
 }
 
+void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
+  if (fillet.params.defaultRadius.has_value()) {
+    *fillet.params.defaultRadius *= factor;
+  }
+  if (fillet.params.defaultRadius2.has_value()) {
+    *fillet.params.defaultRadius2 *= factor;
+  }
+  if (fillet.params.conicValue.has_value()) {
+    *fillet.params.conicValue *= factor;
+  }
+  if (fillet.firstEndFaceMarker.has_value()) {
+    ScalePoint(*fillet.firstEndFaceMarker, factor);
+  }
+  for (auto &item : fillet.params.radiusItems) {
+    if (item.radius1.has_value()) {
+      *item.radius1 *= factor;
+    }
+    if (item.radius2.has_value()) {
+      *item.radius2 *= factor;
+    }
+    if (item.refEdge) {
+      ScaleRefEntity(item.refEdge, factor, ctx);
+    }
+  }
+  for (auto &ref : fillet.references) {
+    ScaleRefEntity(ref, factor, ctx);
+  }
+  for (auto &face : fillet.side1Faces) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+  for (auto &face : fillet.side2Faces) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+  for (auto &face : fillet.centerFaces) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+}
+
 void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &ctx) {
   for (auto &ref : datumPlane.referenceEntities) {
     ScaleRefEntity(ref, factor, ctx);
@@ -305,6 +343,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Sweep:
         ScaleSweep(*std::static_pointer_cast<CSweep>(feature), factor, ctx);
+        break;
+      case FeatureType::Fillet:
+        ScaleFillet(*std::static_pointer_cast<CFillet>(feature), factor, ctx);
         break;
       case FeatureType::Chamfer:
         ScaleChamfer(*std::static_pointer_cast<CChamfer>(feature), factor, ctx);
