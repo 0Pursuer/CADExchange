@@ -10,16 +10,65 @@
 #include <sstream>
 #include <utility>
 #include <vector>
+#include <map>
+#include <string>
+#include <cmath>
+
+#include "../../thirdParty/cereal/archives/json.hpp"
+#include "../../thirdParty/cereal/types/vector.hpp"
+#include "../../thirdParty/cereal/types/map.hpp"
+#include "../../thirdParty/cereal/types/string.hpp"
 
 namespace CADExchange {
+
+// ---------------------------------------------------------
+// Non-intrusive cereal serialization for geometric primitives
+// ---------------------------------------------------------
+template <class Archive>
+void serialize(Archive &ar, CPoint3D &pt) {
+  ar(cereal::make_nvp("x", pt.x),
+     cereal::make_nvp("y", pt.y),
+     cereal::make_nvp("z", pt.z));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CVector3D &vec) {
+  ar(cereal::make_nvp("x", vec.x),
+     cereal::make_nvp("y", vec.y),
+     cereal::make_nvp("z", vec.z));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CSketchCSys &csys) {
+  ar(cereal::make_nvp("origin", csys.origin),
+     cereal::make_nvp("xDir", csys.xDir),
+     cereal::make_nvp("yDir", csys.yDir),
+     cereal::make_nvp("zDir", csys.zDir));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CGeoDatumPlane &plane) {
+  ar(cereal::make_nvp("targetFeatureID", plane.targetFeatureID),
+     cereal::make_nvp("type", plane.type),
+     cereal::make_nvp("localCSys", plane.localCSys));
+}
+
+template <class Archive>
+void serialize(Archive &ar, CRefEdge &edge) {
+  int curveTypeVal = static_cast<int>(edge.curveType);
+  ar(cereal::make_nvp("parentFeatureID", edge.parentFeatureID),
+     cereal::make_nvp("topologyIndex", edge.topologyIndex),
+     cereal::make_nvp("curveType", curveTypeVal),
+     cereal::make_nvp("startPoint", edge.startPoint),
+     cereal::make_nvp("endPoint", edge.endPoint),
+     cereal::make_nvp("midPoint", edge.midPoint));
+  edge.curveType = static_cast<CGeoCurveType>(curveTypeVal);
+}
+
 namespace Geometry {
 
 /**
- * @brief CRTP 基类：统一管理几何边与辅助基准面容器，派生类负责具体 CAD 接口读取。
- *
- * 用法：
- * 1) 派生类实现 `CollectImpl(...)`
- * 2) 通过基类 `Collect(...)` 触发采集（先清空，再调用派生实现）
+ * @brief CRTP 基类：统一管理几何边与辅助基准面容器
  */
 template <typename Derived, typename EdgeT = CRefEdge>
 class GeometryCollectorBase {
@@ -43,74 +92,48 @@ public:
     m_datumPlanes.clear();
   }
 
-  bool SaveEdgesToJson(const std::filesystem::path &filePath,
-                       std::string *errorMessage = nullptr,
-                       const std::string &lengthUnit = "") const {
-    std::ofstream out(filePath, std::ios::trunc);
-    if (!out.is_open()) {
-      if (errorMessage) {
-        *errorMessage = "Unable to open geometry json output: " +
-                        filePath.string();
-      }
+  // Serialization for the collector itself
+  template <class Archive>
+  void serialize(Archive &ar) {
+    ar(cereal::make_nvp("edges", m_edges),
+       cereal::make_nvp("datumPlanes", m_datumPlanes));
+  }
+
+  // Equivalency check for runtime validation
+  bool IsEquivalent(const GeometryCollectorBase& other, double tol = 2e-3) const {
+    if (m_edges.size() != other.m_edges.size()) {
       return false;
     }
+    if (m_datumPlanes.size() != other.m_datumPlanes.size()) return false;
 
-    out.imbue(std::locale::classic());
-    out << std::setprecision(std::numeric_limits<double>::max_digits10);
-
-    out << "{\n";
-    out << "  \"schema_version\": 1,\n";
-    if (!lengthUnit.empty()) {
-      out << "  \"length_unit\": \"" << EscapeJson(lengthUnit) << "\",\n";
-    }
-    out << "  \"edge_count\": " << m_edges.size() << ",\n";
-    out << "  \"datum_plane_count\": " << m_datumPlanes.size() << ",\n";
-    out << "  \"edges\": [\n";
-    for (std::size_t i = 0; i < m_edges.size(); ++i) {
-      const auto &edge = m_edges[i];
-      out << "    {\n";
-      out << "      \"parentFeatureID\": \"" << EscapeJson(edge.parentFeatureID)
-          << "\",\n";
-      out << "      \"topologyIndex\": " << edge.topologyIndex << ",\n";
-      out << "      \"curveType\": \"" << CurveTypeToString(edge.curveType)
-          << "\",\n";
-      out << "      \"curveTypeValue\": " << static_cast<int>(edge.curveType)
-          << ",\n";
-      out << "      \"startPoint\": " << FormatPoint(edge.startPoint) << ",\n";
-      out << "      \"endPoint\": " << FormatPoint(edge.endPoint) << ",\n";
-      out << "      \"midPoint\": " << FormatPoint(edge.midPoint) << "\n";
-      out << "    }";
-      if (i + 1 < m_edges.size()) {
-        out << ",";
+    // Verify all edges in 'this' exist in 'other'
+    for (size_t i = 0; i < m_edges.size(); ++i) {
+      const auto& myEdge = m_edges[i];
+      bool found = false;
+      for (const auto& otherEdge : other.m_edges) {
+        if (myEdge.curveType == otherEdge.curveType) {
+          double dx = myEdge.midPoint.x - otherEdge.midPoint.x;
+          double dy = myEdge.midPoint.y - otherEdge.midPoint.y;
+          double dz = myEdge.midPoint.z - otherEdge.midPoint.z;
+          double dist = std::sqrt(dx*dx + dy*dy + dz*dz);
+          if (dist <= tol) {
+            found = true;
+            break;
+          }
+        }
       }
-      out << "\n";
-    }
-    out << "  ],\n";
-    out << "  \"datum_planes\": [\n";
-    for (std::size_t i = 0; i < m_datumPlanes.size(); ++i) {
-      const auto &plane = m_datumPlanes[i];
-      out << "    {\n";
-      out << "      \"targetFeatureID\": \""
-          << EscapeJson(plane.targetFeatureID) << "\",\n";
-      out << "      \"type\": \"" << EscapeJson(plane.type) << "\",\n";
-      out << "      \"origin\": " << FormatPoint(plane.localCSys.origin) << ",\n";
-      out << "      \"xDir\": " << FormatVector(plane.localCSys.xDir) << ",\n";
-      out << "      \"yDir\": " << FormatVector(plane.localCSys.yDir) << ",\n";
-      out << "      \"normal\": " << FormatVector(plane.localCSys.zDir) << "\n";
-      out << "    }";
-      if (i + 1 < m_datumPlanes.size()) {
-        out << ",";
+      if (!found) {
+        std::cout << "[DEBUG] IsEquivalent FAIL: myEdge mid=(" << myEdge.midPoint.x << "," << myEdge.midPoint.y << "," << myEdge.midPoint.z << ") NOT FOUND" << std::endl;
+        double minD = 1e9;
+        for (const auto& oe : other.m_edges) {
+          double d = std::sqrt(std::pow(myEdge.midPoint.x - oe.midPoint.x, 2) + 
+                               std::pow(myEdge.midPoint.y - oe.midPoint.y, 2) + 
+                               std::pow(myEdge.midPoint.z - oe.midPoint.z, 2));
+          if (d < minD) minD = d;
+        }
+        std::cout << "[DEBUG] Best match dist: " << minD << " (tol=" << tol << ")" << std::endl;
+        return false;
       }
-      out << "\n";
-    }
-    out << "  ]\n";
-    out << "}\n";
-
-    if (!out.good()) {
-      if (errorMessage) {
-        *errorMessage = "Failed to write geometry json: " + filePath.string();
-      }
-      return false;
     }
     return true;
   }
@@ -121,95 +144,84 @@ protected:
   void AddDatumPlane(const DatumPlaneType &plane) { m_datumPlanes.push_back(plane); }
   void AddDatumPlane(DatumPlaneType &&plane) { m_datumPlanes.emplace_back(std::move(plane)); }
 
-private:
-  static std::string EscapeJson(const std::string &value) {
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (unsigned char ch : value) {
-      switch (ch) {
-      case '\\':
-        out += "\\\\";
-        break;
-      case '"':
-        out += "\\\"";
-        break;
-      case '\b':
-        out += "\\b";
-        break;
-      case '\f':
-        out += "\\f";
-        break;
-      case '\n':
-        out += "\\n";
-        break;
-      case '\r':
-        out += "\\r";
-        break;
-      case '\t':
-        out += "\\t";
-        break;
-      default:
-        if (ch < 0x20) {
-          static const char kHex[] = "0123456789ABCDEF";
-          out += "\\u00";
-          out.push_back(kHex[(ch >> 4) & 0xF]);
-          out.push_back(kHex[ch & 0xF]);
-        } else {
-          out.push_back(static_cast<char>(ch));
-        }
-        break;
-      }
-    }
-    return out;
-  }
-
-  static std::string FormatPoint(const CPoint3D &pt) {
-    return "{\"x\":" + FormatNumber(pt.x) + ",\"y\":" +
-           FormatNumber(pt.y) + ",\"z\":" + FormatNumber(pt.z) + "}";
-  }
-
-  static std::string FormatVector(const CVector3D &vec) {
-    return "{\"x\":" + FormatNumber(vec.x) + ",\"y\":" +
-           FormatNumber(vec.y) + ",\"z\":" + FormatNumber(vec.z) + "}";
-  }
-
-  static std::string CurveTypeToString(CGeoCurveType type) {
-    switch (type) {
-    case CGeoCurveType::LINE:
-      return "Line";
-    case CGeoCurveType::CIRCLE:
-      return "Circle";
-    case CGeoCurveType::ELLIPSE:
-      return "Ellipse";
-    case CGeoCurveType::INTERSECTION:
-      return "Intersection";
-    case CGeoCurveType::BCURVE:
-      return "BCurve";
-    case CGeoCurveType::SPCURVE:
-      return "SPCurve";
-    case CGeoCurveType::CONSTPARAM:
-      return "ConstParam";
-    case CGeoCurveType::TRIMMED:
-      return "Trimmed";
-    case CGeoCurveType::UNKNOWN:
-    default:
-      return "Unknown";
-    }
-  }
-
-  static std::string FormatNumber(double value) {
-    std::ostringstream oss;
-    oss.imbue(std::locale::classic());
-    oss << std::setprecision(std::numeric_limits<double>::max_digits10)
-        << value;
-    return oss.str();
-  }
-
   Derived &DerivedSelf() noexcept { return static_cast<Derived &>(*this); }
 
 private:
   std::vector<EdgeType> m_edges;
   std::vector<DatumPlaneType> m_datumPlanes;
+};
+
+/**
+ * @brief 包含多个特征级 GeometryCollector 的模型级几何集合。
+ * 提供方便的基于 cereal 的序列化和反序列化 JSON。
+ */
+template <typename CollectorT>
+class ModelGeometrySet {
+public:
+  std::map<std::string, CollectorT> features;
+
+  template <class Archive>
+  void serialize(Archive &ar) {
+    ar(cereal::make_nvp("features", features));
+  }
+
+  bool SaveToJson(const std::filesystem::path &filePath,
+                  std::string *errorMessage = nullptr) const {
+    std::ofstream out(filePath, std::ios::trunc);
+    if (!out.is_open()) {
+      if (errorMessage) {
+        *errorMessage = "Unable to open geometry json output: " + filePath.string();
+      }
+      return false;
+    }
+    try {
+      cereal::JSONOutputArchive archive(out);
+      archive(cereal::make_nvp("ModelGeometry", *this));
+      return true;
+    } catch (const std::exception& e) {
+      if (errorMessage) {
+        *errorMessage = "Failed to write geometry json: " + std::string(e.what());
+      }
+      return false;
+    }
+  }
+
+  bool LoadFromJson(const std::filesystem::path &filePath,
+                    std::string *errorMessage = nullptr) {
+    std::ifstream in(filePath);
+    if (!in.is_open()) {
+      if (errorMessage) {
+        *errorMessage = "Unable to open geometry json input: " + filePath.string();
+      }
+      return false;
+    }
+    try {
+      cereal::JSONInputArchive archive(in);
+      archive(cereal::make_nvp("ModelGeometry", *this));
+      return true;
+    } catch (const std::exception& e) {
+      if (errorMessage) {
+        *errorMessage = "Failed to parse geometry json: " + std::string(e.what());
+      }
+      return false;
+    }
+  }
+  
+  std::size_t TotalEdgeCount() const {
+    std::size_t total = 0;
+    for (const auto& pair : features) {
+      total += pair.second.EdgeCount();
+    }
+    return total;
+  }
+  
+  std::size_t TotalDatumPlaneCount() const {
+    std::size_t total = 0;
+    for (const auto& pair : features) {
+      total += pair.second.DatumPlaneCount();
+    }
+    return total;
+  }
 };
 
 } // namespace Geometry
