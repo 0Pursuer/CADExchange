@@ -257,15 +257,13 @@ void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
   if (fillet.firstEndFaceMarker.has_value()) {
     ScalePoint(*fillet.firstEndFaceMarker, factor);
   }
-  for (auto &item : fillet.params.radiusItems) {
-    if (item.radius1.has_value()) {
-      *item.radius1 *= factor;
+  for (auto &point : fillet.params.radiusPoints) {
+    point.radius1 *= factor;
+    if (point.radius2.has_value()) {
+      *point.radius2 *= factor;
     }
-    if (item.radius2.has_value()) {
-      *item.radius2 *= factor;
-    }
-    if (item.refEdge) {
-      ScaleRefEntity(item.refEdge, factor, ctx);
+    if (point.edgeRef) {
+      ScaleRefEntity(point.edgeRef, factor, ctx);
     }
   }
   for (auto &ref : fillet.references) {

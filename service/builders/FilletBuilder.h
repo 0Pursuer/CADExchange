@@ -27,7 +27,7 @@ public:
   }
 
   FilletBuilder &SetReferenceMode(FilletReferenceMode referenceMode) {
-    m_feature->params.referenceMode = referenceMode;
+    m_feature->referenceMode = referenceMode;
     return *this;
   }
 
@@ -52,10 +52,12 @@ public:
   }
 
   FilletBuilder &SetCurvatureContinuous(bool value = true) {
-    m_feature->params.curvatureContinuous = value;
     if (value) {
       m_feature->params.crossSection =
           FilletCrossSection::CURVATURE_CONTINUOUS;
+    } else if (m_feature->params.crossSection ==
+               FilletCrossSection::CURVATURE_CONTINUOUS) {
+      m_feature->params.crossSection = FilletCrossSection::UNKNOWN;
     }
     return *this;
   }
@@ -97,11 +99,11 @@ public:
     return AddFace(m_feature->centerFaces, ref, "Fillet center face");
   }
 
-  FilletBuilder &AddRadiusItem(const CFilletRadiusItem &item) {
-    if (item.refEdge) {
-      ValidateReference(item.refEdge);
+  FilletBuilder &AddRadiusPoint(const CFilletRadiusPoint &point) {
+    if (point.edgeRef) {
+      ValidateReference(point.edgeRef);
     }
-    m_feature->params.radiusItems.push_back(item);
+    m_feature->params.radiusPoints.push_back(point);
     return *this;
   }
 

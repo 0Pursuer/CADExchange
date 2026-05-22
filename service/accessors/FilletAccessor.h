@@ -37,7 +37,7 @@ public:
   ACCESSOR_GETTER(FilletMode, Mode, mode, FilletMode::UNKNOWN)
   ACCESSOR_GETTER(FilletCrossSection, CrossSection, params.crossSection,
                   FilletCrossSection::UNKNOWN)
-  ACCESSOR_GETTER(FilletReferenceMode, ReferenceMode, params.referenceMode,
+  ACCESSOR_GETTER(FilletReferenceMode, ReferenceMode, referenceMode,
                   FilletReferenceMode::UNKNOWN)
 
   bool HasDefaultRadius() const {
@@ -65,7 +65,9 @@ public:
   }
 
   bool IsCurvatureContinuous() const {
-    return IsValid() && Data()->params.curvatureContinuous;
+    return IsValid() &&
+           Data()->params.crossSection ==
+               FilletCrossSection::CURVATURE_CONTINUOUS;
   }
 
   bool HasConicValue() const {
@@ -81,9 +83,9 @@ public:
                      : FilletConicValueMode::NONE;
   }
 
-  const std::vector<CFilletRadiusItem> &GetRadiusItems() const {
-    static const std::vector<CFilletRadiusItem> kEmpty;
-    return IsValid() ? Data()->params.radiusItems : kEmpty;
+  const std::vector<CFilletRadiusPoint> &GetRadiusPoints() const {
+    static const std::vector<CFilletRadiusPoint> kEmpty;
+    return IsValid() ? Data()->params.radiusPoints : kEmpty;
   }
 
   bool HasFirstEndFaceMarker() const {

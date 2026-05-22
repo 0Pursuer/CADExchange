@@ -598,28 +598,27 @@ enum class FilletConicValueMode {
   GENERIC_VALUE
 };
 
-struct CFilletRadiusItem {
-  std::optional<double> position;
-  std::optional<double> radius1;
+struct CFilletRadiusPoint {
+  double position = 0.0;
+  double radius1 = 0.0;
   std::optional<double> radius2;
-  std::shared_ptr<CRefEdge> refEdge;
+  std::shared_ptr<CRefEdge> edgeRef;
 };
 
 struct CFilletParams {
-  FilletCrossSection crossSection{FilletCrossSection::UNKNOWN};
-  FilletReferenceMode referenceMode{FilletReferenceMode::UNKNOWN};
   std::optional<double> defaultRadius;
   std::optional<double> defaultRadius2;
+  std::vector<CFilletRadiusPoint> radiusPoints;
+  FilletCrossSection crossSection{FilletCrossSection::UNKNOWN};
+  FilletConicValueMode conicValueMode{FilletConicValueMode::NONE};
+  std::optional<double> conicValue;
   bool isAsymmetric = false;
   bool tangentPropagation = false;
-  bool curvatureContinuous = false;
-  std::optional<double> conicValue;
-  FilletConicValueMode conicValueMode{FilletConicValueMode::NONE};
-  std::vector<CFilletRadiusItem> radiusItems;
 };
 
 struct CFillet : public CFeatureBase {
   FilletMode mode{FilletMode::UNKNOWN};
+  FilletReferenceMode referenceMode{FilletReferenceMode::UNKNOWN};
   CFilletParams params;
   std::vector<std::shared_ptr<CRefEntityBase>> references;
   std::vector<std::shared_ptr<CRefFace>> side1Faces;

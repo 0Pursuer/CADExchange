@@ -1069,11 +1069,11 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
   const std::string extrudeID =
       MakeExtrudeFromSketch(model, "SK-FILLET", "FilletBoss");
 
-  CFilletRadiusItem radiusItem;
-  radiusItem.position = 0.25;
-  radiusItem.radius1 = 0.002;
-  radiusItem.radius2 = 0.003;
-  radiusItem.refEdge = Ref::Edge(extrudeID, 0)
+  CFilletRadiusPoint radiusPoint;
+  radiusPoint.position = 0.25;
+  radiusPoint.radius1 = 0.002;
+  radiusPoint.radius2 = 0.003;
+  radiusPoint.edgeRef = Ref::Edge(extrudeID, 0)
                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                            .EndPoint(CPoint3D{0.06, 0.0, 0.02})
                            .MidPoint(CPoint3D{0.03, 0.0, 0.02});
@@ -1093,7 +1093,7 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
                             .StartPoint(CPoint3D{0.06, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.06, 0.06, 0.02})
                             .MidPoint(CPoint3D{0.06, 0.03, 0.02}))
-          .AddRadiusItem(radiusItem)
+          .AddRadiusPoint(radiusPoint)
           .SetSwOverflowType("KeepEdge")
           .SetSwKeepFeatures(true)
           .SetCreoAttachType(2)
@@ -1131,17 +1131,17 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
          "Fillet first-end-face marker should preserve coordinates.");
   Expect(fillet.GetReferences().size() == 1,
          "Fillet should preserve one edge-chain reference.");
-  Expect(fillet.GetRadiusItems().size() == 1,
-         "Fillet should preserve one radius item.");
-  const auto &item = fillet.GetRadiusItems().front();
-  Expect(item.position.has_value() && std::abs(*item.position - 0.25) < 1e-12,
-         "Fillet radius item position should be readable.");
-  Expect(item.radius1.has_value() && std::abs(*item.radius1 - 0.002) < 1e-12,
-         "Fillet radius item radius1 should be readable.");
-  Expect(item.radius2.has_value() && std::abs(*item.radius2 - 0.003) < 1e-12,
-         "Fillet radius item radius2 should be readable.");
-  Expect(item.refEdge != nullptr,
-         "Fillet radius item refEdge should be preserved.");
+  Expect(fillet.GetRadiusPoints().size() == 1,
+         "Fillet should preserve one radius point.");
+  const auto &point = fillet.GetRadiusPoints().front();
+  Expect(std::abs(point.position - 0.25) < 1e-12,
+         "Fillet radius point position should be readable.");
+  Expect(std::abs(point.radius1 - 0.002) < 1e-12,
+         "Fillet radius point radius1 should be readable.");
+  Expect(point.radius2.has_value() && std::abs(*point.radius2 - 0.003) < 1e-12,
+         "Fillet radius point radius2 should be readable.");
+  Expect(point.edgeRef != nullptr,
+         "Fillet radius point edgeRef should be preserved.");
   const std::string chordalFilletID =
       FilletBuilder(model, "ChordalFillet")
           .SetMode(FilletMode::CHORDAL)
@@ -1182,11 +1182,11 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
   Expect(xml.find("ConicValueMode=\"Rho\"") != std::string::npos,
          "Fillet XML should serialize ConicValueMode only when conic data is present.");
   Expect(xml.find("DefaultRadius=\"0.004") == std::string::npos,
-         "Variable-radius fillet XML should not duplicate default radius when RadiusItems are present.");
+         "Variable-radius fillet XML should not duplicate default radius when RadiusPoints are present.");
   Expect(xml.find("DefaultRadius2=\"0.005") == std::string::npos,
-         "Variable-radius fillet XML should not duplicate default radius2 when RadiusItems are present.");
-  Expect(xml.find("RadiusItem") != std::string::npos,
-         "Fillet XML should serialize radius items.");
+         "Variable-radius fillet XML should not duplicate default radius2 when RadiusPoints are present.");
+  Expect(xml.find("RadiusPoint") != std::string::npos,
+         "Fillet XML should serialize radius points.");
   Expect(xml.find("VendorExtensions") == std::string::npos,
          "Fillet XML should not serialize vendor-specific extension fields.");
   Expect(xml.find("Mode=\"Chordal\"") != std::string::npos,
@@ -1208,13 +1208,13 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
              std::abs(loadedFilletMarker.z - 0.02) < 1e-12,
          "Loaded fillet should preserve first-end-face marker coordinates.");
   Expect(!loadedFillet.HasDefaultRadius(),
-         "Loaded variable-radius fillet should omit duplicate default radius when RadiusItems are serialized.");
+         "Loaded variable-radius fillet should omit duplicate default radius when RadiusPoints are serialized.");
   Expect(!loadedFillet.HasDefaultRadius2(),
-         "Loaded variable-radius fillet should omit duplicate default radius2 when RadiusItems are serialized.");
+         "Loaded variable-radius fillet should omit duplicate default radius2 when RadiusPoints are serialized.");
   Expect(loadedFillet.GetReferences().size() == 1,
          "Loaded fillet should preserve references.");
-  Expect(loadedFillet.GetRadiusItems().size() == 1,
-         "Loaded fillet should preserve radius items.");
+  Expect(loadedFillet.GetRadiusPoints().size() == 1,
+         "Loaded fillet should preserve radius points.");
   FilletAccessor loadedChordalFillet(loaded.GetFeature(chordalFilletID));
   Expect(loadedChordalFillet.IsValid(), "Loaded chordal fillet should be accessible.");
   Expect(loadedChordalFillet.GetMode() == FilletMode::CHORDAL,
@@ -1234,10 +1234,10 @@ void TestFilletUnitConversion() {
   const std::string extrudeID =
       MakeExtrudeFromSketch(model, "SK-FILLET-UNIT", "FilletBossUnit");
 
-  CFilletRadiusItem radiusItem;
-  radiusItem.radius1 = 0.001;
-  radiusItem.radius2 = 0.002;
-  radiusItem.refEdge = Ref::Edge(extrudeID, 0)
+  CFilletRadiusPoint radiusPoint;
+  radiusPoint.radius1 = 0.001;
+  radiusPoint.radius2 = 0.002;
+  radiusPoint.edgeRef = Ref::Edge(extrudeID, 0)
                            .StartPoint(CPoint3D{0.0, 0.0, 0.02})
                            .EndPoint(CPoint3D{0.05, 0.0, 0.02})
                            .MidPoint(CPoint3D{0.025, 0.0, 0.02});
@@ -1255,7 +1255,7 @@ void TestFilletUnitConversion() {
                             .StartPoint(CPoint3D{0.05, 0.0, 0.02})
                             .EndPoint(CPoint3D{0.05, 0.05, 0.02})
                             .MidPoint(CPoint3D{0.05, 0.025, 0.02}))
-          .AddRadiusItem(radiusItem)
+          .AddRadiusPoint(radiusPoint)
           .Build();
 
   std::string errorMessage;
@@ -1270,13 +1270,13 @@ void TestFilletUnitConversion() {
   Expect(converted.HasConicValue() &&
              std::abs(converted.GetConicValue() - 5.0) < 1e-9,
          "Fillet conic value should scale with model units.");
-  Expect(converted.GetRadiusItems().size() == 1,
-         "Converted fillet should preserve radius items.");
-  const auto &item = converted.GetRadiusItems().front();
-  Expect(item.radius1.has_value() && std::abs(*item.radius1 - 1.0) < 1e-9,
-         "Fillet radius item radius1 should scale to millimeters.");
-  Expect(item.radius2.has_value() && std::abs(*item.radius2 - 2.0) < 1e-9,
-         "Fillet radius item radius2 should scale to millimeters.");
+  Expect(converted.GetRadiusPoints().size() == 1,
+         "Converted fillet should preserve radius points.");
+  const auto &point2 = converted.GetRadiusPoints().front();
+  Expect(std::abs(point2.radius1 - 1.0) < 1e-9,
+         "Fillet radius point radius1 should scale to millimeters.");
+  Expect(point2.radius2.has_value() && std::abs(*point2.radius2 - 2.0) < 1e-9,
+         "Fillet radius point radius2 should scale to millimeters.");
   Expect(converted.HasFirstEndFaceMarker(),
          "Converted fillet should preserve first-end-face marker.");
   const CPoint3D convertedMarker = converted.GetFirstEndFaceMarker();
