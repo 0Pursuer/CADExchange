@@ -1536,14 +1536,17 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
   if (emitDefaultRadius && fillet->params.defaultRadius2.has_value()) {
     paramsElem->SetAttribute("DefaultRadius2", *fillet->params.defaultRadius2);
   }
-  if (fillet->params.crossSection == FilletCrossSection::CONIC &&
+  const bool emitConicValue =
+      fillet->params.crossSection == FilletCrossSection::CONIC ||
+      fillet->params.crossSection ==
+          FilletCrossSection::CURVATURE_CONTINUOUS;
+  if (emitConicValue &&
       fillet->params.conicValueMode != FilletConicValueMode::NONE) {
     paramsElem->SetAttribute(
         "ConicValueMode",
         FilletConicValueModeToString(fillet->params.conicValueMode).c_str());
   }
-  if (fillet->params.crossSection == FilletCrossSection::CONIC &&
-      fillet->params.conicValue.has_value()) {
+  if (emitConicValue && fillet->params.conicValue.has_value()) {
     paramsElem->SetAttribute("ConicValue", *fillet->params.conicValue);
   }
   element->InsertEndChild(paramsElem);
