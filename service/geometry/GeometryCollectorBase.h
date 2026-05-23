@@ -123,15 +123,26 @@ public:
         }
       }
       if (!found) {
-        std::cout << "[DEBUG] IsEquivalent FAIL: myEdge mid=(" << myEdge.midPoint.x << "," << myEdge.midPoint.y << "," << myEdge.midPoint.z << ") NOT FOUND" << std::endl;
+        std::cout << "[DEBUG] IsEquivalent FAIL: myEdge type=" << (int)myEdge.curveType 
+                  << " mid=(" << std::fixed << std::setprecision(8) << myEdge.midPoint.x << "," << myEdge.midPoint.y << "," << myEdge.midPoint.z << ") NOT FOUND" << std::endl;
+        
+        std::cout << "[DEBUG] Reference edges (count=" << other.m_edges.size() << "):" << std::endl;
+        for (const auto& oe : other.m_edges) {
+           std::cout << "  - type=" << (int)oe.curveType << " mid=(" << oe.midPoint.x << "," << oe.midPoint.y << "," << oe.midPoint.z << ")" << std::endl;
+        }
+
         double minD = 1e9;
+        int bestType = -1;
         for (const auto& oe : other.m_edges) {
           double d = std::sqrt(std::pow(myEdge.midPoint.x - oe.midPoint.x, 2) + 
                                std::pow(myEdge.midPoint.y - oe.midPoint.y, 2) + 
                                std::pow(myEdge.midPoint.z - oe.midPoint.z, 2));
-          if (d < minD) minD = d;
+          if (d < minD) {
+              minD = d;
+              bestType = (int)oe.curveType;
+          }
         }
-        std::cout << "[DEBUG] Best match dist: " << minD << " (tol=" << tol << ")" << std::endl;
+        std::cout << "[DEBUG] Best match (any type): dist=" << minD << " type=" << bestType << " (tol=" << tol << ")" << std::endl;
         return false;
       }
     }

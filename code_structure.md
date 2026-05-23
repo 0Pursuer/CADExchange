@@ -21,7 +21,7 @@
 ### 1.1 分层概览（从下到上）
 
 1. **thirdParty 层**  
-   - 提供外部依赖：`tinyxml2`、`cereal`、`cadex_logger.h`。  
+   - 提供外部依赖与通用工具：`tinyxml2`、`cereal`、`cadex_logger.h`、`cadex_profiler.h`（轻量级性能分析器）。  
    - 不承载 CADExchange 业务规则。
 
 2. **core 层（统一数据模型层）**  
@@ -123,7 +123,8 @@
 
 - `thirdParty/tinyxml2/`：XML DOM 依赖。  
 - `thirdParty/cereal/`：模板序列化依赖。  
-- `thirdParty/cadex_logger.h`：日志宏与轻量 logger。
+- `thirdParty/cadex_logger.h`：日志宏与轻量 logger。  
+- `thirdParty/cadex_profiler.h`：线程安全、RAII 模式的轻量级性能分析器。  
 
 ---
 
@@ -578,6 +579,18 @@
 - **其他函数分组**
   - 宏：`LOG_DEBUG/INFO/WARN/ERROR`。
   - 辅助：`cadex::WN(...)`。
+
+### `thirdParty/cadex_profiler.h`
+- **核心类型**
+  - `cadex::Profiler`：单例性能分析器。
+  - `cadex::ProfileScope`：RAII 作用域计时辅助类。
+- **核心函数详列**
+  - `Profiler::Start(name)` / `Profiler::Stop(name)`：启动与停止特定命名的计时。
+  - `Profiler::GetReport()`：获取格式化的 WString 性能报告。
+  - `Profiler::PrintReport()`：向 wcout 打印性能报告。
+- **辅助宏**
+  - `PROFILE_SCOPE(name)`：定义一个命名分析作用域.
+  - `PROFILE_FUNCTION()`：定义一个函数级别的分析作用域。
 
 ### `thirdParty/tinyxml2/*` 与 `thirdParty/cereal/*`
 - **核心函数详列**
