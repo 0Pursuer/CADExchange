@@ -74,6 +74,9 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
     add_executable(MigrationRegressionTest examples/MigrationRegressionTest.cpp)
     target_link_libraries(MigrationRegressionTest PRIVATE cadexchange)
 
+    add_executable(test_geom examples/test_geom.cpp)
+    target_link_libraries(test_geom PRIVATE cadexchange)
+
     # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
     # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
 
