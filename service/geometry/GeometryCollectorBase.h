@@ -2,22 +2,18 @@
 
 #include "../../core/UnifiedFeatures.h"
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
-#include <limits>
-#include <locale>
+#include <iostream>
+#include <map>
 #include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
-#include <map>
-#include <string>
-#include <cmath>
 
-#include "../../thirdParty/cereal/archives/json.hpp"
-#include "../../thirdParty/cereal/types/vector.hpp"
-#include "../../thirdParty/cereal/types/map.hpp"
-#include "../../thirdParty/cereal/types/string.hpp"
+#include "../../thirdParty/json/single_include/nlohmann/json.hpp"
 
 namespace CADExchange {
 
@@ -25,99 +21,86 @@ namespace Geometry {
 
 namespace detail {
 
-struct SerializablePoint {
-  double x = 0;
-  double y = 0;
-  double z = 0;
+using json = nlohmann::json;
 
-  SerializablePoint() = default;
-  SerializablePoint(const CPoint3D &pt) : x(pt.x), y(pt.y), z(pt.z) {}
-  SerializablePoint(const CVector3D &vec) : x(vec.x), y(vec.y), z(vec.z) {}
+inline json PointToJson(const CPoint3D &pt) {
+  return json{{"x", pt.x}, {"y", pt.y}, {"z", pt.z}};
+}
 
-  template <class Archive>
-  void serialize(Archive &ar) {
-    ar(cereal::make_nvp("x", x),
-       cereal::make_nvp("y", y),
-       cereal::make_nvp("z", z));
+inline json VectorToJson(const CVector3D &vec) {
+  return json{{"x", vec.x}, {"y", vec.y}, {"z", vec.z}};
+}
+
+inline bool TryReadPoint(const json &node, CPoint3D &pt) {
+  if (!node.is_object() || !node.contains("x") || !node.contains("y") ||
+      !node.contains("z")) {
+    return false;
   }
-};
+  pt.x = node.at("x").get<double>();
+  pt.y = node.at("y").get<double>();
+  pt.z = node.at("z").get<double>();
+  return true;
+}
 
-struct SerializableCSys {
-  SerializablePoint origin;
-  SerializablePoint xDir;
-  SerializablePoint yDir;
-  SerializablePoint zDir;
-
-  SerializableCSys() = default;
-  SerializableCSys(const CSketchCSys &csys)
-      : origin(csys.origin), xDir(csys.xDir), yDir(csys.yDir), zDir(csys.zDir) {}
-
-  template <class Archive>
-  void serialize(Archive &ar) {
-    ar(cereal::make_nvp("origin", origin),
-       cereal::make_nvp("xDir", xDir),
-       cereal::make_nvp("yDir", yDir),
-       cereal::make_nvp("zDir", zDir));
+inline bool TryReadVector(const json &node, CVector3D &vec) {
+  if (!node.is_object() || !node.contains("x") || !node.contains("y") ||
+      !node.contains("z")) {
+    return false;
   }
-};
+  vec.x = node.at("x").get<double>();
+  vec.y = node.at("y").get<double>();
+  vec.z = node.at("z").get<double>();
+  return true;
+}
 
-struct SerializableRefEdge {
-  std::string parentFeatureID;
-  int topologyIndex = -1;
-  int curveType = 0;
-  SerializablePoint startPoint;
-  SerializablePoint endPoint;
-  SerializablePoint midPoint;
-
-  SerializableRefEdge() = default;
-  SerializableRefEdge(const CRefEdge &edge)
-      : parentFeatureID(edge.parentFeatureID),
-        topologyIndex(edge.topologyIndex),
-        curveType(static_cast<int>(edge.curveType)),
-        startPoint(edge.startPoint),
-        endPoint(edge.endPoint),
-        midPoint(edge.midPoint) {}
-
-  template <class Archive>
-  void serialize(Archive &ar) {
-    ar(cereal::make_nvp("parentFeatureID", parentFeatureID),
-       cereal::make_nvp("topologyIndex", topologyIndex),
-       cereal::make_nvp("curveType", curveType),
-       cereal::make_nvp("startPoint", startPoint),
-       cereal::make_nvp("endPoint", endPoint),
-       cereal::make_nvp("midPoint", midPoint));
+inline std::string CurveTypeToString(CGeoCurveType type) {
+  switch (type) {
+  case CGeoCurveType::LINE:
+    return "Line";
+  case CGeoCurveType::CIRCLE:
+    return "Circle";
+  case CGeoCurveType::ELLIPSE:
+    return "Ellipse";
+  case CGeoCurveType::INTERSECTION:
+    return "Intersection";
+  case CGeoCurveType::BCURVE:
+    return "BCurve";
+  case CGeoCurveType::SPCURVE:
+    return "SPCurve";
+  case CGeoCurveType::CONSTPARAM:
+    return "ConstParam";
+  case CGeoCurveType::TRIMMED:
+    return "Trimmed";
+  case CGeoCurveType::UNKNOWN:
+  default:
+    return "Unknown";
   }
-};
+}
 
-struct SerializableDatumPlane {
-  std::string targetFeatureID;
-  SerializableCSys localCSys;
-  std::string type = "Plane";
-
-  SerializableDatumPlane() = default;
-  SerializableDatumPlane(const CGeoDatumPlane &plane)
-      : targetFeatureID(plane.targetFeatureID),
-        localCSys(plane.localCSys),
-        type(plane.type) {}
-
-  template <class Archive>
-  void serialize(Archive &ar) {
-    ar(cereal::make_nvp("targetFeatureID", targetFeatureID),
-       cereal::make_nvp("type", type),
-       cereal::make_nvp("localCSys", localCSys));
-  }
-};
+inline CGeoCurveType CurveTypeFromString(const std::string &typeName) {
+  if (typeName == "Line") return CGeoCurveType::LINE;
+  if (typeName == "Circle") return CGeoCurveType::CIRCLE;
+  if (typeName == "Ellipse") return CGeoCurveType::ELLIPSE;
+  if (typeName == "Intersection") return CGeoCurveType::INTERSECTION;
+  if (typeName == "BCurve") return CGeoCurveType::BCURVE;
+  if (typeName == "SPCurve") return CGeoCurveType::SPCURVE;
+  if (typeName == "ConstParam") return CGeoCurveType::CONSTPARAM;
+  if (typeName == "Trimmed") return CGeoCurveType::TRIMMED;
+  return CGeoCurveType::UNKNOWN;
+}
 
 } // namespace detail
 
-/**
- * @brief CRTP 基类：统一管理几何边与辅助基准面容器
- */
 template <typename Derived, typename EdgeT = CRefEdge>
 class GeometryCollectorBase {
 public:
   using EdgeType = EdgeT;
   using DatumPlaneType = CGeoDatumPlane;
+
+  struct ComparisonResult {
+    bool equivalent = true;
+    std::vector<std::string> diagnostics;
+  };
 
   template <typename... Args> auto Collect(Args &&...args) {
     Clear();
@@ -138,179 +121,212 @@ public:
   bool SaveEdgesToJson(const std::filesystem::path &filePath,
                        std::string *errorMessage = nullptr,
                        const std::string &lengthUnit = "") const {
-    std::ofstream out(filePath, std::ios::trunc);
-    if (!out.is_open()) {
+    try {
+      detail::json root;
+      root["schema_version"] = 1;
+      if (!lengthUnit.empty()) {
+        root["length_unit"] = lengthUnit;
+      }
+      root["edge_count"] = m_edges.size();
+      root["datum_plane_count"] = m_datumPlanes.size();
+      root["edges"] = detail::json::array();
+      for (const auto &edge : m_edges) {
+        root["edges"].push_back(detail::json{{"parentFeatureID", edge.parentFeatureID},
+                                              {"topologyIndex", edge.topologyIndex},
+                                              {"curveType", detail::CurveTypeToString(edge.curveType)},
+                                              {"curveTypeValue", static_cast<int>(edge.curveType)},
+                                              {"startPoint", detail::PointToJson(edge.startPoint)},
+                                              {"endPoint", detail::PointToJson(edge.endPoint)},
+                                              {"midPoint", detail::PointToJson(edge.midPoint)}});
+      }
+      root["datum_planes"] = detail::json::array();
+      for (const auto &plane : m_datumPlanes) {
+        root["datum_planes"].push_back(detail::json{{"targetFeatureID", plane.targetFeatureID},
+                                                     {"type", plane.type},
+                                                     {"origin", detail::PointToJson(plane.localCSys.origin)},
+                                                     {"xDir", detail::VectorToJson(plane.localCSys.xDir)},
+                                                     {"yDir", detail::VectorToJson(plane.localCSys.yDir)},
+                                                     {"normal", detail::VectorToJson(plane.localCSys.zDir)}});
+      }
+      std::ofstream out(filePath, std::ios::trunc);
+      if (!out.is_open()) {
+        if (errorMessage) {
+          *errorMessage = "Unable to open geometry json output: " + filePath.string();
+        }
+        return false;
+      }
+      out << root.dump(2) << '\n';
+      return true;
+    } catch (const std::exception &e) {
       if (errorMessage) {
-        *errorMessage = "Unable to open geometry json output: " + filePath.string();
+        *errorMessage = "Failed to write geometry json: " + std::string(e.what());
       }
       return false;
     }
-
-    out << "{\n";
-    out << "  \"schema_version\": 1,\n";
-    if (!lengthUnit.empty()) {
-      out << "  \"length_unit\": \"" << EscapeJson(lengthUnit) << "\",\n";
-    }
-    out << "  \"edge_count\": " << m_edges.size() << ",\n";
-    out << "  \"datum_plane_count\": " << m_datumPlanes.size() << ",\n";
-    out << "  \"edges\": [\n";
-    for (std::size_t i = 0; i < m_edges.size(); ++i) {
-      const auto &edge = m_edges[i];
-      out << "    {\n";
-      out << "      \"parentFeatureID\": \""
-          << EscapeJson(edge.parentFeatureID) << "\",\n";
-      out << "      \"topologyIndex\": " << edge.topologyIndex << ",\n";
-      out << "      \"curveType\": \"" << CurveTypeToString(edge.curveType)
-          << "\",\n";
-      out << "      \"curveTypeValue\": " << static_cast<int>(edge.curveType)
-          << ",\n";
-      out << "      \"startPoint\": " << FormatPoint(edge.startPoint) << ",\n";
-      out << "      \"endPoint\": " << FormatPoint(edge.endPoint) << ",\n";
-      out << "      \"midPoint\": " << FormatPoint(edge.midPoint) << "\n";
-      out << "    }";
-      if (i + 1 < m_edges.size()) {
-        out << ",";
-      }
-      out << "\n";
-    }
-    out << "  ],\n";
-    out << "  \"datum_planes\": [\n";
-    for (std::size_t i = 0; i < m_datumPlanes.size(); ++i) {
-      const auto &plane = m_datumPlanes[i];
-      out << "    {\n";
-      out << "      \"targetFeatureID\": \""
-          << EscapeJson(plane.targetFeatureID) << "\",\n";
-      out << "      \"type\": \"" << EscapeJson(plane.type) << "\",\n";
-      out << "      \"origin\": " << FormatPoint(plane.localCSys.origin) << ",\n";
-      out << "      \"xDir\": " << FormatVector(plane.localCSys.xDir) << ",\n";
-      out << "      \"yDir\": " << FormatVector(plane.localCSys.yDir) << ",\n";
-      out << "      \"normal\": " << FormatVector(plane.localCSys.zDir) << "\n";
-      out << "    }";
-      if (i + 1 < m_datumPlanes.size()) {
-        out << ",";
-      }
-      out << "\n";
-    }
-    out << "  ]\n";
-    out << "}\n";
-
-    if (!out.good()) {
-      if (errorMessage) {
-        *errorMessage = "Failed to write geometry json: " + filePath.string();
-      }
-      return false;
-    }
-    return true;
   }
 
-  // Serialization for the collector itself
-  template <class Archive>
-  void save(Archive &ar) const {
-    std::vector<detail::SerializableRefEdge> tempEdges;
-    tempEdges.reserve(m_edges.size());
+  detail::json ToJsonValue() const {
+    detail::json geometry;
+    geometry["edges"] = detail::json::array();
     for (const auto &edge : m_edges) {
-      tempEdges.emplace_back(edge);
+      geometry["edges"].push_back(detail::json{{"parentFeatureID", edge.parentFeatureID},
+                                                {"topologyIndex", edge.topologyIndex},
+                                                {"curveType", static_cast<int>(edge.curveType)},
+                                                {"startPoint", detail::PointToJson(edge.startPoint)},
+                                                {"endPoint", detail::PointToJson(edge.endPoint)},
+                                                {"midPoint", detail::PointToJson(edge.midPoint)}});
     }
-
-    std::vector<detail::SerializableDatumPlane> tempPlanes;
-    tempPlanes.reserve(m_datumPlanes.size());
+    geometry["datumPlanes"] = detail::json::array();
     for (const auto &plane : m_datumPlanes) {
-      tempPlanes.emplace_back(plane);
+      geometry["datumPlanes"].push_back(detail::json{{"targetFeatureID", plane.targetFeatureID},
+                                                      {"type", plane.type},
+                                                      {"localCSys", detail::json{{"origin", detail::PointToJson(plane.localCSys.origin)},
+                                                                                  {"xDir", detail::VectorToJson(plane.localCSys.xDir)},
+                                                                                  {"yDir", detail::VectorToJson(plane.localCSys.yDir)},
+                                                                                  {"zDir", detail::VectorToJson(plane.localCSys.zDir)}}}});
     }
-
-    ar(cereal::make_nvp("edges", tempEdges),
-       cereal::make_nvp("datumPlanes", tempPlanes));
+    return geometry;
   }
 
-  template <class Archive>
-  void load(Archive &ar) {
-    std::vector<detail::SerializableRefEdge> tempEdges;
-    std::vector<detail::SerializableDatumPlane> tempPlanes;
+  bool LoadFromJsonValue(const detail::json &geometry,
+                         std::string *errorMessage = nullptr) {
+    try {
+      const auto edgesIt = geometry.find("edges");
+      if (edgesIt == geometry.end() || !edgesIt->is_array()) {
+        if (errorMessage) {
+          *errorMessage = "geometry json missing edges array";
+        }
+        return false;
+      }
 
-    ar(cereal::make_nvp("edges", tempEdges),
-       cereal::make_nvp("datumPlanes", tempPlanes));
+      m_edges.clear();
+      m_edges.reserve(edgesIt->size());
+      for (const auto &edgeJson : *edgesIt) {
+        EdgeType edge;
+        edge.parentFeatureID = edgeJson.value("parentFeatureID", "");
+        edge.topologyIndex = edgeJson.value("topologyIndex", -1);
+        if (edgeJson.contains("curveTypeValue")) {
+          edge.curveType = static_cast<CGeoCurveType>(edgeJson.at("curveTypeValue").get<int>());
+        } else if (edgeJson.contains("curveType")) {
+          const auto &curveTypeNode = edgeJson.at("curveType");
+          if (curveTypeNode.is_number_integer()) {
+            edge.curveType = static_cast<CGeoCurveType>(curveTypeNode.get<int>());
+          } else if (curveTypeNode.is_string()) {
+            edge.curveType = detail::CurveTypeFromString(curveTypeNode.get<std::string>());
+          }
+        }
+        if (!edgeJson.contains("startPoint") || !edgeJson.contains("endPoint") ||
+            !edgeJson.contains("midPoint") ||
+            !detail::TryReadPoint(edgeJson.at("startPoint"), edge.startPoint) ||
+            !detail::TryReadPoint(edgeJson.at("endPoint"), edge.endPoint) ||
+            !detail::TryReadPoint(edgeJson.at("midPoint"), edge.midPoint)) {
+          if (errorMessage) {
+            *errorMessage = "geometry json contains invalid edge point payload";
+          }
+          return false;
+        }
+        m_edges.push_back(std::move(edge));
+      }
 
-    m_edges.clear();
-    m_edges.reserve(tempEdges.size());
-    for (const auto &te : tempEdges) {
-      CRefEdge edge;
-      edge.parentFeatureID = te.parentFeatureID;
-      edge.topologyIndex = te.topologyIndex;
-      edge.curveType = static_cast<CGeoCurveType>(te.curveType);
-      edge.startPoint = CPoint3D{te.startPoint.x, te.startPoint.y, te.startPoint.z};
-      edge.endPoint = CPoint3D{te.endPoint.x, te.endPoint.y, te.endPoint.z};
-      edge.midPoint = CPoint3D{te.midPoint.x, te.midPoint.y, te.midPoint.z};
-      m_edges.push_back(std::move(edge));
-    }
+      const auto planesIt = geometry.find("datumPlanes");
+      const auto flatPlanesIt = geometry.find("datum_planes");
+      const detail::json *planesJson = nullptr;
+      if (planesIt != geometry.end() && planesIt->is_array()) {
+        planesJson = &(*planesIt);
+      } else if (flatPlanesIt != geometry.end() && flatPlanesIt->is_array()) {
+        planesJson = &(*flatPlanesIt);
+      }
 
-    m_datumPlanes.clear();
-    m_datumPlanes.reserve(tempPlanes.size());
-    for (const auto &tp : tempPlanes) {
-      CGeoDatumPlane plane;
-      plane.targetFeatureID = tp.targetFeatureID;
-      plane.type = tp.type;
-      plane.localCSys.origin = CPoint3D{tp.localCSys.origin.x, tp.localCSys.origin.y, tp.localCSys.origin.z};
-      plane.localCSys.xDir = CVector3D{tp.localCSys.xDir.x, tp.localCSys.xDir.y, tp.localCSys.xDir.z};
-      plane.localCSys.yDir = CVector3D{tp.localCSys.yDir.x, tp.localCSys.yDir.y, tp.localCSys.yDir.z};
-      plane.localCSys.zDir = CVector3D{tp.localCSys.zDir.x, tp.localCSys.zDir.y, tp.localCSys.zDir.z};
-      m_datumPlanes.push_back(std::move(plane));
-    }
-  }
-
-  // Equivalency check for runtime validation.
-  //
-  // Edge classification strategy:
-  //   CIRCLE (3002) with start==end, mid!=start  → TRUE CIRCLE  (center=(start+mid)/2, r=dist/2)
-  //   CIRCLE (3002) with start!=end              → ARC          (circumcenter of start/mid/end)
-  //   CIRCLE (3002) with start==end==mid         → DEGENERATE   (skip)
-  //   LINE/ELLIPSE/BCURVE/TRIMMED               → open edge    (mid pre-filter + endpoint check)
-  //   INTERSECTION/SPCURVE/CONSTPARAM           → warn-only    (count mismatch → WARN, not FAIL)
-  //
-  // ARC merging: arcs with identical center+radius that connect end-to-end within the same
-  // JSON are merged; a closed loop of arcs is promoted to a TRUE CIRCLE.
-  //
-  // Matching:
-  //   TRUE CIRCLEs  : center + radius
-  //   ARCs          : center + radius + endpoints (forward or reversed)
-  //   Open edges    : curveType + mid (pre-filter) + endpoints (forward or reversed)
-  bool IsEquivalent(const GeometryCollectorBase& other, double tol = 2e-3) const {
-    if (m_datumPlanes.size() != other.m_datumPlanes.size()) {
-      std::cout << "[DEBUG] IsEquivalent FAIL: datum plane count "
-                << m_datumPlanes.size() << " vs " << other.m_datumPlanes.size() << "\n";
+      m_datumPlanes.clear();
+      if (planesJson != nullptr) {
+        m_datumPlanes.reserve(planesJson->size());
+        for (const auto &planeJson : *planesJson) {
+          DatumPlaneType plane;
+          plane.targetFeatureID = planeJson.value("targetFeatureID", "");
+          plane.type = planeJson.value("type", "Plane");
+          const auto localCSysIt = planeJson.find("localCSys");
+          if (localCSysIt != planeJson.end() && localCSysIt->is_object()) {
+            if (!localCSysIt->contains("origin") || !localCSysIt->contains("xDir") ||
+                !localCSysIt->contains("yDir") || !localCSysIt->contains("zDir") ||
+                !detail::TryReadPoint(localCSysIt->at("origin"), plane.localCSys.origin) ||
+                !detail::TryReadVector(localCSysIt->at("xDir"), plane.localCSys.xDir) ||
+                !detail::TryReadVector(localCSysIt->at("yDir"), plane.localCSys.yDir) ||
+                !detail::TryReadVector(localCSysIt->at("zDir"), plane.localCSys.zDir)) {
+              if (errorMessage) {
+                *errorMessage = "geometry json contains invalid datum plane csys payload";
+              }
+              return false;
+            }
+          } else {
+            if (!planeJson.contains("origin") || !planeJson.contains("xDir") ||
+                !planeJson.contains("yDir") || !planeJson.contains("normal") ||
+                !detail::TryReadPoint(planeJson.at("origin"), plane.localCSys.origin) ||
+                !detail::TryReadVector(planeJson.at("xDir"), plane.localCSys.xDir) ||
+                !detail::TryReadVector(planeJson.at("yDir"), plane.localCSys.yDir) ||
+                !detail::TryReadVector(planeJson.at("normal"), plane.localCSys.zDir)) {
+              if (errorMessage) {
+                *errorMessage = "geometry json contains invalid flat datum plane payload";
+              }
+              return false;
+            }
+          }
+          m_datumPlanes.push_back(std::move(plane));
+        }
+      }
+      return true;
+    } catch (const std::exception &e) {
+      if (errorMessage) {
+        *errorMessage = "Failed to parse geometry json: " + std::string(e.what());
+      }
       return false;
     }
+  }
 
-    // ── Step 1+2: classify and parameterise every edge ───────────────────
-    std::vector<EdgeType>                        src_open, dst_open;
-    std::vector<NormalizedArc>                   src_arcs, dst_arcs;
-    std::vector<std::pair<CPoint3D, double>>     src_circles, dst_circles;
+  ComparisonResult CompareDetailed(const GeometryCollectorBase& other,
+                                   double tol = 2e-3) const {
+    ComparisonResult result;
+    if (m_datumPlanes.size() != other.m_datumPlanes.size()) {
+      result.equivalent = false;
+      result.diagnostics.push_back("DATUM plane count mismatch: SRC=" + std::to_string(m_datumPlanes.size()) +
+                                   " DST=" + std::to_string(other.m_datumPlanes.size()));
+      return result;
+    }
+
+    std::vector<EdgeType> src_open, dst_open;
+    std::vector<NormalizedArc> src_arcs, dst_arcs;
+    std::vector<std::pair<CPoint3D, double>> src_circles, dst_circles;
     int src_warn = 0, dst_warn = 0;
-    ClassifyEdges(m_edges,       src_open, src_arcs, src_circles, src_warn, tol);
+    ClassifyEdges(m_edges, src_open, src_arcs, src_circles, src_warn, tol);
     ClassifyEdges(other.m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
 
-    // ── Step 3: merge connected arcs within each side ────────────────────
     std::vector<std::pair<CPoint3D, double>> promoted_src, promoted_dst;
     src_arcs = MergeArcs(src_arcs, tol, promoted_src);
     dst_arcs = MergeArcs(dst_arcs, tol, promoted_dst);
-    for (auto& p : promoted_src) src_circles.push_back(p);
-    for (auto& p : promoted_dst) dst_circles.push_back(p);
+    for (auto &p : promoted_src) src_circles.push_back(p);
+    for (auto &p : promoted_dst) dst_circles.push_back(p);
 
-    // ── Step 4A: TRUE CIRCLE matching (center + radius) ──────────────────
-    if (!MatchCircles(src_circles, dst_circles, tol)) return false;
-
-    // ── Step 4B: ARC matching (center + radius + endpoints) ──────────────
-    if (!MatchArcs(src_arcs, dst_arcs, tol)) return false;
-
-    // ── Step 4C: open-edge matching (mid pre-filter + endpoint check) ────
-    if (!MatchOpenEdges(src_open, dst_open, tol)) return false;
-
-    // ── Step 4D: warn-only types (INTERSECTION / SPCURVE / CONSTPARAM) ──
-    if (src_warn != dst_warn) {
-      std::cout << "[DEBUG] IsEquivalent WARN-ONLY edge count mismatch: "
-                << src_warn << " vs " << dst_warn << " (not a failure)\n";
+    if (!MatchCircles(src_circles, dst_circles, tol, &result.diagnostics)) {
+      result.equivalent = false;
     }
+    if (!MatchArcs(src_arcs, dst_arcs, tol, &result.diagnostics)) {
+      result.equivalent = false;
+    }
+    if (!MatchOpenEdges(src_open, dst_open, tol, &result.diagnostics)) {
+      result.equivalent = false;
+    }
+    if (src_warn != dst_warn) {
+      result.diagnostics.push_back("WARN-ONLY edge count mismatch: SRC=" + std::to_string(src_warn) +
+                                   " DST=" + std::to_string(dst_warn));
+    }
+    return result;
+  }
 
-    return true;
+  bool IsEquivalent(const GeometryCollectorBase& other, double tol = 2e-3) const {
+    ComparisonResult result = CompareDetailed(other, tol);
+    for (const auto &line : result.diagnostics) {
+      std::cout << "[DEBUG] IsEquivalent: " << line << "\n";
+    }
+    return result.equivalent;
   }
 
 protected:
@@ -322,131 +338,70 @@ protected:
   Derived &DerivedSelf() noexcept { return static_cast<Derived &>(*this); }
 
 private:
-  static std::string EscapeJson(const std::string &value) {
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (unsigned char ch : value) {
-      switch (ch) {
-      case '\\':
-        out += "\\\\";
-        break;
-      case '"':
-        out += "\\\"";
-        break;
-      case '\b':
-        out += "\\b";
-        break;
-      case '\f':
-        out += "\\f";
-        break;
-      case '\n':
-        out += "\\n";
-        break;
-      case '\r':
-        out += "\\r";
-        break;
-      case '\t':
-        out += "\\t";
-        break;
-      default:
-        if (ch < 0x20) {
-          static const char kHex[] = "0123456789ABCDEF";
-          out += "\\u00";
-          out.push_back(kHex[(ch >> 4) & 0xF]);
-          out.push_back(kHex[ch & 0xF]);
-        } else {
-          out.push_back(static_cast<char>(ch));
-        }
-        break;
-      }
-    }
-    return out;
-  }
+  struct NormalizedArc {
+    CPoint3D center{};
+    double radius = 0;
+    CPoint3D startPt{};
+    CPoint3D endPt{};
+  };
 
   static std::string FormatPoint(const CPoint3D &pt) {
-    return "{\"x\":" + FormatNumber(pt.x) + ",\"y\":" +
-           FormatNumber(pt.y) + ",\"z\":" + FormatNumber(pt.z) + "}";
-  }
-
-  static std::string FormatVector(const CVector3D &vec) {
-    return "{\"x\":" + FormatNumber(vec.x) + ",\"y\":" +
-           FormatNumber(vec.y) + ",\"z\":" + FormatNumber(vec.z) + "}";
-  }
-
-  static std::string CurveTypeToString(CGeoCurveType type) {
-    switch (type) {
-    case CGeoCurveType::LINE:
-      return "Line";
-    case CGeoCurveType::CIRCLE:
-      return "Circle";
-    case CGeoCurveType::ELLIPSE:
-      return "Ellipse";
-    case CGeoCurveType::INTERSECTION:
-      return "Intersection";
-    case CGeoCurveType::BCURVE:
-      return "BCurve";
-    case CGeoCurveType::SPCURVE:
-      return "SPCurve";
-    case CGeoCurveType::CONSTPARAM:
-      return "ConstParam";
-    case CGeoCurveType::TRIMMED:
-      return "Trimmed";
-    case CGeoCurveType::UNKNOWN:
-    default:
-      return "Unknown";
-    }
-  }
-
-  static std::string FormatNumber(double value) {
     std::ostringstream oss;
-    oss.imbue(std::locale::classic());
-    oss << std::setprecision(std::numeric_limits<double>::max_digits10)
-        << value;
+    oss << std::fixed << std::setprecision(6)
+        << "(" << pt.x << "," << pt.y << "," << pt.z << ")";
     return oss.str();
   }
 
-  // ═══════════════════════════════════════════════════════════════════════
-  // Private helpers for IsEquivalent
-  // ═══════════════════════════════════════════════════════════════════════
+  static std::string FormatCircle(const CPoint3D &center, double radius) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(6)
+        << "center=" << FormatPoint(center) << " r=" << radius;
+    return oss.str();
+  }
 
-  /// Intermediate representation of a CIRCLE edge after parameterisation.
-  struct NormalizedArc {
-    CPoint3D center{};    ///< circumcenter (or (start+mid)/2 for true circles)
-    double   radius = 0;  ///< circumradius
-    CPoint3D startPt{};   ///< original startPoint
-    CPoint3D endPt{};     ///< original endPoint
-  };
+  static std::string FormatArc(const NormalizedArc &arc) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(6)
+        << "center=" << FormatPoint(arc.center)
+        << " r=" << arc.radius
+        << " start=" << FormatPoint(arc.startPt)
+        << " end=" << FormatPoint(arc.endPt);
+    return oss.str();
+  }
+
+  static std::string FormatOpenEdge(const EdgeType &edge) {
+    std::ostringstream oss;
+    oss << "type=" << static_cast<int>(edge.curveType)
+        << " start=" << FormatPoint(edge.startPoint)
+        << " mid=" << FormatPoint(edge.midPoint)
+        << " end=" << FormatPoint(edge.endPoint);
+    return oss.str();
+  }
 
   static double PtDist(const CPoint3D& a, const CPoint3D& b) noexcept {
-    double dx = a.x-b.x, dy = a.y-b.y, dz = a.z-b.z;
+    double dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
     return std::sqrt(dx*dx + dy*dy + dz*dz);
   }
 
   static bool IsOpenEdge(CGeoCurveType t) noexcept {
-    return t == CGeoCurveType::LINE    || t == CGeoCurveType::ELLIPSE ||
-           t == CGeoCurveType::BCURVE  || t == CGeoCurveType::TRIMMED;
+    return t == CGeoCurveType::LINE || t == CGeoCurveType::ELLIPSE ||
+           t == CGeoCurveType::BCURVE || t == CGeoCurveType::TRIMMED;
   }
 
   static bool IsWarnOnlyEdge(CGeoCurveType t) noexcept {
-    return t == CGeoCurveType::INTERSECTION ||
-           t == CGeoCurveType::SPCURVE      ||
+    return t == CGeoCurveType::INTERSECTION || t == CGeoCurveType::SPCURVE ||
            t == CGeoCurveType::CONSTPARAM;
   }
 
-  /// Compute the circumcenter of three points in 3-D.
-  /// Uses the formula: C = p1 + s*(p2-p1) + t*(p3-p1) where
-  ///   s = |v|^2*(|u|^2 - u.v) / (2*(|u|^2|v|^2 - (u.v)^2))
-  ///   t = |u|^2*(|v|^2 - u.v) / (2*(|u|^2|v|^2 - (u.v)^2))
-  ///   u = p2-p1,  v = p3-p1
-  /// Returns false if the three points are (nearly) collinear.
-  static bool ComputeCircumcenter(const CPoint3D& p1, const CPoint3D& p2, const CPoint3D& p3,
-                                   CPoint3D& center, double& radius) noexcept {
-    double ax = p2.x-p1.x, ay = p2.y-p1.y, az = p2.z-p1.z; // u
-    double bx = p3.x-p1.x, by = p3.y-p1.y, bz = p3.z-p1.z; // v
+  static bool ComputeCircumcenter(const CPoint3D& p1, const CPoint3D& p2,
+                                  const CPoint3D& p3, CPoint3D& center,
+                                  double& radius) noexcept {
+    double ax = p2.x-p1.x, ay = p2.y-p1.y, az = p2.z-p1.z;
+    double bx = p3.x-p1.x, by = p3.y-p1.y, bz = p3.z-p1.z;
     double uu = ax*ax + ay*ay + az*az;
     double uv = ax*bx + ay*by + az*bz;
     double vv = bx*bx + by*by + bz*bz;
-    double det = uu*vv - uv*uv;          // = |u x v|^2
+    double det = uu*vv - uv*uv;
     if (std::abs(det) < 1e-20) return false;
     double inv2 = 0.5 / det;
     double s = vv*(uu - uv)*inv2;
@@ -459,82 +414,53 @@ private:
     return true;
   }
 
-  /// Classify each edge into one of four buckets:
-  ///   open_out     – LINE / ELLIPSE / BCURVE / TRIMMED
-  ///   arc_out      – CIRCLE with start != end  (non-degenerate arc)
-  ///   circle_out   – CIRCLE with start == end, mid != start (true circle)
-  ///   warn_count   – INTERSECTION / SPCURVE / CONSTPARAM  (warn-only)
-  ///   truly degenerate edges (all three sample points coincide) are silently dropped.
-  static void ClassifyEdges(
-      const std::vector<EdgeType>&              edges,
-      std::vector<EdgeType>&                    open_out,
-      std::vector<NormalizedArc>&               arc_out,
-      std::vector<std::pair<CPoint3D,double>>&  circle_out,
-      int&                                      warn_count,
-      double                                    tol)
-  {
+  static void ClassifyEdges(const std::vector<EdgeType>& edges,
+                            std::vector<EdgeType>& open_out,
+                            std::vector<NormalizedArc>& arc_out,
+                            std::vector<std::pair<CPoint3D,double>>& circle_out,
+                            int& warn_count,
+                            double tol) {
     for (const auto& e : edges) {
-      if (e.curveType == CGeoCurveType::UNKNOWN)  continue;
-      if (IsWarnOnlyEdge(e.curveType))            { ++warn_count; continue; }
-      if (IsOpenEdge(e.curveType))                { open_out.push_back(e); continue; }
-      if (e.curveType != CGeoCurveType::CIRCLE)   continue;
-
+      if (e.curveType == CGeoCurveType::UNKNOWN) continue;
+      if (IsWarnOnlyEdge(e.curveType)) { ++warn_count; continue; }
+      if (IsOpenEdge(e.curveType)) { open_out.push_back(e); continue; }
+      if (e.curveType != CGeoCurveType::CIRCLE) continue;
       double se_dist = PtDist(e.startPoint, e.endPoint);
       double sm_dist = PtDist(e.startPoint, e.midPoint);
-
       if (se_dist <= tol) {
-        // start == end
-        if (sm_dist <= tol) {
-          // All three sample points coincide → truly degenerate, skip.
-          continue;
-        }
-        // start == end, mid != start → TRUE CIRCLE.
-        // start and mid are antipodal points; diameter = dist(start, mid).
+        if (sm_dist <= tol) continue;
         CPoint3D cen;
         cen.x = (e.startPoint.x + e.midPoint.x) * 0.5;
         cen.y = (e.startPoint.y + e.midPoint.y) * 0.5;
         cen.z = (e.startPoint.z + e.midPoint.z) * 0.5;
         circle_out.emplace_back(cen, sm_dist * 0.5);
       } else {
-        // start != end → ARC.  Compute circumcenter from (start, mid, end).
         NormalizedArc arc;
-        if (!ComputeCircumcenter(e.startPoint, e.midPoint, e.endPoint,
-                                 arc.center, arc.radius)) {
-          continue; // collinear sample points – skip
+        if (!ComputeCircumcenter(e.startPoint, e.midPoint, e.endPoint, arc.center, arc.radius)) {
+          continue;
         }
         arc.startPt = e.startPoint;
-        arc.endPt   = e.endPoint;
+        arc.endPt = e.endPoint;
         arc_out.push_back(arc);
       }
     }
   }
 
-  /// Within one side's arc list, merge arcs that share the same
-  /// circumcircle (center + radius within tol) and are connected end-to-end.
-  /// A chain that closes into a full loop is promoted to a true circle.
-  static std::vector<NormalizedArc> MergeArcs(
-      const std::vector<NormalizedArc>&          arcs,
-      double                                     tol,
-      std::vector<std::pair<CPoint3D,double>>&   promoted_circles)
-  {
-    std::vector<bool>         used(arcs.size(), false);
+  static std::vector<NormalizedArc> MergeArcs(const std::vector<NormalizedArc>& arcs,
+                                              double tol,
+                                              std::vector<std::pair<CPoint3D,double>>& promoted_circles) {
+    std::vector<bool> used(arcs.size(), false);
     std::vector<NormalizedArc> result;
-
     for (size_t i = 0; i < arcs.size(); ++i) {
       if (used[i]) continue;
       bool found_partner = false;
-
-      for (size_t j = i+1; j < arcs.size(); ++j) {
+      for (size_t j = i + 1; j < arcs.size(); ++j) {
         if (used[j]) continue;
-        if (PtDist(arcs[i].center, arcs[j].center) > tol)     continue;
-        if (std::abs(arcs[i].radius - arcs[j].radius)  > tol) continue;
-
-        // Check whether the two arcs together form a closed loop:
-        //   i.end → j.start and j.end → i.start  (forward)
-        //   i.end → j.end   and j.start → i.start (reversed adjacency)
-        bool loop_fwd = PtDist(arcs[i].endPt,   arcs[j].startPt) <= tol &&
-                        PtDist(arcs[j].endPt,   arcs[i].startPt) <= tol;
-        bool loop_rev = PtDist(arcs[i].endPt,   arcs[j].endPt)   <= tol &&
+        if (PtDist(arcs[i].center, arcs[j].center) > tol) continue;
+        if (std::abs(arcs[i].radius - arcs[j].radius) > tol) continue;
+        bool loop_fwd = PtDist(arcs[i].endPt, arcs[j].startPt) <= tol &&
+                        PtDist(arcs[j].endPt, arcs[i].startPt) <= tol;
+        bool loop_rev = PtDist(arcs[i].endPt, arcs[j].endPt) <= tol &&
                         PtDist(arcs[i].startPt, arcs[j].startPt) <= tol;
         if (loop_fwd || loop_rev) {
           promoted_circles.emplace_back(arcs[i].center, arcs[i].radius);
@@ -542,243 +468,206 @@ private:
           found_partner = true;
           break;
         }
-
-        // Chain i → j  (i.end ≈ j.start)
         if (PtDist(arcs[i].endPt, arcs[j].startPt) <= tol) {
-          NormalizedArc merged;
-          merged.center  = arcs[i].center;
-          merged.radius  = arcs[i].radius;
-          merged.startPt = arcs[i].startPt;
-          merged.endPt   = arcs[j].endPt;
+          NormalizedArc merged{arcs[i].center, arcs[i].radius, arcs[i].startPt, arcs[j].endPt};
           result.push_back(merged);
           used[i] = used[j] = true;
           found_partner = true;
           break;
         }
-        // Chain j → i  (j.end ≈ i.start)
         if (PtDist(arcs[j].endPt, arcs[i].startPt) <= tol) {
-          NormalizedArc merged;
-          merged.center  = arcs[i].center;
-          merged.radius  = arcs[i].radius;
-          merged.startPt = arcs[j].startPt;
-          merged.endPt   = arcs[i].endPt;
+          NormalizedArc merged{arcs[i].center, arcs[i].radius, arcs[j].startPt, arcs[i].endPt};
           result.push_back(merged);
           used[i] = used[j] = true;
           found_partner = true;
           break;
         }
       }
-
       if (!found_partner) result.push_back(arcs[i]);
     }
     return result;
   }
 
-  /// Match TRUE CIRCLEs: each src circle must find a dst circle with the
-  /// same center (within tol) and radius (within tol).
-  static bool MatchCircles(
-      const std::vector<std::pair<CPoint3D,double>>& src,
-      const std::vector<std::pair<CPoint3D,double>>& dst,
-      double tol)
-  {
+  static bool MatchCircles(const std::vector<std::pair<CPoint3D,double>>& src,
+                           const std::vector<std::pair<CPoint3D,double>>& dst,
+                           double tol,
+                           std::vector<std::string>* diagnostics) {
+    bool ok = true;
     std::vector<bool> used(dst.size(), false);
     for (const auto& [sc, sr] : src) {
       bool found = false;
       for (size_t j = 0; j < dst.size(); ++j) {
         if (used[j]) continue;
-        if (PtDist(sc, dst[j].first) <= tol &&
-            std::abs(sr - dst[j].second) <= tol) {
-          used[j] = true; found = true; break;
+        if (PtDist(sc, dst[j].first) <= tol && std::abs(sr - dst[j].second) <= tol) {
+          used[j] = true;
+          found = true;
+          break;
         }
       }
       if (!found) {
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: unmatched TRUE CIRCLE"
-                  << " center=(" << sc.x << "," << sc.y << "," << sc.z
-                  << ") r=" << sr << "\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc, sr));
       }
     }
     for (size_t j = 0; j < dst.size(); ++j) {
       if (!used[j]) {
-        const auto& [dc, dr] = dst[j];
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: extra TRUE CIRCLE in rebuilt"
-                  << " center=(" << dc.x << "," << dc.y << "," << dc.z
-                  << ") r=" << dr << "\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("DST extra TRUE_CIRCLE " + FormatCircle(dst[j].first, dst[j].second));
       }
     }
-    return true;
+    return ok;
   }
 
-  /// Match ARCs: center + radius + endpoints (forward or reversed orientation).
-  static bool MatchArcs(
-      const std::vector<NormalizedArc>& src,
-      const std::vector<NormalizedArc>& dst,
-      double tol)
-  {
+  static bool MatchArcs(const std::vector<NormalizedArc>& src,
+                        const std::vector<NormalizedArc>& dst,
+                        double tol,
+                        std::vector<std::string>* diagnostics) {
+    bool ok = true;
     std::vector<bool> used(dst.size(), false);
     for (const auto& sa : src) {
       bool found = false;
       for (size_t j = 0; j < dst.size(); ++j) {
         if (used[j]) continue;
         const auto& da = dst[j];
-        if (PtDist(sa.center, da.center) > tol)        continue;
-        if (std::abs(sa.radius - da.radius) > tol)     continue;
-        double fwd = (std::max)(PtDist(sa.startPt, da.startPt),
-                                PtDist(sa.endPt,   da.endPt));
-        double rev = (std::max)(PtDist(sa.startPt, da.endPt),
-                                PtDist(sa.endPt,   da.startPt));
+        if (PtDist(sa.center, da.center) > tol) continue;
+        if (std::abs(sa.radius - da.radius) > tol) continue;
+        double fwd = (std::max)(PtDist(sa.startPt, da.startPt), PtDist(sa.endPt, da.endPt));
+        double rev = (std::max)(PtDist(sa.startPt, da.endPt), PtDist(sa.endPt, da.startPt));
         if ((std::min)(fwd, rev) <= tol) {
-          used[j] = true; found = true; break;
+          used[j] = true;
+          found = true;
+          break;
         }
       }
       if (!found) {
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: unmatched ARC"
-                  << " center=(" << sa.center.x << "," << sa.center.y
-                  << "," << sa.center.z << ") r=" << sa.radius
-                  << " start=(" << sa.startPt.x << "," << sa.startPt.y
-                  << "," << sa.startPt.z << ")"
-                  << " end=("   << sa.endPt.x   << "," << sa.endPt.y
-                  << "," << sa.endPt.z   << ")\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("SRC unmatched ARC " + FormatArc(sa));
       }
     }
     for (size_t j = 0; j < dst.size(); ++j) {
       if (!used[j]) {
-        const auto& da = dst[j];
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: extra ARC in rebuilt"
-                  << " center=(" << da.center.x << "," << da.center.y
-                  << "," << da.center.z << ") r=" << da.radius << "\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("DST extra ARC " + FormatArc(dst[j]));
       }
     }
-    return true;
+    return ok;
   }
 
-  /// Match open edges (LINE/ELLIPSE/BCURVE/TRIMMED).
-  /// Uses midPoint as a fast spatial pre-filter, then verifies endpoints
-  /// in both forward and reversed orientations.
-  static bool MatchOpenEdges(
-      const std::vector<EdgeType>& src,
-      const std::vector<EdgeType>& dst,
-      double tol)
-  {
+  static bool MatchOpenEdges(const std::vector<EdgeType>& src,
+                             const std::vector<EdgeType>& dst,
+                             double tol,
+                             std::vector<std::string>* diagnostics) {
+    bool ok = true;
     std::vector<bool> used(dst.size(), false);
     for (const auto& se : src) {
       bool found = false;
       for (size_t j = 0; j < dst.size(); ++j) {
         if (used[j]) continue;
         const auto& de = dst[j];
-        if (se.curveType != de.curveType)              continue;
-        if (PtDist(se.midPoint, de.midPoint) > tol)    continue; // spatial pre-filter
-        double fwd = (std::max)(PtDist(se.startPoint, de.startPoint),
-                                PtDist(se.endPoint,   de.endPoint));
-        double rev = (std::max)(PtDist(se.startPoint, de.endPoint),
-                                PtDist(se.endPoint,   de.startPoint));
+        if (se.curveType != de.curveType) continue;
+        if (PtDist(se.midPoint, de.midPoint) > tol) continue;
+        double fwd = (std::max)(PtDist(se.startPoint, de.startPoint), PtDist(se.endPoint, de.endPoint));
+        double rev = (std::max)(PtDist(se.startPoint, de.endPoint), PtDist(se.endPoint, de.startPoint));
         if ((std::min)(fwd, rev) <= tol) {
-          used[j] = true; found = true; break;
+          used[j] = true;
+          found = true;
+          break;
         }
       }
       if (!found) {
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: unmatched open edge type="
-                  << static_cast<int>(se.curveType)
-                  << " mid=(" << se.midPoint.x << "," << se.midPoint.y
-                  << "," << se.midPoint.z << ")\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("SRC unmatched OPEN_EDGE " + FormatOpenEdge(se));
       }
     }
     for (size_t j = 0; j < dst.size(); ++j) {
       if (!used[j]) {
-        const auto& de = dst[j];
-        std::cout << std::fixed << std::setprecision(6)
-                  << "[DEBUG] IsEquivalent: extra open edge in rebuilt type="
-                  << static_cast<int>(de.curveType)
-                  << " mid=(" << de.midPoint.x << "," << de.midPoint.y
-                  << "," << de.midPoint.z << ")\n";
-        return false;
+        ok = false;
+        if (diagnostics) diagnostics->push_back("DST extra OPEN_EDGE " + FormatOpenEdge(dst[j]));
       }
     }
-    return true;
+    return ok;
   }
 
   std::vector<EdgeType> m_edges;
   std::vector<DatumPlaneType> m_datumPlanes;
 };
 
-/**
- * @brief 包含多个特征级 GeometryCollector 的模型级几何集合。
- * 提供方便的基于 cereal 的序列化和反序列化 JSON。
- */
 template <typename CollectorT>
 class ModelGeometrySet {
 public:
   std::map<std::string, CollectorT> features;
 
-  template <class Archive>
-  void serialize(Archive &ar) {
-    ar(cereal::make_nvp("features", features));
-  }
-
   bool SaveToJson(const std::filesystem::path &filePath,
                   std::string *errorMessage = nullptr) const {
-    std::ofstream out(filePath, std::ios::trunc);
-    if (!out.is_open()) {
-      if (errorMessage) {
-        *errorMessage = "Unable to open geometry json output: " + filePath.string();
-      }
-      return false;
-    }
     try {
-      cereal::JSONOutputArchive archive(out);
-      archive(cereal::make_nvp("ModelGeometry", *this));
-      return true;
-    } catch (const std::exception& e) {
-      if (errorMessage) {
-        *errorMessage = "Failed to write geometry json: " + std::string(e.what());
+      detail::json featuresJson = detail::json::array();
+      for (const auto &[featureId, collector] : features) {
+        featuresJson.push_back(detail::json{{"key", featureId}, {"value", collector.ToJsonValue()}});
       }
+      detail::json root{{"ModelGeometry", detail::json{{"features", std::move(featuresJson)}}}};
+      std::ofstream out(filePath, std::ios::trunc);
+      if (!out.is_open()) {
+        if (errorMessage) *errorMessage = "Unable to open geometry json output: " + filePath.string();
+        return false;
+      }
+      out << root.dump(2) << '\n';
+      return true;
+    } catch (const std::exception &e) {
+      if (errorMessage) *errorMessage = "Failed to write geometry json: " + std::string(e.what());
       return false;
     }
   }
 
   bool LoadFromJson(const std::filesystem::path &filePath,
                     std::string *errorMessage = nullptr) {
-    std::ifstream in(filePath);
-    if (!in.is_open()) {
-      if (errorMessage) {
-        *errorMessage = "Unable to open geometry json input: " + filePath.string();
-      }
-      return false;
-    }
     try {
-      cereal::JSONInputArchive archive(in);
-      archive(cereal::make_nvp("ModelGeometry", *this));
-      return true;
-    } catch (const std::exception& e) {
-      if (errorMessage) {
-        *errorMessage = "Failed to parse geometry json: " + std::string(e.what());
+      std::ifstream in(filePath);
+      if (!in.is_open()) {
+        if (errorMessage) *errorMessage = "Unable to open geometry json input: " + filePath.string();
+        return false;
       }
+      detail::json root = detail::json::parse(in);
+      const auto modelIt = root.find("ModelGeometry");
+      if (modelIt == root.end() || !modelIt->is_object()) {
+        if (errorMessage) *errorMessage = "geometry json missing ModelGeometry object";
+        return false;
+      }
+      const auto featuresIt = modelIt->find("features");
+      if (featuresIt == modelIt->end() || !featuresIt->is_array()) {
+        if (errorMessage) *errorMessage = "geometry json missing features array";
+        return false;
+      }
+      features.clear();
+      for (const auto &entry : *featuresIt) {
+        if (!entry.is_object() || !entry.contains("key") || !entry.contains("value")) {
+          if (errorMessage) *errorMessage = "geometry json contains malformed feature entry";
+          return false;
+        }
+        CollectorT collector;
+        std::string featureError;
+        const std::string featureId = entry.at("key").get<std::string>();
+        if (!collector.LoadFromJsonValue(entry.at("value"), &featureError)) {
+          if (errorMessage) *errorMessage = "feature geometry parse failed for " + featureId + ": " + featureError;
+          return false;
+        }
+        features.emplace(featureId, std::move(collector));
+      }
+      return true;
+    } catch (const std::exception &e) {
+      if (errorMessage) *errorMessage = "Failed to parse geometry json: " + std::string(e.what());
       return false;
     }
   }
-  
+
   std::size_t TotalEdgeCount() const {
     std::size_t total = 0;
-    for (const auto& pair : features) {
-      total += pair.second.EdgeCount();
-    }
+    for (const auto& pair : features) total += pair.second.EdgeCount();
     return total;
   }
-  
+
   std::size_t TotalDatumPlaneCount() const {
     std::size_t total = 0;
-    for (const auto& pair : features) {
-      total += pair.second.DatumPlaneCount();
-    }
+    for (const auto& pair : features) total += pair.second.DatumPlaneCount();
     return total;
   }
 };
