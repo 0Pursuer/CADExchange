@@ -365,4 +365,45 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
   return true;
 }
 
+bool TryParseUnitType(const std::string &unitStr, UnitType &out) {
+  // Build a lower-case copy for case-insensitive matching.
+  std::string lower;
+  lower.reserve(unitStr.size());
+  for (unsigned char c : unitStr) {
+    lower.push_back(static_cast<char>(
+        (c >= 'A' && c <= 'Z') ? (c + 32) : c));
+  }
+  if (lower == "m" || lower == "meter" || lower == "metre") {
+    out = UnitType::METER; return true;
+  }
+  if (lower == "mm" || lower == "millimeter" || lower == "millimetre") {
+    out = UnitType::MILLIMETER; return true;
+  }
+  if (lower == "cm" || lower == "centimeter" || lower == "centimetre") {
+    out = UnitType::CENTIMETER; return true;
+  }
+  if (lower == "in" || lower == "inch") {
+    out = UnitType::INCH; return true;
+  }
+  if (lower == "ft" || lower == "foot" || lower == "feet") {
+    out = UnitType::FOOT; return true;
+  }
+  return false;
+}
+
+bool TryGetUnitConversionFactor(UnitType src, UnitType dst, double &factor) {
+  if (src == dst) {
+    factor = 1.0;
+    return true;
+  }
+  double srcToMeter = 1.0;
+  double dstToMeter = 1.0;
+  if (!TryGetMeterScale(src, srcToMeter) ||
+      !TryGetMeterScale(dst, dstToMeter)) {
+    return false;
+  }
+  factor = srcToMeter / dstToMeter;
+  return true;
+}
+
 } // namespace CADExchange

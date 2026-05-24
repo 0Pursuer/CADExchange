@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../core/UnifiedFeatures.h"
+#include "../../core/UnifiedModel.h"
 
 #include <cmath>
 #include <filesystem>
@@ -116,6 +117,20 @@ public:
   void Clear() noexcept {
     m_edges.clear();
     m_datumPlanes.clear();
+  }
+
+  void Scale(double factor) noexcept {
+    for (auto &edge : m_edges) {
+      edge.startPoint.x *= factor;
+      edge.startPoint.y *= factor;
+      edge.startPoint.z *= factor;
+      edge.endPoint.x *= factor;
+      edge.endPoint.y *= factor;
+      edge.endPoint.z *= factor;
+      edge.midPoint.x *= factor;
+      edge.midPoint.y *= factor;
+      edge.midPoint.z *= factor;
+    }
   }
 
   bool SaveEdgesToJson(const std::filesystem::path &filePath,
@@ -596,6 +611,7 @@ template <typename CollectorT>
 class ModelGeometrySet {
 public:
   std::map<std::string, CollectorT> features;
+  std::string length_unit;
 
   bool SaveToJson(const std::filesystem::path &filePath,
                   std::string *errorMessage = nullptr) const {
@@ -605,6 +621,9 @@ public:
         featuresJson.push_back(detail::json{{"key", featureId}, {"value", collector.ToJsonValue()}});
       }
       detail::json root{{"ModelGeometry", detail::json{{"features", std::move(featuresJson)}}}};
+      if (!length_unit.empty()) {
+        root["length_unit"] = length_unit;
+      }
       std::ofstream out(filePath, std::ios::trunc);
       if (!out.is_open()) {
         if (errorMessage) *errorMessage = "Unable to open geometry json output: " + filePath.string();
@@ -618,8 +637,15 @@ public:
     }
   }
 
+  // Load geometry from JSON.  If `target_unit` is non-empty and differs from
+  // the unit recorded in the file's `length_unit` field, all edge coordinates
+  // are automatically scaled so that the loaded data is expressed in
+  // `target_unit`.  Pass an empty string (the default) to skip conversion.
+  // After a successful load, `this->length_unit` is set to the effective unit
+  // (either the file's unit or `target_unit` if conversion was applied).
   bool LoadFromJson(const std::filesystem::path &filePath,
-                    std::string *errorMessage = nullptr) {
+                    std::string *errorMessage = nullptr,
+                    const std::string &target_unit = "") {
     try {
       std::ifstream in(filePath);
       if (!in.is_open()) {
@@ -627,6 +653,14 @@ public:
         return false;
       }
       detail::json root = detail::json::parse(in);
+
+      // Parse length_unit if present
+      std::string file_unit;
+      const auto unitIt = root.find("length_unit");
+      if (unitIt != root.end() && unitIt->is_string()) {
+        file_unit = unitIt->get<std::string>();
+      }
+
       const auto modelIt = root.find("ModelGeometry");
       if (modelIt == root.end() || !modelIt->is_object()) {
         if (errorMessage) *errorMessage = "geometry json missing ModelGeometry object";
@@ -652,6 +686,27 @@ public:
         }
         features.emplace(featureId, std::move(collector));
       }
+
+      // Optionally convert coordinates from the file's unit to target_unit.
+      // Uses CADExchange::TryParseUnitType / TryGetUnitConversionFactor so that
+      // all unit arithmetic stays in the canonical CADExchange unit system.
+      if (!target_unit.empty() && !file_unit.empty() &&
+          target_unit != file_unit) {
+        UnitType srcUnit{}, dstUnit{};
+        if (TryParseUnitType(file_unit, srcUnit) &&
+            TryParseUnitType(target_unit, dstUnit)) {
+          double factor = 1.0;
+          if (TryGetUnitConversionFactor(srcUnit, dstUnit, factor) &&
+              std::abs(factor - 1.0) > 1e-12) {
+            for (auto &[id, collector] : features) {
+              collector.Scale(factor);
+            }
+          }
+        }
+      }
+
+      // Record the effective unit after any conversion.
+      length_unit = target_unit.empty() ? file_unit : target_unit;
       return true;
     } catch (const std::exception &e) {
       if (errorMessage) *errorMessage = "Failed to parse geometry json: " + std::string(e.what());

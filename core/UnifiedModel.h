@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // clang-format off
 #include "UnifiedFeatures.h"
 #include <memory>
@@ -172,5 +172,13 @@ private:
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
                       std::string *errorMessage = nullptr);
+
+/// Parse a unit string (e.g. "mm", "inch") into the UnitType enum.
+/// Returns false if the string is unrecognised.
+bool TryParseUnitType(const std::string &unitStr, UnitType &out);
+
+/// Compute the multiplicative factor to convert a length value from `src` to
+/// `dst` units.  Returns false if either unit is unsupported.
+bool TryGetUnitConversionFactor(UnitType src, UnitType dst, double &factor);
 
 } // namespace CADExchange

@@ -25,6 +25,8 @@ using json = nlohmann::json;
 struct CompareOptions {
   std::filesystem::path srcPath;
   std::filesystem::path dstPath;
+  std::string srcUnit; // optional: convert src geometry to this unit on load
+  std::string dstUnit; // optional: convert dst geometry to this unit on load
   double tol = 2e-3;
 };
 
@@ -82,6 +84,14 @@ bool ParseCompareArgs(int argc, char *argv[], CompareOptions &out,
       out.dstPath = argv[++i];
       continue;
     }
+    if (arg == "--src-unit" && i + 1 < argc) {
+      out.srcUnit = argv[++i];
+      continue;
+    }
+    if (arg == "--dst-unit" && i + 1 < argc) {
+      out.dstUnit = argv[++i];
+      continue;
+    }
     if (arg == "--tol" && i + 1 < argc) {
       try {
         out.tol = std::stod(argv[++i]);
@@ -93,7 +103,9 @@ bool ParseCompareArgs(int argc, char *argv[], CompareOptions &out,
     }
     if (arg == "--help" || arg == "-h") {
       errorMessage =
-          "usage: test_geom --src <geometry.json> --dst <geometry.json> [--tol <double>]";
+          "usage: test_geom --src <geometry.json> --dst <geometry.json>"
+          " [--src-unit <unit>] [--dst-unit <unit>] [--tol <double>]\n"
+          "  unit examples: m, mm, cm, in, ft";
       return false;
     }
     errorMessage = "unknown argument: " + arg;
@@ -138,8 +150,9 @@ bool ParseDumpArgs(int argc, char *argv[], DumpOptions &out,
 }
 
 bool TryLoadGeometrySet(const std::filesystem::path &path, GeometrySet &set,
-                        std::string &errorMessage) {
-  return set.LoadFromJson(path, &errorMessage);
+                        std::string &errorMessage,
+                        const std::string &target_unit = "") {
+  return set.LoadFromJson(path, &errorMessage, target_unit);
 }
 
 bool TryLoadSingleCollector(const std::filesystem::path &path, Collector &collector,
@@ -165,8 +178,9 @@ bool TryLoadSingleCollector(const std::filesystem::path &path, Collector &collec
 }
 
 bool TryLoadGeometry(const std::filesystem::path &path, GeometrySet &set,
-                     bool &isFlatGeometry, std::string &errorMessage) {
-  if (TryLoadGeometrySet(path, set, errorMessage)) {
+                     bool &isFlatGeometry, std::string &errorMessage,
+                     const std::string &target_unit = "") {
+  if (TryLoadGeometrySet(path, set, errorMessage, target_unit)) {
     isFlatGeometry = false;
     return true;
   }
@@ -339,11 +353,11 @@ int main(int argc, char *argv[]) {
   bool srcFlat = false;
   bool dstFlat = false;
   std::string loadError;
-  if (!TryLoadGeometry(options.srcPath, srcSet, srcFlat, loadError)) {
+  if (!TryLoadGeometry(options.srcPath, srcSet, srcFlat, loadError, options.srcUnit)) {
     std::cerr << loadError << std::endl;
     return 2;
   }
-  if (!TryLoadGeometry(options.dstPath, dstSet, dstFlat, loadError)) {
+  if (!TryLoadGeometry(options.dstPath, dstSet, dstFlat, loadError, options.dstUnit)) {
     std::cerr << loadError << std::endl;
     return 2;
   }
