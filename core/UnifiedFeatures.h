@@ -386,8 +386,10 @@ struct CSketchCSys {
   CVector3D xDir;
   CVector3D yDir;
   CVector3D zDir;
+  bool valid = false;
 
   bool IsValid() const {
+    if (!valid) return false;
     CVector3D zCross = Cross(xDir, yDir);
     zCross.Normalize();
     CVector3D zDirNorm = zDir;

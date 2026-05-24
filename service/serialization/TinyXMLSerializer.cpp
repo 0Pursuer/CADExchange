@@ -1,4 +1,4 @@
-﻿#include "TinyXMLSerializer.h"
+#include "TinyXMLSerializer.h"
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -1112,6 +1112,7 @@ void TinyXMLSerializer::SaveSketch(XMLDocument &doc, XMLElement *element,
 
   XMLElement *csysElem = doc.NewElement("LocalCSys");
   element->InsertEndChild(csysElem);
+  csysElem->SetAttribute("Valid", sketch->sketchCSys.valid);
   SavePoint3D(csysElem, "Origin", sketch->sketchCSys.origin);
   SaveVector3D(csysElem, "XDir", sketch->sketchCSys.xDir);
   SaveVector3D(csysElem, "YDir", sketch->sketchCSys.yDir);
@@ -1773,6 +1774,9 @@ void TinyXMLSerializer::LoadSketch(XMLElement *element,
 
   XMLElement *csysElem = element->FirstChildElement("LocalCSys");
   if (csysElem) {
+    bool valid = false;
+    csysElem->QueryBoolAttribute("Valid", &valid);
+    sketch->sketchCSys.valid = valid;
     sketch->sketchCSys.origin = LoadPoint3D(csysElem, "Origin");
     sketch->sketchCSys.xDir = LoadVector3D(csysElem, "XDir");
     sketch->sketchCSys.yDir = LoadVector3D(csysElem, "YDir");

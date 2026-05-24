@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // clang-format off
 #include "../../core/TypeAdapters.h"
 #include "FeatureBuilderBase.h"
@@ -50,6 +50,7 @@ public:
     m_feature->sketchCSys.xDir = VectorAdapter<VectorT>::Convert(xDir);
     m_feature->sketchCSys.yDir = VectorAdapter<VectorT>::Convert(yDir);
     m_feature->sketchCSys.zDir = VectorAdapter<VectorT>::Convert(zDir);
+    m_feature->sketchCSys.valid = true;
 
     if (!m_feature->sketchCSys.IsValid()) {
       throw std::invalid_argument("Invalid sketch coordinate system: axes must "
