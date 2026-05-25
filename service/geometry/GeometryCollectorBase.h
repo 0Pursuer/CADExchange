@@ -310,15 +310,18 @@ public:
     std::vector<EdgeType> src_open, dst_open;
     std::vector<NormalizedArc> src_arcs, dst_arcs;
     std::vector<std::pair<CPoint3D, double>> src_circles, dst_circles;
+    std::vector<HalfStructurePointGroup> src_half_structure_groups, dst_half_structure_groups;
     int src_warn = 0, dst_warn = 0;
     ClassifyEdges(m_edges, src_open, src_arcs, src_circles, src_warn, tol);
     ClassifyEdges(other.m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
 
     std::vector<std::pair<CPoint3D, double>> promoted_src, promoted_dst;
-    src_arcs = MergeArcs(src_arcs, tol, promoted_src);
-    dst_arcs = MergeArcs(dst_arcs, tol, promoted_dst);
+    src_arcs = MergeArcs(src_arcs, tol, promoted_src, &src_half_structure_groups);
+    dst_arcs = MergeArcs(dst_arcs, tol, promoted_dst, &dst_half_structure_groups);
     for (auto &p : promoted_src) src_circles.push_back(p);
     for (auto &p : promoted_dst) dst_circles.push_back(p);
+    FilterHalfStructureEdges(src_open, src_half_structure_groups, tol);
+    FilterHalfStructureEdges(dst_open, dst_half_structure_groups, tol);
 
     if (!MatchCircles(src_circles, dst_circles, tol, &result.diagnostics)) {
       result.equivalent = false;
@@ -360,6 +363,12 @@ private:
     CPoint3D endPt{};
   };
 
+  struct HalfStructurePointGroup {
+    CPoint3D center{};
+    double radius = 0;
+    std::vector<CPoint3D> points;
+  };
+
   static std::string FormatPoint(const CPoint3D &pt) {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(6)
@@ -391,6 +400,51 @@ private:
         << " mid=" << FormatPoint(edge.midPoint)
         << " end=" << FormatPoint(edge.endPoint);
     return oss.str();
+  }
+
+  static bool PointsNear(const CPoint3D& a, const CPoint3D& b,
+                         double tol) noexcept {
+    return PtDist(a, b) <= tol;
+  }
+
+  static bool PointInGroup(const CPoint3D& pt,
+                           const HalfStructurePointGroup& group,
+                           double tol) noexcept {
+    for (const auto& candidate : group.points) {
+      if (PointsNear(pt, candidate, tol)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool IsHalfStructureRedundantEdge(
+      const EdgeType& edge,
+      const std::vector<HalfStructurePointGroup>& groups,
+      double tol) noexcept {
+    for (const auto& group : groups) {
+      if (PointInGroup(edge.startPoint, group, tol) ||
+          PointInGroup(edge.endPoint, group, tol)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static void FilterHalfStructureEdges(
+      std::vector<EdgeType>& open_edges,
+      const std::vector<HalfStructurePointGroup>& groups,
+      double tol) {
+    if (groups.empty() || open_edges.empty()) {
+      return;
+    }
+
+    open_edges.erase(
+        std::remove_if(open_edges.begin(), open_edges.end(),
+                       [&](const EdgeType& edge) {
+                         return IsHalfStructureRedundantEdge(edge, groups, tol);
+                       }),
+        open_edges.end());
   }
 
   static double PtDist(const CPoint3D& a, const CPoint3D& b) noexcept {
@@ -463,7 +517,8 @@ private:
 
   static std::vector<NormalizedArc> MergeArcs(const std::vector<NormalizedArc>& arcs,
                                               double tol,
-                                              std::vector<std::pair<CPoint3D,double>>& promoted_circles) {
+                                              std::vector<std::pair<CPoint3D,double>>& promoted_circles,
+                                              std::vector<HalfStructurePointGroup>* half_structure_groups = nullptr) {
     std::vector<bool> used(arcs.size(), false);
     std::vector<NormalizedArc> result;
     for (size_t i = 0; i < arcs.size(); ++i) {
@@ -479,6 +534,16 @@ private:
                         PtDist(arcs[i].startPt, arcs[j].startPt) <= tol;
         if (loop_fwd || loop_rev) {
           promoted_circles.emplace_back(arcs[i].center, arcs[i].radius);
+          if (half_structure_groups) {
+            HalfStructurePointGroup group;
+            group.center = arcs[i].center;
+            group.radius = arcs[i].radius;
+            group.points.push_back(arcs[i].startPt);
+            group.points.push_back(arcs[i].endPt);
+            group.points.push_back(arcs[j].startPt);
+            group.points.push_back(arcs[j].endPt);
+            half_structure_groups->push_back(std::move(group));
+          }
           used[i] = used[j] = true;
           found_partner = true;
           break;
