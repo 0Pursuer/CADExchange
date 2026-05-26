@@ -251,6 +251,11 @@ void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
   if (fillet.params.defaultRadius2.has_value()) {
     *fillet.params.defaultRadius2 *= factor;
   }
+  if (fillet.params.conicValue.has_value() &&
+      fillet.params.conicValueMode != FilletConicValueMode::RHO &&
+      fillet.params.conicValueMode != FilletConicValueMode::GENERIC_VALUE) {
+    *fillet.params.conicValue *= factor;
+  }
   if (fillet.firstEndFaceMarker.has_value()) {
     ScalePoint(*fillet.firstEndFaceMarker, factor);
   }

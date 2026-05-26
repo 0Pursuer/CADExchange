@@ -1249,7 +1249,7 @@ void TestFilletUnitConversion() {
           .SetReferenceMode(FilletReferenceMode::EDGE_CHAIN)
           .SetDefaultRadius(0.003)
           .SetDefaultRadius2(0.004)
-          .SetConicValue(0.005)
+          .SetConicValue(0.005, FilletConicValueMode::RHO)
           .SetFirstEndFaceMarker(CPoint3D{0.01, 0.02, 0.03})
           .AddReference(Ref::Edge(extrudeID, 1)
                             .StartPoint(CPoint3D{0.05, 0.0, 0.02})
@@ -1268,8 +1268,8 @@ void TestFilletUnitConversion() {
   Expect(std::abs(converted.GetDefaultRadius2() - 4.0) < 1e-9,
          "Fillet default radius2 should scale to millimeters.");
   Expect(converted.HasConicValue() &&
-             std::abs(converted.GetConicValue() - 5.0) < 1e-9,
-         "Fillet conic value should scale with model units.");
+             std::abs(converted.GetConicValue() - 0.005) < 1e-12,
+         "Rho conic value should remain dimensionless across unit conversion.");
   Expect(converted.GetRadiusPoints().size() == 1,
          "Converted fillet should preserve radius points.");
   const auto &point2 = converted.GetRadiusPoints().front();

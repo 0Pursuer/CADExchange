@@ -1533,7 +1533,8 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
   if (emitDefaultRadius && fillet->params.defaultRadius.has_value()) {
     paramsElem->SetAttribute("DefaultRadius", *fillet->params.defaultRadius);
   }
-  if (emitDefaultRadius && fillet->params.defaultRadius2.has_value()) {
+  if (emitDefaultRadius && fillet->params.isAsymmetric &&
+      fillet->params.defaultRadius2.has_value()) {
     paramsElem->SetAttribute("DefaultRadius2", *fillet->params.defaultRadius2);
   }
   const bool emitConicValue =
