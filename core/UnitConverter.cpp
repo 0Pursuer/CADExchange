@@ -245,11 +245,11 @@ void ScaleChamfer(CChamfer &chamfer, double factor, UnitScaleContext &ctx) {
 }
 
 void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
-  if (fillet.params.defaultRadius.has_value()) {
-    *fillet.params.defaultRadius *= factor;
+  if (fillet.params.primaryValue.has_value()) {
+    *fillet.params.primaryValue *= factor;
   }
-  if (fillet.params.defaultRadius2.has_value()) {
-    *fillet.params.defaultRadius2 *= factor;
+  if (fillet.params.secondValue.has_value()) {
+    *fillet.params.secondValue *= factor;
   }
   if (fillet.params.conicValue.has_value() &&
       fillet.params.conicValueMode != FilletConicValueMode::RHO &&
@@ -260,9 +260,11 @@ void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
     ScalePoint(*fillet.firstEndFaceMarker, factor);
   }
   for (auto &point : fillet.params.radiusPoints) {
-    point.radius1 *= factor;
-    if (point.radius2.has_value()) {
-      *point.radius2 *= factor;
+    if (point.primaryValue.has_value()) {
+      *point.primaryValue *= factor;
+    }
+    if (point.secondValue.has_value()) {
+      *point.secondValue *= factor;
     }
     if (point.edgeRef) {
       ScaleRefEntity(point.edgeRef, factor, ctx);

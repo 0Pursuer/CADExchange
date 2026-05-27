@@ -355,9 +355,9 @@ std::optional<ChamferMode> ChamferModeFromString(const char *text) {
 std::string FilletModeToString(FilletMode mode) {
   switch (mode) {
   case FilletMode::CONSTANT_RADIUS:
-    return "ConstantRadius";
+    return "Constant";
   case FilletMode::VARIABLE_RADIUS:
-    return "VariableRadius";
+    return "Variable";
   case FilletMode::FACE_FILLET:
     return "FaceFillet";
   case FilletMode::FULL_ROUND:
@@ -375,8 +375,14 @@ std::optional<FilletMode> FilletModeFromString(const char *text) {
     return std::nullopt;
   }
   const std::string value = ToLower(text);
+  if (value == "constant") {
+    return FilletMode::CONSTANT_RADIUS;
+  }
   if (value == "constantradius") {
     return FilletMode::CONSTANT_RADIUS;
+  }
+  if (value == "variable") {
+    return FilletMode::VARIABLE_RADIUS;
   }
   if (value == "variableradius") {
     return FilletMode::VARIABLE_RADIUS;
@@ -497,6 +503,42 @@ FilletConicValueModeFromString(const char *text) {
   }
   if (value == "none") {
     return FilletConicValueMode::NONE;
+  }
+  return std::nullopt;
+}
+
+std::string FilletDriveTypeToString(FilletDriveType driveType) {
+  switch (driveType) {
+  case FilletDriveType::RADIUS:
+    return "Radius";
+  case FilletDriveType::SINGLE_DISTANCE:
+  case FilletDriveType::TWO_DISTANCES:
+    return "Distances";
+  case FilletDriveType::UNKNOWN:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<FilletDriveType> FilletDriveTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "radius") {
+    return FilletDriveType::RADIUS;
+  }
+  if (value == "distances") {
+    return FilletDriveType::SINGLE_DISTANCE;
+  }
+  if (value == "singledistance") {
+    return FilletDriveType::SINGLE_DISTANCE;
+  }
+  if (value == "twodistances") {
+    return FilletDriveType::TWO_DISTANCES;
+  }
+  if (value == "unknown") {
+    return FilletDriveType::UNKNOWN;
   }
   return std::nullopt;
 }
@@ -1512,30 +1554,32 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
                static_cast<int>(fillet->referenceMode), fillet->references.size(),
                fillet->params.radiusPoints.size());
   element->SetAttribute("Mode", FilletModeToString(fillet->mode).c_str());
-  if (fillet->referenceMode != FilletReferenceMode::UNKNOWN) {
+  if (fillet->referenceMode != FilletReferenceMode::UNKNOWN &&
+      fillet->referenceMode != FilletReferenceMode::EDGE_CHAIN) {
     element->SetAttribute(
         "ReferenceMode",
         FilletReferenceModeToString(fillet->referenceMode).c_str());
   }
-  if (fillet->params.isAsymmetric && fillet->firstEndFaceMarker.has_value()) {
+  if (fillet->params.secondValue.has_value() &&
+      fillet->firstEndFaceMarker.has_value()) {
     SavePoint3D(element, "FirstEndFaceMarker",
                 *fillet->firstEndFaceMarker);
   }
   const bool emitDefaultRadius = fillet->mode != FilletMode::VARIABLE_RADIUS;
 
   XMLElement *paramsElem = doc.NewElement("Parameters");
+  paramsElem->SetAttribute("DriveType",
+                           FilletDriveTypeToString(fillet->params.driveType).c_str());
+  if (fillet->params.primaryValue.has_value()) {
+    paramsElem->SetAttribute("PrimaryValue", *fillet->params.primaryValue);
+  }
+  if (fillet->params.secondValue.has_value()) {
+    paramsElem->SetAttribute("SecondValue", *fillet->params.secondValue);
+  }
   if (fillet->params.crossSection != FilletCrossSection::UNKNOWN) {
     paramsElem->SetAttribute(
         "CrossSection",
         FilletCrossSectionToString(fillet->params.crossSection).c_str());
-  }
-  paramsElem->SetAttribute("IsAsymmetric", fillet->params.isAsymmetric);
-  if (emitDefaultRadius && fillet->params.defaultRadius.has_value()) {
-    paramsElem->SetAttribute("DefaultRadius", *fillet->params.defaultRadius);
-  }
-  if (emitDefaultRadius && fillet->params.isAsymmetric &&
-      fillet->params.defaultRadius2.has_value()) {
-    paramsElem->SetAttribute("DefaultRadius2", *fillet->params.defaultRadius2);
   }
   const bool emitConicValue =
       fillet->params.crossSection == FilletCrossSection::CONIC ||
@@ -1557,9 +1601,11 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
     for (const auto &point : fillet->params.radiusPoints) {
       XMLElement *pointElem = doc.NewElement("RadiusPoint");
       pointElem->SetAttribute("Position", point.position);
-      pointElem->SetAttribute("Radius1", point.radius1);
-      if (point.radius2.has_value()) {
-        pointElem->SetAttribute("Radius2", *point.radius2);
+      if (point.primaryValue.has_value()) {
+        pointElem->SetAttribute("PrimaryValue", *point.primaryValue);
+      }
+      if (point.secondValue.has_value()) {
+        pointElem->SetAttribute("SecondValue", *point.secondValue);
       }
       if (point.edgeRef) {
         SaveRefEntity(doc, pointElem, "ReferenceEntity", point.edgeRef);
@@ -2252,6 +2298,12 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
   }
 
   if (XMLElement *paramsElem = element->FirstChildElement("Parameters")) {
+    if (auto driveType =
+            FilletDriveTypeFromString(paramsElem->Attribute("DriveType"))) {
+      fillet->params.driveType = *driveType;
+    } else if (fillet->mode == FilletMode::CHORDAL) {
+      fillet->params.driveType = FilletDriveType::SINGLE_DISTANCE;
+    }
     if (auto crossSection =
             FilletCrossSectionFromString(paramsElem->Attribute("CrossSection"))) {
       fillet->params.crossSection = *crossSection;
@@ -2259,8 +2311,6 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
                XML_SUCCESS) {
       fillet->params.crossSection = static_cast<FilletCrossSection>(intValue);
     }
-    paramsElem->QueryBoolAttribute("IsAsymmetric",
-                                   &fillet->params.isAsymmetric);
     paramsElem->QueryBoolAttribute("TangentPropagation",
                                    &fillet->params.tangentPropagation);
     if (auto conicValueMode =
@@ -2272,13 +2322,52 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
           static_cast<FilletConicValueMode>(intValue);
     }
     double doubleValue = 0.0;
+    if (paramsElem->QueryDoubleAttribute("PrimaryValue", &doubleValue) ==
+        XML_SUCCESS) {
+      fillet->params.primaryValue = doubleValue;
+    }
+    if (paramsElem->QueryDoubleAttribute("SecondValue", &doubleValue) ==
+        XML_SUCCESS) {
+      fillet->params.secondValue = doubleValue;
+      if (fillet->params.driveType == FilletDriveType::SINGLE_DISTANCE) {
+        fillet->params.driveType = FilletDriveType::TWO_DISTANCES;
+      }
+    }
     if (paramsElem->QueryDoubleAttribute("DefaultRadius", &doubleValue) ==
         XML_SUCCESS) {
-      fillet->params.defaultRadius = doubleValue;
+      if (!fillet->params.primaryValue.has_value()) {
+        fillet->params.primaryValue = doubleValue;
+      }
     }
-    if (paramsElem->QueryDoubleAttribute("DefaultRadius2", &doubleValue) ==
+    if (paramsElem->QueryDoubleAttribute("DefaultDistance", &doubleValue) ==
         XML_SUCCESS) {
-      fillet->params.defaultRadius2 = doubleValue;
+      if (!fillet->params.primaryValue.has_value()) {
+        fillet->params.primaryValue = doubleValue;
+      }
+    }
+    if (paramsElem->QueryDoubleAttribute("DefaultDistance2", &doubleValue) ==
+        XML_SUCCESS) {
+      if (!fillet->params.secondValue.has_value()) {
+        fillet->params.secondValue = doubleValue;
+      }
+      if (fillet->params.driveType == FilletDriveType::SINGLE_DISTANCE) {
+        fillet->params.driveType = FilletDriveType::TWO_DISTANCES;
+      }
+    } else if (paramsElem->QueryDoubleAttribute("DefaultRadius2", &doubleValue) ==
+               XML_SUCCESS) {
+      if (!fillet->params.secondValue.has_value()) {
+        fillet->params.secondValue = doubleValue;
+      }
+      if (fillet->params.driveType == FilletDriveType::SINGLE_DISTANCE) {
+        fillet->params.driveType = FilletDriveType::TWO_DISTANCES;
+      }
+    }
+    if (fillet->params.driveType == FilletDriveType::UNKNOWN) {
+      if (fillet->params.secondValue.has_value()) {
+        fillet->params.driveType = FilletDriveType::TWO_DISTANCES;
+      } else if (fillet->params.primaryValue.has_value()) {
+        fillet->params.driveType = FilletDriveType::SINGLE_DISTANCE;
+      }
     }
     if (paramsElem->QueryDoubleAttribute("ConicValue", &doubleValue) ==
         XML_SUCCESS) {
@@ -2302,7 +2391,15 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
     }
   }
 
-  if (!fillet->params.isAsymmetric) {
+  if (fillet->referenceMode == FilletReferenceMode::UNKNOWN) {
+    if (fillet->mode == FilletMode::FULL_ROUND) {
+      fillet->referenceMode = FilletReferenceMode::FULL_ROUND_THREE_FACES;
+    } else {
+      fillet->referenceMode = FilletReferenceMode::EDGE_CHAIN;
+    }
+  }
+
+  if (!fillet->params.secondValue.has_value()) {
     fillet->firstEndFaceMarker.reset();
   }
 
@@ -2323,13 +2420,42 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
           XML_SUCCESS) {
         point.position = doubleValue;
       }
+      if (pointElem->QueryDoubleAttribute("PrimaryValue", &doubleValue) ==
+          XML_SUCCESS) {
+        point.primaryValue = doubleValue;
+      }
+      if (pointElem->QueryDoubleAttribute("SecondValue", &doubleValue) ==
+          XML_SUCCESS) {
+        point.secondValue = doubleValue;
+      }
       if (pointElem->QueryDoubleAttribute("Radius1", &doubleValue) ==
           XML_SUCCESS) {
-        point.radius1 = doubleValue;
+        point.primaryValue = doubleValue;
       }
-      if (pointElem->QueryDoubleAttribute("Radius2", &doubleValue) ==
+      if (pointElem->QueryDoubleAttribute("Radius", &doubleValue) ==
           XML_SUCCESS) {
-        point.radius2 = doubleValue;
+        point.primaryValue = doubleValue;
+      }
+      if (pointElem->QueryDoubleAttribute("Distance1", &doubleValue) ==
+          XML_SUCCESS) {
+        point.primaryValue = doubleValue;
+      }
+      if (pointElem->QueryDoubleAttribute("Distance", &doubleValue) ==
+          XML_SUCCESS) {
+        if (!point.primaryValue.has_value()) {
+          point.primaryValue = doubleValue;
+        }
+      }
+      if (pointElem->QueryDoubleAttribute("Distance2", &doubleValue) ==
+          XML_SUCCESS) {
+        if (!point.secondValue.has_value()) {
+          point.secondValue = doubleValue;
+        }
+      } else if (pointElem->QueryDoubleAttribute("Radius2", &doubleValue) ==
+          XML_SUCCESS) {
+        if (!point.secondValue.has_value()) {
+          point.secondValue = doubleValue;
+        }
       }
       if (auto *edgeElem = pointElem->FirstChildElement("ReferenceEntity")) {
         point.edgeRef =

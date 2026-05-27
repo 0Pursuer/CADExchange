@@ -598,21 +598,28 @@ enum class FilletConicValueMode {
   GENERIC_VALUE
 };
 
+enum class FilletDriveType {
+  UNKNOWN = 0,
+  RADIUS,
+  SINGLE_DISTANCE,
+  TWO_DISTANCES
+};
+
 struct CFilletRadiusPoint {
   double position = 0.0;
-  double radius1 = 0.0;
-  std::optional<double> radius2;
+  std::optional<double> primaryValue;
+  std::optional<double> secondValue;
   std::shared_ptr<CRefEdge> edgeRef;
 };
 
 struct CFilletParams {
-  std::optional<double> defaultRadius;
-  std::optional<double> defaultRadius2;
+  FilletDriveType driveType{FilletDriveType::UNKNOWN};
+  std::optional<double> primaryValue;
+  std::optional<double> secondValue;
   std::vector<CFilletRadiusPoint> radiusPoints;
   FilletCrossSection crossSection{FilletCrossSection::UNKNOWN};
   FilletConicValueMode conicValueMode{FilletConicValueMode::NONE};
   std::optional<double> conicValue;
-  bool isAsymmetric = false;
   bool tangentPropagation = false;
 };
 

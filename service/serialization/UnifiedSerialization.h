@@ -356,19 +356,19 @@ template <class Archive> void serialize(Archive &ar, CSweep &sweep) {
 
 template <class Archive> void serialize(Archive &ar, CFilletRadiusPoint &point) {
   ar(cereal::make_nvp("Position", point.position),
-     cereal::make_nvp("Radius1", point.radius1),
-     cereal::make_nvp("Radius2", point.radius2),
+     cereal::make_nvp("PrimaryValue", point.primaryValue),
+     cereal::make_nvp("SecondValue", point.secondValue),
      cereal::make_nvp("EdgeRef", point.edgeRef));
 }
 
 template <class Archive> void serialize(Archive &ar, CFilletParams &params) {
-  ar(cereal::make_nvp("DefaultRadius", params.defaultRadius),
-     cereal::make_nvp("DefaultRadius2", params.defaultRadius2),
+  ar(cereal::make_nvp("DriveType", params.driveType),
+     cereal::make_nvp("PrimaryValue", params.primaryValue),
+     cereal::make_nvp("SecondValue", params.secondValue),
      cereal::make_nvp("RadiusPoints", params.radiusPoints),
      cereal::make_nvp("CrossSection", params.crossSection),
      cereal::make_nvp("ConicValueMode", params.conicValueMode),
      cereal::make_nvp("ConicValue", params.conicValue),
-     cereal::make_nvp("IsAsymmetric", params.isAsymmetric),
      cereal::make_nvp("TangentPropagation", params.tangentPropagation));
 }
 

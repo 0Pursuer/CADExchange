@@ -5,6 +5,10 @@
 #include <memory>
 #include <vector>
 
+#ifdef GetDriveType
+#undef GetDriveType
+#endif
+
 namespace CADExchange {
 namespace Accessor {
 
@@ -35,29 +39,27 @@ public:
   bool IsValid() const override { return m_fillet != nullptr; }
 
   ACCESSOR_GETTER(FilletMode, Mode, mode, FilletMode::UNKNOWN)
+  ACCESSOR_GETTER(FilletDriveType, DriveType, params.driveType,
+                  FilletDriveType::UNKNOWN)
   ACCESSOR_GETTER(FilletCrossSection, CrossSection, params.crossSection,
                   FilletCrossSection::UNKNOWN)
   ACCESSOR_GETTER(FilletReferenceMode, ReferenceMode, referenceMode,
                   FilletReferenceMode::UNKNOWN)
 
-  bool HasDefaultRadius() const {
-    return IsValid() && Data()->params.defaultRadius.has_value();
+  bool HasPrimaryValue() const {
+    return IsValid() && Data()->params.primaryValue.has_value();
   }
 
-  double GetDefaultRadius() const {
-    return HasDefaultRadius() ? *Data()->params.defaultRadius : 0.0;
+  double GetPrimaryValue() const {
+    return HasPrimaryValue() ? *Data()->params.primaryValue : 0.0;
   }
 
-  bool HasDefaultRadius2() const {
-    return IsValid() && Data()->params.defaultRadius2.has_value();
+  bool HasSecondValue() const {
+    return IsValid() && Data()->params.secondValue.has_value();
   }
 
-  double GetDefaultRadius2() const {
-    return HasDefaultRadius2() ? *Data()->params.defaultRadius2 : 0.0;
-  }
-
-  bool IsAsymmetric() const {
-    return IsValid() && Data()->params.isAsymmetric;
+  double GetSecondValue() const {
+    return HasSecondValue() ? *Data()->params.secondValue : 0.0;
   }
 
   bool HasTangentPropagation() const {
