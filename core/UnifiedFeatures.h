@@ -609,7 +609,7 @@ struct CFilletRadiusPoint {
   double position = 0.0;
   std::optional<double> primaryValue;
   std::optional<double> secondValue;
-  std::shared_ptr<CRefEdge> edgeRef;
+  std::optional<CPoint3D> edgeMidPoint;
 };
 
 struct CFilletParams {

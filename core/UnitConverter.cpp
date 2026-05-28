@@ -266,8 +266,8 @@ void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
     if (point.secondValue.has_value()) {
       *point.secondValue *= factor;
     }
-    if (point.edgeRef) {
-      ScaleRefEntity(point.edgeRef, factor, ctx);
+    if (point.edgeMidPoint.has_value()) {
+      ScalePoint(*point.edgeMidPoint, factor);
     }
   }
   for (auto &ref : fillet.references) {

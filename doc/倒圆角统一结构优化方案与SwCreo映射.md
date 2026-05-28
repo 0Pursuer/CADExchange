@@ -472,6 +472,51 @@ SW 读取后统一映射为：
 - `ConicValueMode`
 - `ConicValue`
 
+### 8.4 Variable RadiusPoint Position 方向归一化
+
+当前代码已实际落地如下规则：
+
+- `SW -> CADExchange -> SW`
+- `SW -> CADExchange -> Creo`
+
+在变半径倒圆角写侧，若目标 CAD 中被选中的重建边方向与源 XML 记录的参考边方向相反，则：
+
+```text
+mappedPosition = 1.0 - sourcePosition
+```
+
+否则：
+
+```text
+mappedPosition = sourcePosition
+```
+
+源边身份恢复方式为：
+
+- 优先使用 `RadiusPoint.EdgeMidPoint`
+- 在 fillet 顶层 `References` 中反查对应 edge
+- 取其 `StartPoint / EndPoint`
+
+若控制点没有 `EdgeMidPoint`，则回退到：
+
+- fillet 第一条 edge reference
+
+该规则当前已在两侧桥接中落地：
+
+- `SwLibs/read_write/src/internal/feature_fillet.cpp`
+  - 作用于 `POINTREF` 预选点
+  - 作用于 `SetControlPointRadiusAtIndex(...)`
+- `CreoLibs/read_write/src/internal/feature_fillet.cpp`
+  - 作用于 `PRO_EDGE_PNT` 的 `uv[0]`
+
+已验证现象：
+
+- `varRound_test_1`
+  中 `SW -> Creo` 路径上，即使 compare 报告提示：
+  - `References[0].Start/End reversed`
+  控制点位置仍能正确落到目标边反向后的对应参数位置
+- 当前该 warning 不再演变成控制点位置错误或几何失败
+
 ## 9. 标准降级规则
 
 当前统一结构中，以下语义已被视为标准归一化结果：

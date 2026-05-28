@@ -1073,10 +1073,7 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
   radiusPoint.position = 0.25;
   radiusPoint.primaryValue = 0.002;
   radiusPoint.secondValue = 0.003;
-  radiusPoint.edgeRef = Ref::Edge(extrudeID, 0)
-                           .StartPoint(CPoint3D{0.0, 0.0, 0.02})
-                           .EndPoint(CPoint3D{0.06, 0.0, 0.02})
-                           .MidPoint(CPoint3D{0.03, 0.0, 0.02});
+  radiusPoint.edgeMidPoint = CPoint3D{0.03, 0.0, 0.02};
 
   const std::string filletID =
       FilletBuilder(model, "EdgeFillet")
@@ -1139,8 +1136,12 @@ void TestFilletBuilderAccessorAndXmlRoundTrip() {
          "Fillet radius point primary value should be readable.");
   Expect(point.secondValue.has_value() && std::abs(*point.secondValue - 0.003) < 1e-12,
          "Fillet radius point second value should be readable.");
-  Expect(point.edgeRef != nullptr,
-         "Fillet radius point edgeRef should be preserved.");
+  Expect(point.edgeMidPoint.has_value(),
+         "Fillet radius point edgeMidPoint should be preserved.");
+  Expect(std::abs(point.edgeMidPoint->x - 0.03) < 1e-12 &&
+             std::abs(point.edgeMidPoint->y - 0.0) < 1e-12 &&
+             std::abs(point.edgeMidPoint->z - 0.02) < 1e-12,
+         "Fillet radius point edgeMidPoint should preserve coordinates.");
   const std::string chordalFilletID =
       FilletBuilder(model, "ChordalFillet")
           .SetMode(FilletMode::CHORDAL)
@@ -1245,10 +1246,7 @@ void TestFilletUnitConversion() {
   CFilletRadiusPoint radiusPoint;
   radiusPoint.primaryValue = 0.001;
   radiusPoint.secondValue = 0.002;
-  radiusPoint.edgeRef = Ref::Edge(extrudeID, 0)
-                           .StartPoint(CPoint3D{0.0, 0.0, 0.02})
-                           .EndPoint(CPoint3D{0.05, 0.0, 0.02})
-                           .MidPoint(CPoint3D{0.025, 0.0, 0.02});
+  radiusPoint.edgeMidPoint = CPoint3D{0.025, 0.0, 0.02};
 
   const std::string filletID =
       FilletBuilder(model, "UnitFillet")
@@ -1285,6 +1283,9 @@ void TestFilletUnitConversion() {
          "Fillet radius point primary value should scale to millimeters.");
   Expect(point2.secondValue.has_value() && std::abs(*point2.secondValue - 2.0) < 1e-9,
          "Fillet radius point second value should scale to millimeters.");
+  Expect(point2.edgeMidPoint.has_value() &&
+             std::abs(point2.edgeMidPoint->x - 25.0) < 1e-9,
+         "Fillet radius point edgeMidPoint should scale to millimeters.");
   Expect(converted.HasFirstEndFaceMarker(),
          "Converted fillet should preserve first-end-face marker.");
   const CPoint3D convertedMarker = converted.GetFirstEndFaceMarker();

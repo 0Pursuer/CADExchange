@@ -1607,8 +1607,8 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
       if (point.secondValue.has_value()) {
         pointElem->SetAttribute("SecondValue", *point.secondValue);
       }
-      if (point.edgeRef) {
-        SaveRefEntity(doc, pointElem, "ReferenceEntity", point.edgeRef);
+      if (point.edgeMidPoint.has_value()) {
+        SavePoint3D(pointElem, "EdgeMidPoint", *point.edgeMidPoint);
       }
       radiusPointsElem->InsertEndChild(pointElem);
     }
@@ -2457,9 +2457,13 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
           point.secondValue = doubleValue;
         }
       }
-      if (auto *edgeElem = pointElem->FirstChildElement("ReferenceEntity")) {
-        point.edgeRef =
-            std::dynamic_pointer_cast<CRefEdge>(LoadRefEntity(edgeElem));
+      if (pointElem->Attribute("EdgeMidPoint")) {
+        point.edgeMidPoint = LoadPoint3D(pointElem, "EdgeMidPoint");
+      } else if (auto *edgeElem = pointElem->FirstChildElement("ReferenceEntity")) {
+        if (auto edgeRef =
+                std::dynamic_pointer_cast<CRefEdge>(LoadRefEntity(edgeElem))) {
+          point.edgeMidPoint = edgeRef->midPoint;
+        }
       }
       fillet->params.radiusPoints.push_back(std::move(point));
     }

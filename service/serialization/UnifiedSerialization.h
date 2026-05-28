@@ -358,7 +358,7 @@ template <class Archive> void serialize(Archive &ar, CFilletRadiusPoint &point) 
   ar(cereal::make_nvp("Position", point.position),
      cereal::make_nvp("PrimaryValue", point.primaryValue),
      cereal::make_nvp("SecondValue", point.secondValue),
-     cereal::make_nvp("EdgeRef", point.edgeRef));
+     cereal::make_nvp("EdgeMidPoint", point.edgeMidPoint));
 }
 
 template <class Archive> void serialize(Archive &ar, CFilletParams &params) {

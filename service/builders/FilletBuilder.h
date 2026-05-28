@@ -101,9 +101,6 @@ public:
 
   FilletBuilder &AddRadiusPoint(const CFilletRadiusPoint &point) {
     CFilletRadiusPoint normalizedPoint = point;
-    if (point.edgeRef) {
-      ValidateReference(point.edgeRef);
-    }
     m_feature->params.radiusPoints.push_back(std::move(normalizedPoint));
     return *this;
   }
