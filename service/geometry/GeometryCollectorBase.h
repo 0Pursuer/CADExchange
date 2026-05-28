@@ -312,26 +312,164 @@ public:
     std::vector<std::pair<CPoint3D, double>> src_circles, dst_circles;
     std::vector<HalfStructurePointGroup> src_half_structure_groups, dst_half_structure_groups;
     int src_warn = 0, dst_warn = 0;
-    ClassifyEdges(m_edges, src_open, src_arcs, src_circles, src_warn, tol);
-    ClassifyEdges(other.m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
+    ClassifyEdges(m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
+    ClassifyEdges(other.m_edges, src_open, src_arcs, src_circles, src_warn, tol);
 
     std::vector<std::pair<CPoint3D, double>> promoted_src, promoted_dst;
     src_arcs = MergeArcs(src_arcs, tol, promoted_src, &src_half_structure_groups);
     dst_arcs = MergeArcs(dst_arcs, tol, promoted_dst, &dst_half_structure_groups);
     for (auto &p : promoted_src) src_circles.push_back(p);
     for (auto &p : promoted_dst) dst_circles.push_back(p);
+
+    // Simplify circles and arcs on both sides
+    SimplifyCirclesAndArcs(src_circles, src_arcs, tol);
+    SimplifyCirclesAndArcs(dst_circles, dst_arcs, tol);
+
     FilterHalfStructureEdges(src_open, src_half_structure_groups, tol);
     FilterHalfStructureEdges(dst_open, dst_half_structure_groups, tol);
 
-    if (!MatchCircles(src_circles, dst_circles, tol, &result.diagnostics)) {
-      result.equivalent = false;
+    std::vector<std::pair<CPoint3D, double>> src_unmatched_circles;
+    std::vector<std::pair<CPoint3D, double>> dst_unmatched_circles;
+    std::vector<bool> dst_circle_used(dst_circles.size(), false);
+    for (const auto& sc : src_circles) {
+      bool found = false;
+      for (size_t j = 0; j < dst_circles.size(); ++j) {
+        if (dst_circle_used[j]) continue;
+        if (PtDist(sc.first, dst_circles[j].first) <= tol && 
+            std::abs(sc.second - dst_circles[j].second) <= tol) {
+          dst_circle_used[j] = true;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        src_unmatched_circles.push_back(sc);
+      }
     }
-    if (!MatchArcs(src_arcs, dst_arcs, tol, &result.diagnostics)) {
-      result.equivalent = false;
+    for (size_t j = 0; j < dst_circles.size(); ++j) {
+      if (!dst_circle_used[j]) {
+        dst_unmatched_circles.push_back(dst_circles[j]);
+      }
     }
-    if (!MatchOpenEdges(src_open, dst_open, tol, &result.diagnostics)) {
-      result.equivalent = false;
+
+    std::vector<NormalizedArc> src_unmatched_arcs;
+    std::vector<NormalizedArc> dst_unmatched_arcs;
+    std::vector<CPoint3D> matched_vertices;
+    std::vector<bool> dst_arc_used(dst_arcs.size(), false);
+    for (const auto& sa : src_arcs) {
+      bool found = false;
+      for (size_t j = 0; j < dst_arcs.size(); ++j) {
+        if (dst_arc_used[j]) continue;
+        const auto& da = dst_arcs[j];
+        if (PtDist(sa.center, da.center) <= tol && std::abs(sa.radius - da.radius) <= tol) {
+          double fwd = (std::max)(PtDist(sa.startPt, da.startPt), PtDist(sa.endPt, da.endPt));
+          double rev = (std::max)(PtDist(sa.startPt, da.endPt), PtDist(sa.endPt, da.startPt));
+          if ((std::min)(fwd, rev) <= tol) {
+            dst_arc_used[j] = true;
+            found = true;
+            matched_vertices.push_back(sa.startPt);
+            matched_vertices.push_back(sa.endPt);
+            break;
+          }
+        }
+      }
+      if (!found) {
+        src_unmatched_arcs.push_back(sa);
+      }
     }
+    for (size_t j = 0; j < dst_arcs.size(); ++j) {
+      if (!dst_arc_used[j]) {
+        dst_unmatched_arcs.push_back(dst_arcs[j]);
+      }
+    }
+
+    std::vector<EdgeType> src_unmatched_open;
+    std::vector<EdgeType> dst_unmatched_open;
+    std::vector<bool> dst_open_used(dst_open.size(), false);
+    for (const auto& se : src_open) {
+      bool found = false;
+      for (size_t j = 0; j < dst_open.size(); ++j) {
+        if (dst_open_used[j]) continue;
+        const auto& de = dst_open[j];
+        if (se.curveType == de.curveType && PtDist(se.midPoint, de.midPoint) <= tol) {
+          double fwd = (std::max)(PtDist(se.startPoint, de.startPoint), PtDist(se.endPoint, de.endPoint));
+          double rev = (std::max)(PtDist(se.startPoint, de.endPoint), PtDist(se.endPoint, de.startPoint));
+          if ((std::min)(fwd, rev) <= tol) {
+            dst_open_used[j] = true;
+            found = true;
+            matched_vertices.push_back(se.startPoint);
+            matched_vertices.push_back(se.endPoint);
+            break;
+          }
+        }
+      }
+      if (!found) {
+        src_unmatched_open.push_back(se);
+      }
+    }
+    for (size_t j = 0; j < dst_open.size(); ++j) {
+      if (!dst_open_used[j]) {
+        dst_unmatched_open.push_back(dst_open[j]);
+      }
+    }
+
+    auto is_vertex_matched = [&](const CPoint3D& pt) -> bool {
+      for (const auto& mv : matched_vertices) {
+        if (PtDist(pt, mv) <= tol) return true;
+      }
+      return false;
+    };
+    auto is_redundant_division_open = [&](const EdgeType& edge) -> bool {
+      return is_vertex_matched(edge.startPoint) && is_vertex_matched(edge.endPoint);
+    };
+    auto is_redundant_division_arc = [&](const NormalizedArc& arc) -> bool {
+      return is_vertex_matched(arc.startPt) && is_vertex_matched(arc.endPt);
+    };
+
+    src_unmatched_open.erase(
+        std::remove_if(src_unmatched_open.begin(), src_unmatched_open.end(),
+                       is_redundant_division_open),
+        src_unmatched_open.end());
+    dst_unmatched_open.erase(
+        std::remove_if(dst_unmatched_open.begin(), dst_unmatched_open.end(),
+                       is_redundant_division_open),
+        dst_unmatched_open.end());
+
+    src_unmatched_arcs.erase(
+        std::remove_if(src_unmatched_arcs.begin(), src_unmatched_arcs.end(),
+                       is_redundant_division_arc),
+        src_unmatched_arcs.end());
+    dst_unmatched_arcs.erase(
+        std::remove_if(dst_unmatched_arcs.begin(), dst_unmatched_arcs.end(),
+                       is_redundant_division_arc),
+        dst_unmatched_arcs.end());
+
+    result.equivalent = true;
+    for (const auto& sc : src_unmatched_circles) {
+      result.equivalent = false;
+      result.diagnostics.push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc.first, sc.second));
+    }
+    for (const auto& dc : dst_unmatched_circles) {
+      result.equivalent = false;
+      result.diagnostics.push_back("DST extra TRUE_CIRCLE " + FormatCircle(dc.first, dc.second));
+    }
+    for (const auto& sa : src_unmatched_arcs) {
+      result.equivalent = false;
+      result.diagnostics.push_back("SRC unmatched ARC " + FormatArc(sa));
+    }
+    for (const auto& da : dst_unmatched_arcs) {
+      result.equivalent = false;
+      result.diagnostics.push_back("DST extra ARC " + FormatArc(da));
+    }
+    for (const auto& se : src_unmatched_open) {
+      result.equivalent = false;
+      result.diagnostics.push_back("SRC unmatched OPEN_EDGE " + FormatOpenEdge(se));
+    }
+    for (const auto& de : dst_unmatched_open) {
+      result.equivalent = false;
+      result.diagnostics.push_back("DST extra OPEN_EDGE " + FormatOpenEdge(de));
+    }
+
     if (src_warn != dst_warn) {
       result.diagnostics.push_back("WARN-ONLY edge count mismatch: SRC=" + std::to_string(src_warn) +
                                    " DST=" + std::to_string(dst_warn));
@@ -519,53 +657,90 @@ private:
                                               double tol,
                                               std::vector<std::pair<CPoint3D,double>>& promoted_circles,
                                               std::vector<HalfStructurePointGroup>* half_structure_groups = nullptr) {
-    std::vector<bool> used(arcs.size(), false);
-    std::vector<NormalizedArc> result;
-    for (size_t i = 0; i < arcs.size(); ++i) {
-      if (used[i]) continue;
-      bool found_partner = false;
-      for (size_t j = i + 1; j < arcs.size(); ++j) {
-        if (used[j]) continue;
-        if (PtDist(arcs[i].center, arcs[j].center) > tol) continue;
-        if (std::abs(arcs[i].radius - arcs[j].radius) > tol) continue;
-        bool loop_fwd = PtDist(arcs[i].endPt, arcs[j].startPt) <= tol &&
-                        PtDist(arcs[j].endPt, arcs[i].startPt) <= tol;
-        bool loop_rev = PtDist(arcs[i].endPt, arcs[j].endPt) <= tol &&
-                        PtDist(arcs[i].startPt, arcs[j].startPt) <= tol;
-        if (loop_fwd || loop_rev) {
-          promoted_circles.emplace_back(arcs[i].center, arcs[i].radius);
-          if (half_structure_groups) {
-            HalfStructurePointGroup group;
-            group.center = arcs[i].center;
-            group.radius = arcs[i].radius;
-            group.points.push_back(arcs[i].startPt);
-            group.points.push_back(arcs[i].endPt);
-            group.points.push_back(arcs[j].startPt);
-            group.points.push_back(arcs[j].endPt);
-            half_structure_groups->push_back(std::move(group));
+    std::vector<NormalizedArc> current_arcs = arcs;
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      std::vector<bool> used(current_arcs.size(), false);
+      std::vector<NormalizedArc> next_arcs;
+      for (size_t i = 0; i < current_arcs.size(); ++i) {
+        if (used[i]) continue;
+        bool found_partner = false;
+        for (size_t j = i + 1; j < current_arcs.size(); ++j) {
+          if (used[j]) continue;
+          if (PtDist(current_arcs[i].center, current_arcs[j].center) > tol) continue;
+          if (std::abs(current_arcs[i].radius - current_arcs[j].radius) > tol) continue;
+          bool loop_fwd = PtDist(current_arcs[i].endPt, current_arcs[j].startPt) <= tol &&
+                          PtDist(current_arcs[j].endPt, current_arcs[i].startPt) <= tol;
+          bool loop_rev = PtDist(current_arcs[i].endPt, current_arcs[j].endPt) <= tol &&
+                          PtDist(current_arcs[i].startPt, current_arcs[j].startPt) <= tol;
+          if (loop_fwd || loop_rev) {
+            promoted_circles.emplace_back(current_arcs[i].center, current_arcs[i].radius);
+            if (half_structure_groups) {
+              HalfStructurePointGroup group;
+              group.center = current_arcs[i].center;
+              group.radius = current_arcs[i].radius;
+              group.points.push_back(current_arcs[i].startPt);
+              group.points.push_back(current_arcs[i].endPt);
+              group.points.push_back(current_arcs[j].startPt);
+              group.points.push_back(current_arcs[j].endPt);
+              half_structure_groups->push_back(std::move(group));
+            }
+            used[i] = used[j] = true;
+            found_partner = true;
+            changed = true;
+            break;
           }
-          used[i] = used[j] = true;
-          found_partner = true;
-          break;
+          if (PtDist(current_arcs[i].endPt, current_arcs[j].startPt) <= tol) {
+            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[i].startPt, current_arcs[j].endPt};
+            next_arcs.push_back(merged);
+            used[i] = used[j] = true;
+            found_partner = true;
+            changed = true;
+            break;
+          }
+          if (PtDist(current_arcs[j].endPt, current_arcs[i].startPt) <= tol) {
+            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[j].startPt, current_arcs[i].endPt};
+            next_arcs.push_back(merged);
+            used[i] = used[j] = true;
+            found_partner = true;
+            changed = true;
+            break;
+          }
         }
-        if (PtDist(arcs[i].endPt, arcs[j].startPt) <= tol) {
-          NormalizedArc merged{arcs[i].center, arcs[i].radius, arcs[i].startPt, arcs[j].endPt};
-          result.push_back(merged);
-          used[i] = used[j] = true;
-          found_partner = true;
-          break;
+        if (!found_partner) {
+          next_arcs.push_back(current_arcs[i]);
         }
-        if (PtDist(arcs[j].endPt, arcs[i].startPt) <= tol) {
-          NormalizedArc merged{arcs[i].center, arcs[i].radius, arcs[j].startPt, arcs[i].endPt};
-          result.push_back(merged);
-          used[i] = used[j] = true;
-          found_partner = true;
+      }
+      current_arcs = std::move(next_arcs);
+    }
+    return current_arcs;
+  }
+
+  static void SimplifyCirclesAndArcs(std::vector<std::pair<CPoint3D, double>>& circles,
+                                     std::vector<NormalizedArc>& arcs,
+                                     double tol) {
+    for (auto circle_it = circles.begin(); circle_it != circles.end(); ) {
+      bool circle_simplified = false;
+      for (auto arc_it = arcs.begin(); arc_it != arcs.end(); ++arc_it) {
+        if (PtDist(circle_it->first, arc_it->center) <= tol &&
+            std::abs(circle_it->second - arc_it->radius) <= tol) {
+          NormalizedArc comp_arc;
+          comp_arc.center = arc_it->center;
+          comp_arc.radius = arc_it->radius;
+          comp_arc.startPt = arc_it->endPt;
+          comp_arc.endPt = arc_it->startPt;
+          
+          *arc_it = comp_arc;
+          circle_it = circles.erase(circle_it);
+          circle_simplified = true;
           break;
         }
       }
-      if (!found_partner) result.push_back(arcs[i]);
+      if (!circle_simplified) {
+        ++circle_it;
+      }
     }
-    return result;
   }
 
   static bool MatchCircles(const std::vector<std::pair<CPoint3D,double>>& src,
