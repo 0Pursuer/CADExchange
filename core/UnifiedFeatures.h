@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 // clang-format off
 #include "UnifiedTypes.h"
 #include <memory>
