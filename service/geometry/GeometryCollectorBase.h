@@ -309,13 +309,13 @@ public:
 
     std::vector<EdgeType> src_open, dst_open;
     std::vector<NormalizedArc> src_arcs, dst_arcs;
-    std::vector<std::pair<CPoint3D, double>> src_circles, dst_circles;
+    std::vector<CircleType> src_circles, dst_circles;
     std::vector<HalfStructurePointGroup> src_half_structure_groups, dst_half_structure_groups;
     int src_warn = 0, dst_warn = 0;
     ClassifyEdges(m_edges, src_open, src_arcs, src_circles, src_warn, tol);
     ClassifyEdges(other.m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
 
-    std::vector<std::pair<CPoint3D, double>> promoted_src, promoted_dst;
+    std::vector<CircleType> promoted_src, promoted_dst;
     src_arcs = MergeArcs(src_arcs, tol, promoted_src, &src_half_structure_groups);
     dst_arcs = MergeArcs(dst_arcs, tol, promoted_dst, &dst_half_structure_groups);
     for (auto &p : promoted_src) src_circles.push_back(p);
@@ -328,15 +328,15 @@ public:
     FilterHalfStructureEdges(src_open, src_half_structure_groups, tol);
     FilterHalfStructureEdges(dst_open, dst_half_structure_groups, tol);
 
-    std::vector<std::pair<CPoint3D, double>> src_unmatched_circles;
-    std::vector<std::pair<CPoint3D, double>> dst_unmatched_circles;
+    std::vector<CircleType> src_unmatched_circles;
+    std::vector<CircleType> dst_unmatched_circles;
     std::vector<bool> dst_circle_used(dst_circles.size(), false);
     for (const auto& sc : src_circles) {
       bool found = false;
       for (size_t j = 0; j < dst_circles.size(); ++j) {
         if (dst_circle_used[j]) continue;
-        if (PtDist(sc.first, dst_circles[j].first) <= tol && 
-            std::abs(sc.second - dst_circles[j].second) <= tol) {
+        if (PtDist(sc.center, dst_circles[j].center) <= tol && 
+            std::abs(sc.radius - dst_circles[j].radius) <= tol) {
           dst_circle_used[j] = true;
           found = true;
           break;
@@ -446,26 +446,32 @@ public:
 
     result.equivalent = true;
     for (const auto& sc : src_unmatched_circles) {
+      if (IsWarnOnlyEdge(sc.curveType)) continue;
       result.equivalent = false;
-      result.diagnostics.push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc.first, sc.second));
+      result.diagnostics.push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc.center, sc.radius));
     }
     for (const auto& dc : dst_unmatched_circles) {
+      if (IsWarnOnlyEdge(dc.curveType)) continue;
       result.equivalent = false;
-      result.diagnostics.push_back("DST extra TRUE_CIRCLE " + FormatCircle(dc.first, dc.second));
+      result.diagnostics.push_back("DST extra TRUE_CIRCLE " + FormatCircle(dc.center, dc.radius));
     }
     for (const auto& sa : src_unmatched_arcs) {
+      if (IsWarnOnlyEdge(sa.curveType)) continue;
       result.equivalent = false;
       result.diagnostics.push_back("SRC unmatched ARC " + FormatArc(sa));
     }
     for (const auto& da : dst_unmatched_arcs) {
+      if (IsWarnOnlyEdge(da.curveType)) continue;
       result.equivalent = false;
       result.diagnostics.push_back("DST extra ARC " + FormatArc(da));
     }
     for (const auto& se : src_unmatched_open) {
+      if (IsWarnOnlyEdge(se.curveType)) continue;
       result.equivalent = false;
       result.diagnostics.push_back("SRC unmatched OPEN_EDGE " + FormatOpenEdge(se));
     }
     for (const auto& de : dst_unmatched_open) {
+      if (IsWarnOnlyEdge(de.curveType)) continue;
       result.equivalent = false;
       result.diagnostics.push_back("DST extra OPEN_EDGE " + FormatOpenEdge(de));
     }
@@ -499,6 +505,13 @@ private:
     double radius = 0;
     CPoint3D startPt{};
     CPoint3D endPt{};
+    CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
+  };
+
+  struct CircleType {
+    CPoint3D center{};
+    double radius = 0;
+    CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
   };
 
   struct HalfStructurePointGroup {
@@ -624,14 +637,19 @@ private:
   static void ClassifyEdges(const std::vector<EdgeType>& edges,
                             std::vector<EdgeType>& open_out,
                             std::vector<NormalizedArc>& arc_out,
-                            std::vector<std::pair<CPoint3D,double>>& circle_out,
+                            std::vector<CircleType>& circle_out,
                             int& warn_count,
                             double tol) {
     for (const auto& e : edges) {
       if (e.curveType == CGeoCurveType::UNKNOWN) continue;
-      if (IsWarnOnlyEdge(e.curveType)) { ++warn_count; continue; }
-      if (IsOpenEdge(e.curveType)) { open_out.push_back(e); continue; }
-      if (e.curveType != CGeoCurveType::CIRCLE) continue;
+      if (IsWarnOnlyEdge(e.curveType)) { ++warn_count; }
+
+      // LINE is strictly a straight line segment.
+      if (e.curveType == CGeoCurveType::LINE) {
+        open_out.push_back(e);
+        continue;
+      }
+
       double se_dist = PtDist(e.startPoint, e.endPoint);
       double sm_dist = PtDist(e.startPoint, e.midPoint);
       if (se_dist <= tol) {
@@ -640,14 +658,17 @@ private:
         cen.x = (e.startPoint.x + e.midPoint.x) * 0.5;
         cen.y = (e.startPoint.y + e.midPoint.y) * 0.5;
         cen.z = (e.startPoint.z + e.midPoint.z) * 0.5;
-        circle_out.emplace_back(cen, sm_dist * 0.5);
+        circle_out.push_back({cen, sm_dist * 0.5, e.curveType});
       } else {
         NormalizedArc arc;
         if (!ComputeCircumcenter(e.startPoint, e.midPoint, e.endPoint, arc.center, arc.radius)) {
+          // If circumcenter fit fails (collinear), it's a straight segment, treat as open edge
+          open_out.push_back(e);
           continue;
         }
         arc.startPt = e.startPoint;
         arc.endPt = e.endPoint;
+        arc.curveType = e.curveType;
         arc_out.push_back(arc);
       }
     }
@@ -655,7 +676,7 @@ private:
 
   static std::vector<NormalizedArc> MergeArcs(const std::vector<NormalizedArc>& arcs,
                                               double tol,
-                                              std::vector<std::pair<CPoint3D,double>>& promoted_circles,
+                                              std::vector<CircleType>& promoted_circles,
                                               std::vector<HalfStructurePointGroup>* half_structure_groups = nullptr) {
     std::vector<NormalizedArc> current_arcs = arcs;
     bool changed = true;
@@ -675,7 +696,13 @@ private:
           bool loop_rev = PtDist(current_arcs[i].endPt, current_arcs[j].endPt) <= tol &&
                           PtDist(current_arcs[i].startPt, current_arcs[j].startPt) <= tol;
           if (loop_fwd || loop_rev) {
-            promoted_circles.emplace_back(current_arcs[i].center, current_arcs[i].radius);
+            CGeoCurveType promotedType = current_arcs[i].curveType;
+            if (current_arcs[i].curveType != current_arcs[j].curveType) {
+              if (IsWarnOnlyEdge(current_arcs[i].curveType) || IsWarnOnlyEdge(current_arcs[j].curveType)) {
+                promotedType = CGeoCurveType::INTERSECTION;
+              }
+            }
+            promoted_circles.push_back({current_arcs[i].center, current_arcs[i].radius, promotedType});
             if (half_structure_groups) {
               HalfStructurePointGroup group;
               group.center = current_arcs[i].center;
@@ -692,7 +719,19 @@ private:
             break;
           }
           if (PtDist(current_arcs[i].endPt, current_arcs[j].startPt) <= tol) {
-            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[i].startPt, current_arcs[j].endPt};
+            CGeoCurveType mergedType = current_arcs[i].curveType;
+            if (IsWarnOnlyEdge(current_arcs[i].curveType) || IsWarnOnlyEdge(current_arcs[j].curveType)) {
+              mergedType = CGeoCurveType::INTERSECTION;
+            }
+            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[i].startPt, current_arcs[j].endPt, mergedType};
+            if (half_structure_groups) {
+              HalfStructurePointGroup group;
+              group.center = current_arcs[i].center;
+              group.radius = current_arcs[i].radius;
+              group.points.push_back(current_arcs[i].endPt);
+              group.points.push_back(current_arcs[j].startPt);
+              half_structure_groups->push_back(std::move(group));
+            }
             next_arcs.push_back(merged);
             used[i] = used[j] = true;
             found_partner = true;
@@ -700,7 +739,19 @@ private:
             break;
           }
           if (PtDist(current_arcs[j].endPt, current_arcs[i].startPt) <= tol) {
-            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[j].startPt, current_arcs[i].endPt};
+            CGeoCurveType mergedType = current_arcs[i].curveType;
+            if (IsWarnOnlyEdge(current_arcs[i].curveType) || IsWarnOnlyEdge(current_arcs[j].curveType)) {
+              mergedType = CGeoCurveType::INTERSECTION;
+            }
+            NormalizedArc merged{current_arcs[i].center, current_arcs[i].radius, current_arcs[j].startPt, current_arcs[i].endPt, mergedType};
+            if (half_structure_groups) {
+              HalfStructurePointGroup group;
+              group.center = current_arcs[i].center;
+              group.radius = current_arcs[i].radius;
+              group.points.push_back(current_arcs[j].endPt);
+              group.points.push_back(current_arcs[i].startPt);
+              half_structure_groups->push_back(std::move(group));
+            }
             next_arcs.push_back(merged);
             used[i] = used[j] = true;
             found_partner = true;
@@ -717,19 +768,20 @@ private:
     return current_arcs;
   }
 
-  static void SimplifyCirclesAndArcs(std::vector<std::pair<CPoint3D, double>>& circles,
+  static void SimplifyCirclesAndArcs(std::vector<CircleType>& circles,
                                      std::vector<NormalizedArc>& arcs,
                                      double tol) {
     for (auto circle_it = circles.begin(); circle_it != circles.end(); ) {
       bool circle_simplified = false;
       for (auto arc_it = arcs.begin(); arc_it != arcs.end(); ++arc_it) {
-        if (PtDist(circle_it->first, arc_it->center) <= tol &&
-            std::abs(circle_it->second - arc_it->radius) <= tol) {
+        if (PtDist(circle_it->center, arc_it->center) <= tol &&
+            std::abs(circle_it->radius - arc_it->radius) <= tol) {
           NormalizedArc comp_arc;
           comp_arc.center = arc_it->center;
           comp_arc.radius = arc_it->radius;
           comp_arc.startPt = arc_it->endPt;
           comp_arc.endPt = arc_it->startPt;
+          comp_arc.curveType = arc_it->curveType;
           
           *arc_it = comp_arc;
           circle_it = circles.erase(circle_it);
@@ -743,17 +795,17 @@ private:
     }
   }
 
-  static bool MatchCircles(const std::vector<std::pair<CPoint3D,double>>& src,
-                           const std::vector<std::pair<CPoint3D,double>>& dst,
+  static bool MatchCircles(const std::vector<CircleType>& src,
+                           const std::vector<CircleType>& dst,
                            double tol,
                            std::vector<std::string>* diagnostics) {
     bool ok = true;
     std::vector<bool> used(dst.size(), false);
-    for (const auto& [sc, sr] : src) {
+    for (const auto& sc : src) {
       bool found = false;
       for (size_t j = 0; j < dst.size(); ++j) {
         if (used[j]) continue;
-        if (PtDist(sc, dst[j].first) <= tol && std::abs(sr - dst[j].second) <= tol) {
+        if (PtDist(sc.center, dst[j].center) <= tol && std::abs(sc.radius - dst[j].radius) <= tol) {
           used[j] = true;
           found = true;
           break;
@@ -761,13 +813,13 @@ private:
       }
       if (!found) {
         ok = false;
-        if (diagnostics) diagnostics->push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc, sr));
+        if (diagnostics) diagnostics->push_back("SRC unmatched TRUE_CIRCLE " + FormatCircle(sc.center, sc.radius));
       }
     }
     for (size_t j = 0; j < dst.size(); ++j) {
       if (!used[j]) {
         ok = false;
-        if (diagnostics) diagnostics->push_back("DST extra TRUE_CIRCLE " + FormatCircle(dst[j].first, dst[j].second));
+        if (diagnostics) diagnostics->push_back("DST extra TRUE_CIRCLE " + FormatCircle(dst[j].center, dst[j].radius));
       }
     }
     return ok;
