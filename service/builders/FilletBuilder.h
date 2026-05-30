@@ -26,23 +26,23 @@ public:
     return *this;
   }
 
+  FilletBuilder &SetDriveType(FilletDriveType driveType) {
+    m_feature->params.driveType = driveType;
+    return *this;
+  }
+
   FilletBuilder &SetReferenceMode(FilletReferenceMode referenceMode) {
-    m_feature->params.referenceMode = referenceMode;
+    m_feature->referenceMode = referenceMode;
     return *this;
   }
 
-  FilletBuilder &SetDefaultRadius(double value) {
-    m_feature->params.defaultRadius = value;
+  FilletBuilder &SetPrimaryValue(double value) {
+    m_feature->params.primaryValue = value;
     return *this;
   }
 
-  FilletBuilder &SetDefaultRadius2(double value) {
-    m_feature->params.defaultRadius2 = value;
-    return *this;
-  }
-
-  FilletBuilder &SetAsymmetric(bool value = true) {
-    m_feature->params.isAsymmetric = value;
+  FilletBuilder &SetSecondValue(double value) {
+    m_feature->params.secondValue = value;
     return *this;
   }
 
@@ -52,10 +52,12 @@ public:
   }
 
   FilletBuilder &SetCurvatureContinuous(bool value = true) {
-    m_feature->params.curvatureContinuous = value;
     if (value) {
       m_feature->params.crossSection =
           FilletCrossSection::CURVATURE_CONTINUOUS;
+    } else if (m_feature->params.crossSection ==
+               FilletCrossSection::CURVATURE_CONTINUOUS) {
+      m_feature->params.crossSection = FilletCrossSection::UNKNOWN;
     }
     return *this;
   }
@@ -97,11 +99,9 @@ public:
     return AddFace(m_feature->centerFaces, ref, "Fillet center face");
   }
 
-  FilletBuilder &AddRadiusItem(const CFilletRadiusItem &item) {
-    if (item.refEdge) {
-      ValidateReference(item.refEdge);
-    }
-    m_feature->params.radiusItems.push_back(item);
+  FilletBuilder &AddRadiusPoint(const CFilletRadiusPoint &point) {
+    CFilletRadiusPoint normalizedPoint = point;
+    m_feature->params.radiusPoints.push_back(std::move(normalizedPoint));
     return *this;
   }
 

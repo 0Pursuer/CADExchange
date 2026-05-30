@@ -245,27 +245,29 @@ void ScaleChamfer(CChamfer &chamfer, double factor, UnitScaleContext &ctx) {
 }
 
 void ScaleFillet(CFillet &fillet, double factor, UnitScaleContext &ctx) {
-  if (fillet.params.defaultRadius.has_value()) {
-    *fillet.params.defaultRadius *= factor;
+  if (fillet.params.primaryValue.has_value()) {
+    *fillet.params.primaryValue *= factor;
   }
-  if (fillet.params.defaultRadius2.has_value()) {
-    *fillet.params.defaultRadius2 *= factor;
+  if (fillet.params.secondValue.has_value()) {
+    *fillet.params.secondValue *= factor;
   }
-  if (fillet.params.conicValue.has_value()) {
+  if (fillet.params.conicValue.has_value() &&
+      fillet.params.conicValueMode != FilletConicValueMode::RHO &&
+      fillet.params.conicValueMode != FilletConicValueMode::GENERIC_VALUE) {
     *fillet.params.conicValue *= factor;
   }
   if (fillet.firstEndFaceMarker.has_value()) {
     ScalePoint(*fillet.firstEndFaceMarker, factor);
   }
-  for (auto &item : fillet.params.radiusItems) {
-    if (item.radius1.has_value()) {
-      *item.radius1 *= factor;
+  for (auto &point : fillet.params.radiusPoints) {
+    if (point.primaryValue.has_value()) {
+      *point.primaryValue *= factor;
     }
-    if (item.radius2.has_value()) {
-      *item.radius2 *= factor;
+    if (point.secondValue.has_value()) {
+      *point.secondValue *= factor;
     }
-    if (item.refEdge) {
-      ScaleRefEntity(item.refEdge, factor, ctx);
+    if (point.edgeMidPoint.has_value()) {
+      ScalePoint(*point.edgeMidPoint, factor);
     }
   }
   for (auto &ref : fillet.references) {

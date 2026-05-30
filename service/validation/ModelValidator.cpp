@@ -534,12 +534,12 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         addError("[FILLET_001] Fillet '" + fillet->featureID +
                  "' mode is UNKNOWN.");
       }
-      if (fillet->params.referenceMode == FilletReferenceMode::UNKNOWN) {
+      if (fillet->referenceMode == FilletReferenceMode::UNKNOWN) {
         addError("[FILLET_002] Fillet '" + fillet->featureID +
                  "' referenceMode is UNKNOWN.");
       }
 
-      switch (fillet->params.referenceMode) {
+      switch (fillet->referenceMode) {
         case FilletReferenceMode::EDGE_CHAIN:
           if (fillet->references.empty()) {
             addError("[FILLET_003] Fillet '" + fillet->featureID +
@@ -563,51 +563,66 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
           break;
       }
 
-      if (fillet->mode == FilletMode::CONSTANT_RADIUS ||
-          fillet->mode == FilletMode::CHORDAL) {
-        if (!fillet->params.defaultRadius.has_value()) {
+      if (fillet->mode == FilletMode::CONSTANT_RADIUS) {
+        const auto &primaryValue = fillet->params.primaryValue;
+        if (primaryValue.has_value()) {
+          if (*primaryValue <= 0.0) {
+            addError("[FILLET_007] Fillet '" + fillet->featureID +
+                     "' primaryValue=" + std::to_string(*primaryValue) +
+                     " (must be > 0).");
+          }
+        } else if (fillet->params.radiusPoints.empty()) {
           addError("[FILLET_006] Fillet '" + fillet->featureID +
-                   "' missing required defaultRadius.");
-        } else if (*fillet->params.defaultRadius <= 0.0) {
-          addError("[FILLET_007] Fillet '" + fillet->featureID +
-                   "' defaultRadius=" + std::to_string(*fillet->params.defaultRadius) +
-                   " (must be > 0).");
+                   "' missing required primaryValue.");
+        }
+      }
+
+      if (fillet->mode == FilletMode::CHORDAL) {
+        const auto &primaryValue = fillet->params.primaryValue;
+        if (primaryValue.has_value()) {
+          if (*primaryValue <= 0.0) {
+            addError("[FILLET_007] Fillet '" + fillet->featureID +
+                     "' primaryValue=" + std::to_string(*primaryValue) +
+                     " (must be > 0).");
+          }
+        } else if (fillet->params.radiusPoints.empty()) {
+          addError("[FILLET_006] Fillet '" + fillet->featureID +
+                   "' missing required primaryValue.");
         }
       }
 
       if (fillet->mode == FilletMode::VARIABLE_RADIUS &&
-          fillet->params.radiusItems.empty()) {
+          fillet->params.radiusPoints.empty()) {
         addError("[FILLET_008] Fillet '" + fillet->featureID +
-                 "' variable-radius mode requires radiusItems.");
+                 "' variable-radius mode requires radiusPoints.");
       }
 
-      if (fillet->params.defaultRadius2.has_value() &&
-          *fillet->params.defaultRadius2 <= 0.0) {
-        addError("[FILLET_009] Fillet '" + fillet->featureID +
-                 "' defaultRadius2=" + std::to_string(*fillet->params.defaultRadius2) +
-                 " (must be > 0).");
+      const auto &secondValue = fillet->params.secondValue;
+      if (secondValue.has_value() && *secondValue <= 0.0) {
+        addWarn("[FILLET_009] Fillet '" + fillet->featureID +
+                "' secondValue=" + std::to_string(*secondValue) +
+                " (ignored because it is not positive).");
       }
 
-      for (size_t i = 0; i < fillet->params.radiusItems.size(); ++i) {
-        const auto& item = fillet->params.radiusItems[i];
-        if (!item.radius1.has_value()) {
-          addError("[FILLET_010] Fillet '" + fillet->featureID +
-                   "' radiusItems[" + std::to_string(i) + "] missing radius1.");
-        } else if (*item.radius1 <= 0.0) {
+      for (size_t i = 0; i < fillet->params.radiusPoints.size(); ++i) {
+        const auto& point = fillet->params.radiusPoints[i];
+        const bool hasPositivePrimary =
+            point.primaryValue.has_value() && *point.primaryValue > 0.0;
+        if (!hasPositivePrimary) {
           addError("[FILLET_011] Fillet '" + fillet->featureID +
-                   "' radiusItems[" + std::to_string(i) + "].radius1=" +
-                   std::to_string(*item.radius1) + " (must be > 0).");
+                   "' radiusPoints[" + std::to_string(i) +
+                   "] missing positive primaryValue.");
         }
-        if (item.radius2.has_value() && *item.radius2 <= 0.0) {
+        const auto &pointSecondValue = point.secondValue;
+        if (pointSecondValue.has_value() && *pointSecondValue <= 0.0) {
           addError("[FILLET_012] Fillet '" + fillet->featureID +
-                   "' radiusItems[" + std::to_string(i) + "].radius2=" +
-                   std::to_string(*item.radius2) + " (must be > 0).");
+                   "' radiusPoints[" + std::to_string(i) + "].secondValue=" +
+                   std::to_string(*pointSecondValue) + " (must be > 0).");
         }
-        if (item.position.has_value() &&
-            (*item.position < 0.0 || *item.position > 1.0)) {
+        if (point.position < 0.0 || point.position > 1.0) {
           addWarn("[FILLET_013] Fillet '" + fillet->featureID +
-                  "' radiusItems[" + std::to_string(i) + "].position=" +
-                  std::to_string(*item.position) +
+                  "' radiusPoints[" + std::to_string(i) + "].position=" +
+                  std::to_string(point.position) +
                   " is outside [0, 1] -- check edge parameter normalization.");
         }
       }

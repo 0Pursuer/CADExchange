@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // clang-format off
 #include "UnifiedTypes.h"
 #include <memory>
@@ -600,28 +600,34 @@ enum class FilletConicValueMode {
   GENERIC_VALUE
 };
 
-struct CFilletRadiusItem {
-  std::optional<double> position;
-  std::optional<double> radius1;
-  std::optional<double> radius2;
-  std::shared_ptr<CRefEdge> refEdge;
+enum class FilletDriveType {
+  UNKNOWN = 0,
+  RADIUS,
+  SINGLE_DISTANCE,
+  TWO_DISTANCES
+};
+
+struct CFilletRadiusPoint {
+  double position = 0.0;
+  std::optional<double> primaryValue;
+  std::optional<double> secondValue;
+  std::optional<CPoint3D> edgeMidPoint;
 };
 
 struct CFilletParams {
+  FilletDriveType driveType{FilletDriveType::UNKNOWN};
+  std::optional<double> primaryValue;
+  std::optional<double> secondValue;
+  std::vector<CFilletRadiusPoint> radiusPoints;
   FilletCrossSection crossSection{FilletCrossSection::UNKNOWN};
-  FilletReferenceMode referenceMode{FilletReferenceMode::UNKNOWN};
-  std::optional<double> defaultRadius;
-  std::optional<double> defaultRadius2;
-  bool isAsymmetric = false;
-  bool tangentPropagation = false;
-  bool curvatureContinuous = false;
-  std::optional<double> conicValue;
   FilletConicValueMode conicValueMode{FilletConicValueMode::NONE};
-  std::vector<CFilletRadiusItem> radiusItems;
+  std::optional<double> conicValue;
+  bool tangentPropagation = false;
 };
 
 struct CFillet : public CFeatureBase {
   FilletMode mode{FilletMode::UNKNOWN};
+  FilletReferenceMode referenceMode{FilletReferenceMode::UNKNOWN};
   CFilletParams params;
   std::vector<std::shared_ptr<CRefEntityBase>> references;
   std::vector<std::shared_ptr<CRefFace>> side1Faces;
