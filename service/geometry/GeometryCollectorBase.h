@@ -312,8 +312,8 @@ public:
     std::vector<std::pair<CPoint3D, double>> src_circles, dst_circles;
     std::vector<HalfStructurePointGroup> src_half_structure_groups, dst_half_structure_groups;
     int src_warn = 0, dst_warn = 0;
-    ClassifyEdges(m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
-    ClassifyEdges(other.m_edges, src_open, src_arcs, src_circles, src_warn, tol);
+    ClassifyEdges(m_edges, src_open, src_arcs, src_circles, src_warn, tol);
+    ClassifyEdges(other.m_edges, dst_open, dst_arcs, dst_circles, dst_warn, tol);
 
     std::vector<std::pair<CPoint3D, double>> promoted_src, promoted_dst;
     src_arcs = MergeArcs(src_arcs, tol, promoted_src, &src_half_structure_groups);
