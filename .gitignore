@@ -7,3 +7,7 @@ tmp/
 **/tmp/
 
 **/demo/
+
+# Temp/trail files
+std.out
+trail.txt.*
