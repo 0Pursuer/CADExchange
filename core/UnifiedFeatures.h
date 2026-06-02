@@ -30,6 +30,7 @@ enum class FeatureType {
   Sweep,
   Fillet,
   Chamfer,
+  Rib,
   Sketch,
   DatumPlane
 };
@@ -708,6 +709,58 @@ struct CChamfer : public CFeatureBase {
   std::optional<CPoint3D> firstEndFaceMarker;
 
   CChamfer() { featureType = FeatureType::Chamfer; }
+};
+
+enum class RibThicknessSideMode {
+  Unknown = 0,
+  Symmetric,
+  OneSideA,
+  OneSideB
+};
+
+enum class RibMaterialSide {
+  Unknown = 0,
+  SideA,
+  SideB
+};
+
+enum class SwRibType {
+  Unknown = 0,
+  Linear,
+  Natural
+};
+
+enum class SwRibExtrusionDirection {
+  Unknown = 0,
+  ParallelToSketch,
+  NormalToSketch
+};
+
+struct CRibSwDraftOption {
+  bool enabled = false;
+  double angle = 0.0;
+  bool outward = false;
+  std::optional<bool> fromWall;
+};
+
+struct CRibSwOptions {
+  SwRibType ribType{SwRibType::Unknown};
+  SwRibExtrusionDirection extrusionDirection{
+      SwRibExtrusionDirection::Unknown};
+  std::optional<int> referenceEdgeIndex;
+  std::optional<int> refSketchIndex;
+  std::optional<CRibSwDraftOption> draft;
+};
+
+struct CRib : public CFeatureBase {
+  std::string sectionSketchID;
+  double thickness = 0.0;
+  RibThicknessSideMode thicknessSideMode{RibThicknessSideMode::Unknown};
+  RibMaterialSide materialSide{RibMaterialSide::Unknown};
+  std::shared_ptr<CRefEntityBase> targetBody;
+  std::optional<CRibSwOptions> swOptions;
+
+  CRib() { featureType = FeatureType::Rib; }
 };
 
 enum class PlaneMethod {

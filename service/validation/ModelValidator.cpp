@@ -45,6 +45,9 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         referencedSketchIDs.insert(sketchID);
       }
     }
+    if (auto rib = std::dynamic_pointer_cast<CRib>(f))
+      if (!rib->sectionSketchID.empty())
+        referencedSketchIDs.insert(rib->sectionSketchID);
   }
 
   // length magnitude threshold (convert to meters)
@@ -187,6 +190,15 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                     "' has not been defined yet.");
           }
         }
+      };
+
+  auto isAllowedRibTargetBodyRef =
+      [&](const std::shared_ptr<CRefEntityBase> &ref) -> bool {
+        if (!ref) {
+          return false;
+        }
+        return std::dynamic_pointer_cast<CRefFeature>(ref) != nullptr ||
+               std::dynamic_pointer_cast<CRefFace>(ref) != nullptr;
       };
 
   // Main validation loop
@@ -525,6 +537,86 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                     "' reference[" + std::to_string(i) +
                     "] is an edge with geometry fingerprint but curveType is UNKNOWN.");
           }
+        }
+      }
+    }
+    // ---- CRib ----
+    else if (auto rib = std::dynamic_pointer_cast<CRib>(feature)) {
+      if (rib->sectionSketchID.empty()) {
+        addError("[RIB_001] Rib '" + rib->featureID +
+                 "' has empty sectionSketchID.");
+      } else if (seen.find(rib->sectionSketchID) == seen.end()) {
+        addError("[RIB_002] Rib '" + rib->featureID +
+                 "' references sketch '" + rib->sectionSketchID +
+                 "' which has not been defined yet.");
+      }
+
+      if (rib->thickness <= 0.0) {
+        addError("[RIB_003] Rib '" + rib->featureID +
+                 "' thickness=" + std::to_string(rib->thickness) +
+                 " (must be > 0).");
+      } else {
+        const double thicknessM = toMeter(rib->thickness);
+        if (thicknessM < 1e-6 || thicknessM > 100.0) {
+          addWarn("[SCALE_003] Rib '" + rib->featureID + "' thickness=" +
+                  std::to_string(rib->thickness) + " (~" +
+                  std::to_string(thicknessM * 1000.0) +
+                  "mm) is out of normal range -- check unit system.");
+        }
+      }
+
+      if (rib->thicknessSideMode == RibThicknessSideMode::Unknown) {
+        addError("[RIB_004] Rib '" + rib->featureID +
+                 "' thicknessSideMode is UNKNOWN.");
+      }
+
+      if (rib->materialSide == RibMaterialSide::Unknown) {
+        addError("[RIB_005] Rib '" + rib->featureID +
+                 "' materialSide is UNKNOWN.");
+      }
+
+      if (rib->targetBody) {
+        if (!isAllowedRibTargetBodyRef(rib->targetBody)) {
+          addError("[RIB_006] Rib '" + rib->featureID +
+                   "' targetBody has unsupported reference type.");
+        } else if (auto subTopo =
+                       std::dynamic_pointer_cast<CRefSubTopo>(rib->targetBody)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_008] Rib '" + rib->featureID +
+                    "' targetBody parent feature '" +
+                    subTopo->parentFeatureID +
+                    "' has not been defined yet.");
+          }
+        } else if (auto featureRef =
+                       std::dynamic_pointer_cast<CRefFeature>(rib->targetBody)) {
+          if (!featureRef->targetFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(featureRef->targetFeatureID) &&
+              seen.find(featureRef->targetFeatureID) == seen.end()) {
+            addWarn("[REF_008] Rib '" + rib->featureID +
+                    "' targetBody feature '" + featureRef->targetFeatureID +
+                    "' has not been defined yet.");
+          }
+        }
+      }
+
+      if (rib->swOptions.has_value()) {
+        if (rib->swOptions->draft.has_value()) {
+          const auto &draft = *rib->swOptions->draft;
+          if (draft.enabled && draft.angle < 0.0) {
+            addError("[RIB_007] Rib '" + rib->featureID +
+                     "' sw draft angle must be non-negative.");
+          }
+        }
+        if (rib->swOptions->referenceEdgeIndex.has_value() &&
+            *rib->swOptions->referenceEdgeIndex < 0) {
+          addError("[RIB_008] Rib '" + rib->featureID +
+                   "' referenceEdgeIndex must be >= 0.");
+        }
+        if (rib->swOptions->refSketchIndex.has_value() &&
+            *rib->swOptions->refSketchIndex < 0) {
+          addError("[RIB_009] Rib '" + rib->featureID +
+                   "' refSketchIndex must be >= 0.");
         }
       }
     }

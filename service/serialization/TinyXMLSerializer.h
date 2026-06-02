@@ -112,6 +112,13 @@ private:
                           const std::shared_ptr<CChamfer> &chamfer);
 
   /**
+   * @brief Serialize a `CRib` feature.
+   */
+  static void SaveRib(tinyxml2::XMLDocument &doc,
+                      tinyxml2::XMLElement *element,
+                      const std::shared_ptr<CRib> &rib);
+
+  /**
    * @brief 将 `CDatumPlane` 类型的特征序列化到给定的元素下。
    */
   static void SaveDatumPlane(tinyxml2::XMLDocument &doc,
@@ -207,6 +214,12 @@ private:
    */
   static void LoadChamfer(tinyxml2::XMLElement *element,
                           std::shared_ptr<CChamfer> &chamfer);
+
+  /**
+   * @brief Restore a `CRib` feature from XML.
+   */
+  static void LoadRib(tinyxml2::XMLElement *element,
+                      std::shared_ptr<CRib> &rib);
 
   /**
    * @brief 从 XML 元素恢复 `CDatumPlane`。

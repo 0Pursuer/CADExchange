@@ -411,6 +411,32 @@ template <class Archive> void serialize(Archive &ar, CChamfer &chamfer) {
      cereal::make_nvp("FirstEndFaceMarker", chamfer.firstEndFaceMarker));
 }
 
+template <class Archive>
+void serialize(Archive &ar, CRibSwDraftOption &draft) {
+  ar(cereal::make_nvp("Enabled", draft.enabled),
+     cereal::make_nvp("Angle", draft.angle),
+     cereal::make_nvp("Outward", draft.outward),
+     cereal::make_nvp("FromWall", draft.fromWall));
+}
+
+template <class Archive> void serialize(Archive &ar, CRibSwOptions &options) {
+  ar(cereal::make_nvp("RibType", options.ribType),
+     cereal::make_nvp("ExtrusionDirection", options.extrusionDirection),
+     cereal::make_nvp("ReferenceEdgeIndex", options.referenceEdgeIndex),
+     cereal::make_nvp("RefSketchIndex", options.refSketchIndex),
+     cereal::make_nvp("Draft", options.draft));
+}
+
+template <class Archive> void serialize(Archive &ar, CRib &rib) {
+  ar(cereal::base_class<CFeatureBase>(&rib),
+     cereal::make_nvp("SectionSketchID", rib.sectionSketchID),
+     cereal::make_nvp("Thickness", rib.thickness),
+     cereal::make_nvp("ThicknessSideMode", rib.thicknessSideMode),
+     cereal::make_nvp("MaterialSide", rib.materialSide),
+     cereal::make_nvp("TargetBody", rib.targetBody),
+     cereal::make_nvp("SwOptions", rib.swOptions));
+}
+
 /**
  * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
  */

@@ -352,6 +352,129 @@ std::optional<ChamferMode> ChamferModeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string RibThicknessSideModeToString(RibThicknessSideMode mode) {
+  switch (mode) {
+  case RibThicknessSideMode::Symmetric:
+    return "Symmetric";
+  case RibThicknessSideMode::OneSideA:
+    return "OneSideA";
+  case RibThicknessSideMode::OneSideB:
+    return "OneSideB";
+  case RibThicknessSideMode::Unknown:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<RibThicknessSideMode>
+RibThicknessSideModeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "symmetric") {
+    return RibThicknessSideMode::Symmetric;
+  }
+  if (value == "onesidea") {
+    return RibThicknessSideMode::OneSideA;
+  }
+  if (value == "onesideb") {
+    return RibThicknessSideMode::OneSideB;
+  }
+  if (value == "unknown") {
+    return RibThicknessSideMode::Unknown;
+  }
+  return std::nullopt;
+}
+
+std::string RibMaterialSideToString(RibMaterialSide side) {
+  switch (side) {
+  case RibMaterialSide::SideA:
+    return "SideA";
+  case RibMaterialSide::SideB:
+    return "SideB";
+  case RibMaterialSide::Unknown:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<RibMaterialSide> RibMaterialSideFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "sidea") {
+    return RibMaterialSide::SideA;
+  }
+  if (value == "sideb") {
+    return RibMaterialSide::SideB;
+  }
+  if (value == "unknown") {
+    return RibMaterialSide::Unknown;
+  }
+  return std::nullopt;
+}
+
+std::string SwRibTypeToString(SwRibType type) {
+  switch (type) {
+  case SwRibType::Linear:
+    return "Linear";
+  case SwRibType::Natural:
+    return "Natural";
+  case SwRibType::Unknown:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<SwRibType> SwRibTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "linear") {
+    return SwRibType::Linear;
+  }
+  if (value == "natural") {
+    return SwRibType::Natural;
+  }
+  if (value == "unknown") {
+    return SwRibType::Unknown;
+  }
+  return std::nullopt;
+}
+
+std::string SwRibExtrusionDirectionToString(SwRibExtrusionDirection direction) {
+  switch (direction) {
+  case SwRibExtrusionDirection::ParallelToSketch:
+    return "ParallelToSketch";
+  case SwRibExtrusionDirection::NormalToSketch:
+    return "NormalToSketch";
+  case SwRibExtrusionDirection::Unknown:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<SwRibExtrusionDirection>
+SwRibExtrusionDirectionFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "paralleltosketch") {
+    return SwRibExtrusionDirection::ParallelToSketch;
+  }
+  if (value == "normaltosketch") {
+    return SwRibExtrusionDirection::NormalToSketch;
+  }
+  if (value == "unknown") {
+    return SwRibExtrusionDirection::Unknown;
+  }
+  return std::nullopt;
+}
+
 std::string FilletModeToString(FilletMode mode) {
   switch (mode) {
   case FilletMode::CONSTANT_RADIUS:
@@ -1139,6 +1262,10 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "Chamfer");
       SaveChamfer(doc, featElem, std::static_pointer_cast<CChamfer>(feature));
       break;
+    case FeatureType::Rib:
+      featElem->SetAttribute("Type", "Rib");
+      SaveRib(doc, featElem, std::static_pointer_cast<CRib>(feature));
+      break;
     case FeatureType::DatumPlane:
       featElem->SetAttribute("Type", "DatumPlane");
       SaveDatumPlane(doc, featElem,
@@ -1547,6 +1674,60 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
   }
 }
 
+void TinyXMLSerializer::SaveRib(XMLDocument &doc, XMLElement *element,
+                                const std::shared_ptr<CRib> &rib) {
+  XMLElement *sectionElem = doc.NewElement("Section");
+  sectionElem->SetAttribute("SketchID", rib->sectionSketchID.c_str());
+  element->InsertEndChild(sectionElem);
+
+  XMLElement *thicknessElem = doc.NewElement("Thickness");
+  thicknessElem->SetAttribute("Value", rib->thickness);
+  thicknessElem->SetAttribute(
+      "SideMode", RibThicknessSideModeToString(rib->thicknessSideMode).c_str());
+  element->InsertEndChild(thicknessElem);
+
+  XMLElement *materialSideElem = doc.NewElement("MaterialSide");
+  materialSideElem->SetAttribute(
+      "Value", RibMaterialSideToString(rib->materialSide).c_str());
+  element->InsertEndChild(materialSideElem);
+
+  if (rib->targetBody) {
+    SaveRefEntity(doc, element, "TargetBody", rib->targetBody);
+  }
+
+  if (rib->swOptions.has_value()) {
+    XMLElement *swElem = doc.NewElement("SwOptions");
+    swElem->SetAttribute("RibType",
+                         SwRibTypeToString(rib->swOptions->ribType).c_str());
+    swElem->SetAttribute(
+        "ExtrusionDirection",
+        SwRibExtrusionDirectionToString(
+            rib->swOptions->extrusionDirection).c_str());
+    if (rib->swOptions->referenceEdgeIndex.has_value()) {
+      swElem->SetAttribute("ReferenceEdgeIndex",
+                           *rib->swOptions->referenceEdgeIndex);
+    }
+    if (rib->swOptions->refSketchIndex.has_value()) {
+      swElem->SetAttribute("RefSketchIndex",
+                           *rib->swOptions->refSketchIndex);
+    }
+
+    if (rib->swOptions->draft.has_value()) {
+      XMLElement *draftElem = doc.NewElement("Draft");
+      draftElem->SetAttribute("Enabled", rib->swOptions->draft->enabled);
+      draftElem->SetAttribute("Angle", rib->swOptions->draft->angle);
+      draftElem->SetAttribute("Outward", rib->swOptions->draft->outward);
+      if (rib->swOptions->draft->fromWall.has_value()) {
+        draftElem->SetAttribute("FromWall",
+                                *rib->swOptions->draft->fromWall);
+      }
+      swElem->InsertEndChild(draftElem);
+    }
+
+    element->InsertEndChild(swElem);
+  }
+}
+
 void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
                                    const std::shared_ptr<CFillet> &fillet) {
   std::fprintf(stderr,
@@ -1797,6 +1978,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto chamfer = std::make_shared<CChamfer>();
     LoadChamfer(element, chamfer);
     feature = chamfer;
+  } else if (type == "Rib") {
+    auto rib = std::make_shared<CRib>();
+    LoadRib(element, rib);
+    feature = rib;
   } else if (type == "DatumPlane") {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
@@ -2278,6 +2463,92 @@ void TinyXMLSerializer::LoadChamfer(XMLElement *element,
       }
       refElem = refElem->NextSiblingElement("ReferenceEntity");
     }
+  }
+}
+
+void TinyXMLSerializer::LoadRib(XMLElement *element,
+                                std::shared_ptr<CRib> &rib) {
+  if (auto *sectionElem = element->FirstChildElement("Section")) {
+    if (const char *id = sectionElem->Attribute("SketchID")) {
+      rib->sectionSketchID = id;
+    }
+  }
+
+  if (auto *thicknessElem = element->FirstChildElement("Thickness")) {
+    thicknessElem->QueryDoubleAttribute("Value", &rib->thickness);
+    if (auto sideMode =
+            RibThicknessSideModeFromString(thicknessElem->Attribute("SideMode"))) {
+      rib->thicknessSideMode = *sideMode;
+    } else {
+      int intValue = 0;
+      if (thicknessElem->QueryIntAttribute("SideMode", &intValue) ==
+          XML_SUCCESS) {
+        rib->thicknessSideMode = static_cast<RibThicknessSideMode>(intValue);
+      }
+    }
+  }
+
+  if (auto *materialSideElem = element->FirstChildElement("MaterialSide")) {
+    if (auto side =
+            RibMaterialSideFromString(materialSideElem->Attribute("Value"))) {
+      rib->materialSide = *side;
+    } else {
+      int intValue = 0;
+      if (materialSideElem->QueryIntAttribute("Value", &intValue) ==
+          XML_SUCCESS) {
+        rib->materialSide = static_cast<RibMaterialSide>(intValue);
+      }
+    }
+  }
+
+  if (auto *targetBodyElem = element->FirstChildElement("TargetBody")) {
+    rib->targetBody = LoadRefEntity(targetBodyElem);
+  }
+
+  if (auto *swElem = element->FirstChildElement("SwOptions")) {
+    CRibSwOptions swOptions;
+    if (auto ribType = SwRibTypeFromString(swElem->Attribute("RibType"))) {
+      swOptions.ribType = *ribType;
+    } else {
+      int intValue = 0;
+      if (swElem->QueryIntAttribute("RibType", &intValue) == XML_SUCCESS) {
+        swOptions.ribType = static_cast<SwRibType>(intValue);
+      }
+    }
+    if (auto direction = SwRibExtrusionDirectionFromString(
+            swElem->Attribute("ExtrusionDirection"))) {
+      swOptions.extrusionDirection = *direction;
+    } else {
+      int intValue = 0;
+      if (swElem->QueryIntAttribute("ExtrusionDirection", &intValue) ==
+          XML_SUCCESS) {
+        swOptions.extrusionDirection =
+            static_cast<SwRibExtrusionDirection>(intValue);
+      }
+    }
+    int intValue = 0;
+    if (swElem->QueryIntAttribute("ReferenceEdgeIndex", &intValue) ==
+        XML_SUCCESS) {
+      swOptions.referenceEdgeIndex = intValue;
+    }
+    if (swElem->QueryIntAttribute("RefSketchIndex", &intValue) ==
+        XML_SUCCESS) {
+      swOptions.refSketchIndex = intValue;
+    }
+
+    if (auto *draftElem = swElem->FirstChildElement("Draft")) {
+      CRibSwDraftOption draft;
+      draftElem->QueryBoolAttribute("Enabled", &draft.enabled);
+      draftElem->QueryDoubleAttribute("Angle", &draft.angle);
+      draftElem->QueryBoolAttribute("Outward", &draft.outward);
+      bool fromWall = false;
+      if (draftElem->QueryBoolAttribute("FromWall", &fromWall) == XML_SUCCESS) {
+        draft.fromWall = fromWall;
+      }
+      swOptions.draft = draft;
+    }
+
+    rib->swOptions = swOptions;
   }
 }
 
