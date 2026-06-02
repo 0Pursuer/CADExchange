@@ -11,6 +11,7 @@
 #include "SweepBuilder.h"
 #include "FilletBuilder.h"
 #include "ChamferBuilder.h"
+#include "RibBuilder.h"
 #include "DatumPlaneBuilder.h"
 
 // clang-format on

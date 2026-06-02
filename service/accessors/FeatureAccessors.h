@@ -9,6 +9,7 @@
 #include "SweepAccessor.h"
 #include "FilletAccessor.h"
 #include "ChamferAccessor.h"
+#include "RibAccessor.h"
 #include "DatumPlaneAccessor.h"
 #include "ModelAccessor.h"
 
