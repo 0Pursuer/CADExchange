@@ -711,54 +711,24 @@ struct CChamfer : public CFeatureBase {
   CChamfer() { featureType = FeatureType::Chamfer; }
 };
 
-enum class RibThicknessSideMode {
-  Unknown = 0,
-  Symmetric,
-  OneSideA,
-  OneSideB
+// 厚度情况
+struct RibThicknessOption {
+  bool symmetric = true; // 是否对称
+  double thickness = 0.0; // 厚度值
+  std::optional<CVector3D> direction; // 如果不对称，提供具体方向值
 };
 
-enum class RibMaterialSide {
-  Unknown = 0,
-  SideA,
-  SideB
+// 材料情况
+struct RibMaterialOption {
+  CVector3D direction; // 材料方向
+  CPoint3D referencePoint; // 标记面，方向值是该点处的法向相反方向，辅助确定材料方向
 };
 
-enum class SwRibType {
-  Unknown = 0,
-  Linear,
-  Natural
-};
-
-enum class SwRibExtrusionDirection {
-  Unknown = 0,
-  ParallelToSketch,
-  NormalToSketch
-};
-
-struct CRibSwDraftOption {
-  bool enabled = false;
-  double angle = 0.0;
-  bool outward = false;
-  std::optional<bool> fromWall;
-};
-
-struct CRibSwOptions {
-  SwRibType ribType{SwRibType::Unknown};
-  SwRibExtrusionDirection extrusionDirection{
-      SwRibExtrusionDirection::Unknown};
-  std::optional<int> referenceEdgeIndex;
-  std::optional<int> refSketchIndex;
-  std::optional<CRibSwDraftOption> draft;
-};
-
+// Rib特征定义
 struct CRib : public CFeatureBase {
-  std::string sectionSketchID;
-  double thickness = 0.0;
-  RibThicknessSideMode thicknessSideMode{RibThicknessSideMode::Unknown};
-  RibMaterialSide materialSide{RibMaterialSide::Unknown};
-  std::shared_ptr<CRefEntityBase> targetBody;
-  std::optional<CRibSwOptions> swOptions;
+  std::string sketchID; // 草图ID
+  RibThicknessOption thicknessOption; // 厚度情况
+  RibMaterialOption materialOption; // 材料情况
 
   CRib() { featureType = FeatureType::Rib; }
 };

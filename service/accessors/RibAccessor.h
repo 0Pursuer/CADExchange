@@ -33,30 +33,15 @@ public:
   bool IsValid() const override { return m_rib != nullptr; }
 
   std::string GetSectionSketchID() const {
-    return IsValid() ? Data()->sectionSketchID : "";
+    return IsValid() ? Data()->sketchID : "";
   }
 
-  double GetThickness() const { return IsValid() ? Data()->thickness : 0.0; }
-
-  RibThicknessSideMode GetThicknessSideMode() const {
-    return IsValid() ? Data()->thicknessSideMode : RibThicknessSideMode::Unknown;
+  RibThicknessOption GetThicknessOption() const {
+    return IsValid() ? Data()->thicknessOption : RibThicknessOption{};
   }
 
-  RibMaterialSide GetMaterialSide() const {
-    return IsValid() ? Data()->materialSide : RibMaterialSide::Unknown;
-  }
-
-  ReferenceAccessor GetTargetBody() const {
-    return IsValid() ? ReferenceAccessor(Data()->targetBody)
-                     : ReferenceAccessor(nullptr);
-  }
-
-  bool HasTargetBody() const {
-    return IsValid() && static_cast<bool>(Data()->targetBody);
-  }
-
-  bool HasSwOptions() const {
-    return IsValid() && Data()->swOptions.has_value();
+  RibMaterialOption GetMaterialOption() const {
+    return IsValid() ? Data()->materialOption : RibMaterialOption{};
   }
 };
 

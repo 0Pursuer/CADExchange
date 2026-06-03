@@ -14,31 +14,17 @@ public:
     if (!m_model.GetFeatureAs<CSketch>(sketchID)) {
       throw std::runtime_error("Sketch profile not found: " + sketchID);
     }
-    m_feature->sectionSketchID = sketchID;
+    m_feature->sketchID = sketchID;
     return *this;
   }
 
-  RibBuilder &SetThickness(double thickness) {
-    if (thickness <= 0.0) {
-      throw std::runtime_error("Rib thickness must be positive.");
-    }
-    m_feature->thickness = thickness;
+  RibBuilder &SetThicknessOption(const RibThicknessOption &opt) {
+    m_feature->thicknessOption = opt;
     return *this;
   }
 
-  RibBuilder &SetThicknessSideMode(RibThicknessSideMode mode) {
-    m_feature->thicknessSideMode = mode;
-    return *this;
-  }
-
-  RibBuilder &SetMaterialSide(RibMaterialSide side) {
-    m_feature->materialSide = side;
-    return *this;
-  }
-
-  RibBuilder &SetTargetBody(std::shared_ptr<CRefEntityBase> ref) {
-    ValidateReference(ref);
-    m_feature->targetBody = std::move(ref);
+  RibBuilder &SetMaterialOption(const RibMaterialOption &opt) {
+    m_feature->materialOption = opt;
     return *this;
   }
 };

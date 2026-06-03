@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../thirdParty/cereal/archives/xml.hpp"
 #include "../../thirdParty/cereal/types/base_class.hpp"
@@ -412,29 +412,23 @@ template <class Archive> void serialize(Archive &ar, CChamfer &chamfer) {
 }
 
 template <class Archive>
-void serialize(Archive &ar, CRibSwDraftOption &draft) {
-  ar(cereal::make_nvp("Enabled", draft.enabled),
-     cereal::make_nvp("Angle", draft.angle),
-     cereal::make_nvp("Outward", draft.outward),
-     cereal::make_nvp("FromWall", draft.fromWall));
+void serialize(Archive &ar, RibThicknessOption &opt) {
+  ar(cereal::make_nvp("Symmetric", opt.symmetric),
+     cereal::make_nvp("Thickness", opt.thickness),
+     cereal::make_nvp("Direction", opt.direction));
 }
 
-template <class Archive> void serialize(Archive &ar, CRibSwOptions &options) {
-  ar(cereal::make_nvp("RibType", options.ribType),
-     cereal::make_nvp("ExtrusionDirection", options.extrusionDirection),
-     cereal::make_nvp("ReferenceEdgeIndex", options.referenceEdgeIndex),
-     cereal::make_nvp("RefSketchIndex", options.refSketchIndex),
-     cereal::make_nvp("Draft", options.draft));
+template <class Archive>
+void serialize(Archive &ar, RibMaterialOption &opt) {
+  ar(cereal::make_nvp("Direction", opt.direction),
+     cereal::make_nvp("ReferencePoint", opt.referencePoint));
 }
 
 template <class Archive> void serialize(Archive &ar, CRib &rib) {
   ar(cereal::base_class<CFeatureBase>(&rib),
-     cereal::make_nvp("SectionSketchID", rib.sectionSketchID),
-     cereal::make_nvp("Thickness", rib.thickness),
-     cereal::make_nvp("ThicknessSideMode", rib.thicknessSideMode),
-     cereal::make_nvp("MaterialSide", rib.materialSide),
-     cereal::make_nvp("TargetBody", rib.targetBody),
-     cereal::make_nvp("SwOptions", rib.swOptions));
+     cereal::make_nvp("SketchID", rib.sketchID),
+     cereal::make_nvp("ThicknessOption", rib.thicknessOption),
+     cereal::make_nvp("MaterialOption", rib.materialOption));
 }
 
 /**

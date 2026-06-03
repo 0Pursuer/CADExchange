@@ -352,128 +352,7 @@ std::optional<ChamferMode> ChamferModeFromString(const char *text) {
   return std::nullopt;
 }
 
-std::string RibThicknessSideModeToString(RibThicknessSideMode mode) {
-  switch (mode) {
-  case RibThicknessSideMode::Symmetric:
-    return "Symmetric";
-  case RibThicknessSideMode::OneSideA:
-    return "OneSideA";
-  case RibThicknessSideMode::OneSideB:
-    return "OneSideB";
-  case RibThicknessSideMode::Unknown:
-  default:
-    return "Unknown";
-  }
-}
 
-std::optional<RibThicknessSideMode>
-RibThicknessSideModeFromString(const char *text) {
-  if (!text) {
-    return std::nullopt;
-  }
-  const std::string value = ToLower(text);
-  if (value == "symmetric") {
-    return RibThicknessSideMode::Symmetric;
-  }
-  if (value == "onesidea") {
-    return RibThicknessSideMode::OneSideA;
-  }
-  if (value == "onesideb") {
-    return RibThicknessSideMode::OneSideB;
-  }
-  if (value == "unknown") {
-    return RibThicknessSideMode::Unknown;
-  }
-  return std::nullopt;
-}
-
-std::string RibMaterialSideToString(RibMaterialSide side) {
-  switch (side) {
-  case RibMaterialSide::SideA:
-    return "SideA";
-  case RibMaterialSide::SideB:
-    return "SideB";
-  case RibMaterialSide::Unknown:
-  default:
-    return "Unknown";
-  }
-}
-
-std::optional<RibMaterialSide> RibMaterialSideFromString(const char *text) {
-  if (!text) {
-    return std::nullopt;
-  }
-  const std::string value = ToLower(text);
-  if (value == "sidea") {
-    return RibMaterialSide::SideA;
-  }
-  if (value == "sideb") {
-    return RibMaterialSide::SideB;
-  }
-  if (value == "unknown") {
-    return RibMaterialSide::Unknown;
-  }
-  return std::nullopt;
-}
-
-std::string SwRibTypeToString(SwRibType type) {
-  switch (type) {
-  case SwRibType::Linear:
-    return "Linear";
-  case SwRibType::Natural:
-    return "Natural";
-  case SwRibType::Unknown:
-  default:
-    return "Unknown";
-  }
-}
-
-std::optional<SwRibType> SwRibTypeFromString(const char *text) {
-  if (!text) {
-    return std::nullopt;
-  }
-  const std::string value = ToLower(text);
-  if (value == "linear") {
-    return SwRibType::Linear;
-  }
-  if (value == "natural") {
-    return SwRibType::Natural;
-  }
-  if (value == "unknown") {
-    return SwRibType::Unknown;
-  }
-  return std::nullopt;
-}
-
-std::string SwRibExtrusionDirectionToString(SwRibExtrusionDirection direction) {
-  switch (direction) {
-  case SwRibExtrusionDirection::ParallelToSketch:
-    return "ParallelToSketch";
-  case SwRibExtrusionDirection::NormalToSketch:
-    return "NormalToSketch";
-  case SwRibExtrusionDirection::Unknown:
-  default:
-    return "Unknown";
-  }
-}
-
-std::optional<SwRibExtrusionDirection>
-SwRibExtrusionDirectionFromString(const char *text) {
-  if (!text) {
-    return std::nullopt;
-  }
-  const std::string value = ToLower(text);
-  if (value == "paralleltosketch") {
-    return SwRibExtrusionDirection::ParallelToSketch;
-  }
-  if (value == "normaltosketch") {
-    return SwRibExtrusionDirection::NormalToSketch;
-  }
-  if (value == "unknown") {
-    return SwRibExtrusionDirection::Unknown;
-  }
-  return std::nullopt;
-}
 
 std::string FilletModeToString(FilletMode mode) {
   switch (mode) {
@@ -1676,56 +1555,25 @@ void TinyXMLSerializer::SaveChamfer(XMLDocument &doc, XMLElement *element,
 
 void TinyXMLSerializer::SaveRib(XMLDocument &doc, XMLElement *element,
                                 const std::shared_ptr<CRib> &rib) {
+  if (!rib->sketchID.empty()) {
+    element->SetAttribute("SketchID", rib->sketchID.c_str());
+  }
   XMLElement *sectionElem = doc.NewElement("Section");
-  sectionElem->SetAttribute("SketchID", rib->sectionSketchID.c_str());
+  sectionElem->SetAttribute("SketchID", rib->sketchID.c_str());
   element->InsertEndChild(sectionElem);
 
   XMLElement *thicknessElem = doc.NewElement("Thickness");
-  thicknessElem->SetAttribute("Value", rib->thickness);
-  thicknessElem->SetAttribute(
-      "SideMode", RibThicknessSideModeToString(rib->thicknessSideMode).c_str());
+  thicknessElem->SetAttribute("Symmetric", rib->thicknessOption.symmetric);
+  thicknessElem->SetAttribute("Value", rib->thicknessOption.thickness);
+  if (rib->thicknessOption.direction.has_value()) {
+    SaveVector3D(thicknessElem, "Direction", *rib->thicknessOption.direction);
+  }
   element->InsertEndChild(thicknessElem);
 
-  XMLElement *materialSideElem = doc.NewElement("MaterialSide");
-  materialSideElem->SetAttribute(
-      "Value", RibMaterialSideToString(rib->materialSide).c_str());
-  element->InsertEndChild(materialSideElem);
-
-  if (rib->targetBody) {
-    SaveRefEntity(doc, element, "TargetBody", rib->targetBody);
-  }
-
-  if (rib->swOptions.has_value()) {
-    XMLElement *swElem = doc.NewElement("SwOptions");
-    swElem->SetAttribute("RibType",
-                         SwRibTypeToString(rib->swOptions->ribType).c_str());
-    swElem->SetAttribute(
-        "ExtrusionDirection",
-        SwRibExtrusionDirectionToString(
-            rib->swOptions->extrusionDirection).c_str());
-    if (rib->swOptions->referenceEdgeIndex.has_value()) {
-      swElem->SetAttribute("ReferenceEdgeIndex",
-                           *rib->swOptions->referenceEdgeIndex);
-    }
-    if (rib->swOptions->refSketchIndex.has_value()) {
-      swElem->SetAttribute("RefSketchIndex",
-                           *rib->swOptions->refSketchIndex);
-    }
-
-    if (rib->swOptions->draft.has_value()) {
-      XMLElement *draftElem = doc.NewElement("Draft");
-      draftElem->SetAttribute("Enabled", rib->swOptions->draft->enabled);
-      draftElem->SetAttribute("Angle", rib->swOptions->draft->angle);
-      draftElem->SetAttribute("Outward", rib->swOptions->draft->outward);
-      if (rib->swOptions->draft->fromWall.has_value()) {
-        draftElem->SetAttribute("FromWall",
-                                *rib->swOptions->draft->fromWall);
-      }
-      swElem->InsertEndChild(draftElem);
-    }
-
-    element->InsertEndChild(swElem);
-  }
+  XMLElement *materialElem = doc.NewElement("Material");
+  SaveVector3D(materialElem, "Direction", rib->materialOption.direction);
+  SavePoint3D(materialElem, "ReferencePoint", rib->materialOption.referencePoint);
+  element->InsertEndChild(materialElem);
 }
 
 void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
@@ -2468,87 +2316,40 @@ void TinyXMLSerializer::LoadChamfer(XMLElement *element,
 
 void TinyXMLSerializer::LoadRib(XMLElement *element,
                                 std::shared_ptr<CRib> &rib) {
-  if (auto *sectionElem = element->FirstChildElement("Section")) {
+  const char *sketchIdAttr = element->Attribute("SketchID");
+  if (sketchIdAttr) {
+    rib->sketchID = sketchIdAttr;
+  } else if (auto *sectionElem = element->FirstChildElement("Section")) {
     if (const char *id = sectionElem->Attribute("SketchID")) {
-      rib->sectionSketchID = id;
+      rib->sketchID = id;
     }
   }
 
   if (auto *thicknessElem = element->FirstChildElement("Thickness")) {
-    thicknessElem->QueryDoubleAttribute("Value", &rib->thickness);
-    if (auto sideMode =
-            RibThicknessSideModeFromString(thicknessElem->Attribute("SideMode"))) {
-      rib->thicknessSideMode = *sideMode;
-    } else {
-      int intValue = 0;
-      if (thicknessElem->QueryIntAttribute("SideMode", &intValue) ==
-          XML_SUCCESS) {
-        rib->thicknessSideMode = static_cast<RibThicknessSideMode>(intValue);
-      }
+    bool symmetric = true;
+    if (thicknessElem->Attribute("Symmetric")) {
+      thicknessElem->QueryBoolAttribute("Symmetric", &symmetric);
+    } else if (const char *sideMode = thicknessElem->Attribute("SideMode")) {
+      std::string modeStr = sideMode;
+      symmetric = (modeStr == "Symmetric" || modeStr == "1");
+    }
+    rib->thicknessOption.symmetric = symmetric;
+
+    double val = 0.0;
+    thicknessElem->QueryDoubleAttribute("Value", &val);
+    rib->thicknessOption.thickness = val;
+
+    if (thicknessElem->Attribute("Direction")) {
+      rib->thicknessOption.direction = LoadVector3D(thicknessElem, "Direction");
     }
   }
 
-  if (auto *materialSideElem = element->FirstChildElement("MaterialSide")) {
-    if (auto side =
-            RibMaterialSideFromString(materialSideElem->Attribute("Value"))) {
-      rib->materialSide = *side;
-    } else {
-      int intValue = 0;
-      if (materialSideElem->QueryIntAttribute("Value", &intValue) ==
-          XML_SUCCESS) {
-        rib->materialSide = static_cast<RibMaterialSide>(intValue);
-      }
-    }
-  }
-
-  if (auto *targetBodyElem = element->FirstChildElement("TargetBody")) {
-    rib->targetBody = LoadRefEntity(targetBodyElem);
-  }
-
-  if (auto *swElem = element->FirstChildElement("SwOptions")) {
-    CRibSwOptions swOptions;
-    if (auto ribType = SwRibTypeFromString(swElem->Attribute("RibType"))) {
-      swOptions.ribType = *ribType;
-    } else {
-      int intValue = 0;
-      if (swElem->QueryIntAttribute("RibType", &intValue) == XML_SUCCESS) {
-        swOptions.ribType = static_cast<SwRibType>(intValue);
-      }
-    }
-    if (auto direction = SwRibExtrusionDirectionFromString(
-            swElem->Attribute("ExtrusionDirection"))) {
-      swOptions.extrusionDirection = *direction;
-    } else {
-      int intValue = 0;
-      if (swElem->QueryIntAttribute("ExtrusionDirection", &intValue) ==
-          XML_SUCCESS) {
-        swOptions.extrusionDirection =
-            static_cast<SwRibExtrusionDirection>(intValue);
-      }
-    }
-    int intValue = 0;
-    if (swElem->QueryIntAttribute("ReferenceEdgeIndex", &intValue) ==
-        XML_SUCCESS) {
-      swOptions.referenceEdgeIndex = intValue;
-    }
-    if (swElem->QueryIntAttribute("RefSketchIndex", &intValue) ==
-        XML_SUCCESS) {
-      swOptions.refSketchIndex = intValue;
-    }
-
-    if (auto *draftElem = swElem->FirstChildElement("Draft")) {
-      CRibSwDraftOption draft;
-      draftElem->QueryBoolAttribute("Enabled", &draft.enabled);
-      draftElem->QueryDoubleAttribute("Angle", &draft.angle);
-      draftElem->QueryBoolAttribute("Outward", &draft.outward);
-      bool fromWall = false;
-      if (draftElem->QueryBoolAttribute("FromWall", &fromWall) == XML_SUCCESS) {
-        draft.fromWall = fromWall;
-      }
-      swOptions.draft = draft;
-    }
-
-    rib->swOptions = swOptions;
+  if (auto *materialElem = element->FirstChildElement("Material")) {
+    rib->materialOption.direction = LoadVector3D(materialElem, "Direction");
+    rib->materialOption.referencePoint = LoadPoint3D(materialElem, "ReferencePoint");
+  } else if (auto *materialSideElem = element->FirstChildElement("MaterialSide")) {
+    // Fallback default direction
+    rib->materialOption.direction = {0, 0, -1};
   }
 }
 

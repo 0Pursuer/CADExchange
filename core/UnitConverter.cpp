@@ -295,6 +295,11 @@ void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &c
   }
 }
 
+void ScaleRib(CRib &rib, double factor, UnitScaleContext &ctx) {
+  rib.thicknessOption.thickness *= factor;
+  ScalePoint(rib.materialOption.referencePoint, factor);
+}
+
 } // namespace
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
@@ -354,6 +359,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::DatumPlane:
         ScaleDatumPlane(*std::static_pointer_cast<CDatumPlane>(feature), factor, ctx);
+        break;
+      case FeatureType::Rib:
+        ScaleRib(*std::static_pointer_cast<CRib>(feature), factor, ctx);
         break;
       default:
         break;

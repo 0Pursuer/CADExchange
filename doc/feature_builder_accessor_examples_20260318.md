@@ -1300,3 +1300,72 @@ if (auto feat = ma.GetFeatureByID(chamferID)) {
 7. `ConvertModelUnit`
 8. `RecommendedApproach` 示例
 9. `MigrationRegressionTest` 回归测试
+
+---
+
+## 13. RibBuilder / RibAccessor 详细使用参考
+
+`RibBuilder` 主要方法：
+
+1. `SetSectionSketch(sketchID)`
+2. `SetThicknessOption(thicknessOption)`
+3. `SetMaterialOption(materialOption)`
+4. `Build()`
+
+### 13.1 典型写法：对称筋特征创建
+
+```cpp
+using namespace CADExchange;
+using namespace CADExchange::Builder;
+
+RibThicknessOption thickOpt;
+thickOpt.symmetric = true;
+thickOpt.thickness = 0.005;
+
+RibMaterialOption matOpt;
+matOpt.direction = CVector3D{0.0, 0.0, -1.0};
+matOpt.referencePoint = CPoint3D{0.0, 0.0, 0.0};
+
+std::string ribID =
+  Builder::RibBuilder(model, "Rib_Feature")
+    .SetSectionSketch(sketchID)
+    .SetThicknessOption(thickOpt)
+    .SetMaterialOption(matOpt)
+    .Build();
+```
+
+### 13.2 典型写法：非对称单侧筋特征创建
+
+```cpp
+RibThicknessOption thickOpt;
+thickOpt.symmetric = false;
+thickOpt.thickness = 0.004;
+thickOpt.direction = CVector3D{0.0, 1.0, 0.0}; // 厚度加厚方向
+```
+
+### 13.3 RibAccessor 读取参考
+
+`RibAccessor` 主要方法：
+
+1. `GetSectionSketchID()`
+2. `GetThicknessOption()`
+3. `GetMaterialOption()`
+
+```cpp
+using namespace CADExchange::Accessor;
+
+if (auto feat = ma.GetFeatureByID(ribID)) {
+  auto ribOpt = feat->As<Accessor::RibAccessor>();
+  if (ribOpt.has_value()) {
+    auto rib = *ribOpt;
+
+    std::string sketchID = rib.GetSectionSketchID();
+    RibThicknessOption thickOpt = rib.GetThicknessOption();
+    RibMaterialOption matOpt = rib.GetMaterialOption();
+
+    (void)sketchID;
+    (void)thickOpt;
+    (void)matOpt;
+  }
+}
+```
