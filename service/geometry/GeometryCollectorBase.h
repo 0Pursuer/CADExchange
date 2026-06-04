@@ -297,8 +297,29 @@ public:
     }
   }
 
+  struct HalfStructurePointGroup {
+    CPoint3D center{};
+    double radius = 0;
+    std::vector<CPoint3D> points;
+  };
+
+  static std::vector<HalfStructurePointGroup> ExtractHalfStructureGroups(
+      const std::vector<EdgeType>& edges, double tol) {
+    std::vector<EdgeType> open;
+    std::vector<NormalizedArc> arcs;
+    std::vector<CircleType> circles;
+    int warn = 0;
+    ClassifyEdges(edges, open, arcs, circles, warn, tol);
+    std::vector<CircleType> promoted;
+    std::vector<HalfStructurePointGroup> groups;
+    MergeArcs(arcs, tol, promoted, &groups);
+    return groups;
+  }
+
   ComparisonResult CompareDetailed(const GeometryCollectorBase& other,
-                                   double tol = 2e-3) const {
+                                   double tol = 2e-3,
+                                   const std::vector<HalfStructurePointGroup>* global_src_half_groups = nullptr,
+                                   const std::vector<HalfStructurePointGroup>* global_dst_half_groups = nullptr) const {
     ComparisonResult result;
     if (m_datumPlanes.size() != other.m_datumPlanes.size()) {
       result.equivalent = false;
@@ -325,8 +346,11 @@ public:
     SimplifyCirclesAndArcs(src_circles, src_arcs, tol);
     SimplifyCirclesAndArcs(dst_circles, dst_arcs, tol);
 
-    FilterHalfStructureEdges(src_open, src_half_structure_groups, tol);
-    FilterHalfStructureEdges(dst_open, dst_half_structure_groups, tol);
+    const auto* src_groups = global_src_half_groups ? global_src_half_groups : &src_half_structure_groups;
+    const auto* dst_groups = global_dst_half_groups ? global_dst_half_groups : &dst_half_structure_groups;
+    FilterHalfStructureEdges(src_open, *src_groups, tol);
+    FilterHalfStructureEdges(dst_open, *dst_groups, tol);
+
 
     std::vector<CircleType> src_unmatched_circles;
     std::vector<CircleType> dst_unmatched_circles;
@@ -514,11 +538,7 @@ private:
     CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
   };
 
-  struct HalfStructurePointGroup {
-    CPoint3D center{};
-    double radius = 0;
-    std::vector<CPoint3D> points;
-  };
+
 
   static std::string FormatPoint(const CPoint3D &pt) {
     std::ostringstream oss;
@@ -597,6 +617,7 @@ private:
                        }),
         open_edges.end());
   }
+
 
   static double PtDist(const CPoint3D& a, const CPoint3D& b) noexcept {
     double dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;

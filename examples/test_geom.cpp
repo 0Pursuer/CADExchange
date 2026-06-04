@@ -257,6 +257,21 @@ bool CompareSets(const GeometrySet &srcSet, const GeometrySet &dstSet,
                  std::vector<FeatureDiff> &featureDiffs) {
   bool equivalent = true;
 
+  std::vector<CADExchange::CRefEdge> all_src_edges, all_dst_edges;
+  for (const auto& [featureId, srcCollector] : srcSet.features) {
+    for (const auto& edge : srcCollector.GetEdges()) {
+      all_src_edges.push_back(edge);
+    }
+  }
+  for (const auto& [featureId, dstCollector] : dstSet.features) {
+    for (const auto& edge : dstCollector.GetEdges()) {
+      all_dst_edges.push_back(edge);
+    }
+  }
+
+  auto global_src_groups = Collector::ExtractHalfStructureGroups(all_src_edges, tol);
+  auto global_dst_groups = Collector::ExtractHalfStructureGroups(all_dst_edges, tol);
+
   for (const auto &[featureId, srcCollector] : srcSet.features) {
     auto dstIt = dstSet.features.find(featureId);
     if (dstIt == dstSet.features.end()) {
@@ -266,13 +281,14 @@ bool CompareSets(const GeometrySet &srcSet, const GeometrySet &dstSet,
       continue;
     }
 
-    ComparisonResult comparison = srcCollector.CompareDetailed(dstIt->second, tol);
+    ComparisonResult comparison = srcCollector.CompareDetailed(dstIt->second, tol, &global_src_groups, &global_dst_groups);
     if (!comparison.equivalent) {
       diffs.push_back("feature mismatch: " + featureId);
       featureDiffs.push_back(FeatureDiff{featureId, std::move(comparison.diagnostics)});
       equivalent = false;
     }
   }
+
 
   for (const auto &[featureId, unusedCollector] : dstSet.features) {
     (void)unusedCollector;
