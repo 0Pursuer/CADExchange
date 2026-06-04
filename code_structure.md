@@ -61,7 +61,7 @@
 ## 2.2 core
 
 - `core/UnifiedTypes.h`：基础几何类型、单位、标准基准 ID、向量运算工具。  
-- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CSweep/CChamfer/CDatumPlane`、`SweepExtent` 等）。
+- `core/UnifiedFeatures.h`：统一特征树与引用体系（`CSketch/CExtrude/CRevolve/CSweep/CChamfer/CRib/CShell/CDatumPlane`、`SweepExtent` 等）。
 - `core/UnifiedModel.h`：`UnifiedModel` 容器、索引、查找、校验入口声明。  
 - `core/UnitConverter.cpp`：`ConvertModelUnit` 及特征/引用的单位缩放实现。  
 - `core/TypeAdapters.h`：`PointAdapter/VectorAdapter` 与反向 `PointWriter/VectorWriter`。  
@@ -78,6 +78,8 @@
 - `RevolveBuilder.h`：旋转构造（轮廓、轴、`extent1/extent2`、薄壁）。  
 - `SweepBuilder.h`：扫掠构造（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁）。
 - `ChamferBuilder.h`：倒角构造（mode、参数、引用对象）。
+- `RibBuilder.h`：筋特征构造（轮廓草图、厚度选项、材料方向）。
+- `ShellBuilder.h`：壳特征（抽壳）的 Builder（厚度、方向、移除面、多厚度面）。
 - `DatumPlaneBuilder.h`：基准面构造（方法、引用、约束）。  
 - `FeatureBuilders.h`：Builder 聚合头。  
 - `StringHelper.h`：UUID（递增串）与 UTF8/宽字串路径处理。  
@@ -92,6 +94,8 @@
 - `RevolveAccessor.h`：旋转访问（共享 `SweepExtent` 字段读取）。  
 - `SweepAccessor.h`：扫掠访问（轮廓、主路径引用链、可选引导线路径、方向策略、薄壁读取）。
 - `ChamferAccessor.h`：倒角访问（mode、参数、引用对象读取）。
+- `RibAccessor.h`：筋特征访问（截面草图、厚度选项、材料方向）。
+- `ShellAccessor.h`：壳特征（抽壳）的只读访问器（厚度、方向、移除面、多厚度面、可选的 targetBody 与 excludedFaces）。
 - `DatumPlaneAccessor.h`：基准面访问。  
 - `ModelAccessor.h`：模型访问入口（按索引/ID 取特征）。  
 - `FeatureAccessors.h`：Accessor 聚合头。  

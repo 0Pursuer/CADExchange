@@ -300,6 +300,23 @@ void ScaleRib(CRib &rib, double factor, UnitScaleContext &ctx) {
   ScalePoint(rib.materialOption.referencePoint, factor);
 }
 
+void ScaleShell(CShell &shell, double factor, UnitScaleContext &ctx) {
+  shell.thickness *= factor;
+  for (auto &face : shell.facesToRemove) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+  for (auto &item : shell.thicknessFaces) {
+    item.thickness *= factor;
+    ScaleRefEntity(item.face, factor, ctx);
+  }
+  if (shell.targetBody) {
+    ScaleRefEntity(shell.targetBody, factor, ctx);
+  }
+  for (auto &face : shell.excludedFaces) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+}
+
 } // namespace
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
@@ -362,6 +379,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Rib:
         ScaleRib(*std::static_pointer_cast<CRib>(feature), factor, ctx);
+        break;
+      case FeatureType::Shell:
+        ScaleShell(*std::static_pointer_cast<CShell>(feature), factor, ctx);
         break;
       default:
         break;

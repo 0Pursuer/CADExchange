@@ -431,6 +431,22 @@ template <class Archive> void serialize(Archive &ar, CRib &rib) {
      cereal::make_nvp("MaterialOption", rib.materialOption));
 }
 
+template <class Archive>
+void serialize(Archive &ar, CShellThicknessFace &face) {
+  ar(cereal::make_nvp("Face", face.face),
+     cereal::make_nvp("Thickness", face.thickness));
+}
+
+template <class Archive> void serialize(Archive &ar, CShell &shell) {
+  ar(cereal::base_class<CFeatureBase>(&shell),
+     cereal::make_nvp("Thickness", shell.thickness),
+     cereal::make_nvp("Direction", shell.direction),
+     cereal::make_nvp("FacesToRemove", shell.facesToRemove),
+     cereal::make_nvp("ThicknessFaces", shell.thicknessFaces),
+     cereal::make_nvp("TargetBody", shell.targetBody),
+     cereal::make_nvp("ExcludedFaces", shell.excludedFaces));
+}
+
 /**
  * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
  */

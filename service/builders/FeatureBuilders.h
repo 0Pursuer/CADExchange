@@ -12,6 +12,7 @@
 #include "FilletBuilder.h"
 #include "ChamferBuilder.h"
 #include "RibBuilder.h"
+#include "ShellBuilder.h"
 #include "DatumPlaneBuilder.h"
 
 // clang-format on

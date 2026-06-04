@@ -581,6 +581,98 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
                  "' material direction is zero vector.");
       }
     }
+    // ---- CShell ----
+    else if (auto shell = std::dynamic_pointer_cast<CShell>(feature)) {
+      // SHELL_001: thickness must be positive
+      if (shell->thickness <= 0.0) {
+        addError("[SHELL_001] Shell '" + shell->featureID +
+                 "' thickness=" + std::to_string(shell->thickness) +
+                 " (must be > 0).");
+      } else {
+        const double thicknessM = toMeter(shell->thickness);
+        if (thicknessM < 1e-6 || thicknessM > 100.0) {
+          addWarn("[SCALE_004] Shell '" + shell->featureID + "' thickness=" +
+                  std::to_string(shell->thickness) + " (~" +
+                  std::to_string(thicknessM * 1000.0) +
+                  "mm) is out of normal range -- check unit system.");
+        }
+      }
+
+      // SHELL_002: direction must be specified
+      if (shell->direction == ShellThicknessDirection::Unknown) {
+        addError("[SHELL_002] Shell '" + shell->featureID +
+                 "' direction is Unknown.");
+      }
+
+      // SHELL_003: facesToRemove is typically non-empty for a meaningful shell
+      if (shell->facesToRemove.empty() && shell->thicknessFaces.empty()) {
+        addWarn("[SHELL_003] Shell '" + shell->featureID +
+                "' has no facesToRemove and no thicknessFaces -- "
+                "shell may be a no-op.");
+      }
+
+      // Validate references in facesToRemove
+      for (size_t i = 0; i < shell->facesToRemove.size(); ++i) {
+        const auto &ref = shell->facesToRemove[i];
+        if (!ref) {
+          addError("[SHELL_004] Shell '" + shell->featureID +
+                   "' facesToRemove[" + std::to_string(i) + "] is null.");
+        } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_008] Shell '" + shell->featureID +
+                    "' facesToRemove[" + std::to_string(i) +
+                    "] parent feature '" + subTopo->parentFeatureID +
+                    "' has not been defined yet.");
+          }
+        }
+      }
+
+      // Validate references in thicknessFaces
+      for (size_t i = 0; i < shell->thicknessFaces.size(); ++i) {
+        const auto &item = shell->thicknessFaces[i];
+        if (!item.face) {
+          addError("[SHELL_005] Shell '" + shell->featureID +
+                   "' thicknessFaces[" + std::to_string(i) + "] face is null.");
+        } else {
+          if (item.thickness <= 0.0) {
+            addError("[SHELL_006] Shell '" + shell->featureID +
+                     "' thicknessFaces[" + std::to_string(i) +
+                     "].thickness=" + std::to_string(item.thickness) +
+                     " (must be > 0).");
+          }
+          if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(item.face)) {
+            if (!subTopo->parentFeatureID.empty() &&
+                !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+                seen.find(subTopo->parentFeatureID) == seen.end()) {
+              addWarn("[REF_009] Shell '" + shell->featureID +
+                      "' thicknessFaces[" + std::to_string(i) +
+                      "] parent feature '" + subTopo->parentFeatureID +
+                      "' has not been defined yet.");
+            }
+          }
+        }
+      }
+
+      // Validate references in excludedFaces (optional, Creo-specific)
+      for (size_t i = 0; i < shell->excludedFaces.size(); ++i) {
+        const auto &ref = shell->excludedFaces[i];
+        if (!ref) {
+          addError("[SHELL_007] Shell '" + shell->featureID +
+                   "' excludedFaces[" + std::to_string(i) + "] is null.");
+        } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(ref)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_010] Shell '" + shell->featureID +
+                    "' excludedFaces[" + std::to_string(i) +
+                    "] parent feature '" + subTopo->parentFeatureID +
+                    "' has not been defined yet.");
+          }
+        }
+      }
+    }
     // ---- CFillet ----
     else if (auto fillet = std::dynamic_pointer_cast<CFillet>(feature)) {
       if (fillet->mode == FilletMode::UNKNOWN) {

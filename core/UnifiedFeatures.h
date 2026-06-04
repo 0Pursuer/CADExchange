@@ -31,6 +31,7 @@ enum class FeatureType {
   Fillet,
   Chamfer,
   Rib,
+  Shell,
   Sketch,
   DatumPlane
 };
@@ -731,6 +732,58 @@ struct CRib : public CFeatureBase {
   RibMaterialOption materialOption; // 材料情况
 
   CRib() { featureType = FeatureType::Rib; }
+};
+
+/**
+ * @brief 壳特征（抽壳）的厚度方向模式。
+ *
+ * 与方向取反 (Flip) 不同：这是壳特征自身的厚度偏置语义。
+ */
+enum class ShellThicknessDirection {
+  Unknown = 0,
+  Inward,   ///< 内侧抽壳：向实体内部偏移厚度
+  Outward   ///< 外侧抽壳：向实体外部偏移厚度
+};
+
+/**
+ * @brief 壳特征中具有独立厚度的面。
+ *
+ * 例如 Creo `PRO_E_ST_SHELL_LOCL_LIST` 中的单条多厚度记录，
+ * 或 SW `IShellFeatureData` 中 `MultipleThicknessFaces` 与 `GetMultipleThicknessAtIndex` 的组合。
+ */
+struct CShellThicknessFace {
+  std::shared_ptr<CRefFace> face;  ///< 具有独立厚度的面引用
+  double thickness = 0.0;           ///< 该面的独立厚度值（跟随模型单位）
+};
+
+/**
+ * @brief 壳特征（抽壳）。
+ *
+ * 壳特征属于非草图驱动的面操作类特征，直接引用拓扑面（`CRefFace`），
+ * 与 `CFillet` / `CChamfer` 同属一类（继承 `CFeatureBase`，不继承 `CProfiledFeatureBase`）。
+ *
+ * 核心参数（跨系统共同）：
+ * - `thickness` + `direction`：默认壳壁厚度与偏移方向
+ * - `facesToRemove`：被移除的面（开口面）
+ * - `thicknessFaces`：具有非默认厚度的面列表
+ *
+ * 系统专有扩展（可选）：
+ * - `targetBody`：目标实体引用（Creo `PRO_E_BODY_SELECT`）
+ * - `excludedFaces`：排除曲面集合（Creo `PRO_E_STD_SURF_COLLECTION_APPL`）
+ */
+struct CShell : public CFeatureBase {
+  // ---- 核心参数（跨系统共同） ----
+  double thickness = 0.0;                                   ///< 默认壳壁厚度
+  ShellThicknessDirection direction{ShellThicknessDirection::Unknown}; ///< 抽壳方向
+
+  std::vector<std::shared_ptr<CRefFace>> facesToRemove;     ///< 被移除的面（开口面）
+  std::vector<CShellThicknessFace> thicknessFaces;          ///< 非默认厚度的面
+
+  // ---- 系统专有扩展（Phase-1 可选） ----
+  std::shared_ptr<CRefEntityBase> targetBody;               ///< 目标实体引用（Creo: PRO_E_BODY_SELECT）
+  std::vector<std::shared_ptr<CRefFace>> excludedFaces;     ///< 排除曲面（Creo: PRO_E_STD_SURF_COLLECTION_APPL）
+
+  CShell() { featureType = FeatureType::Shell; }
 };
 
 enum class PlaneMethod {

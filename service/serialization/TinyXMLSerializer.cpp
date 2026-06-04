@@ -1099,6 +1099,36 @@ void TinyXMLSerializer::SaveRefEntity(
   }
 }
 
+// ---------------------------------------------------------------------------
+// ShellThicknessDirection enum ↔ string
+// ---------------------------------------------------------------------------
+std::string ShellThicknessDirectionToString(ShellThicknessDirection direction) {
+  switch (direction) {
+  case ShellThicknessDirection::Inward:
+    return "Inward";
+  case ShellThicknessDirection::Outward:
+    return "Outward";
+  case ShellThicknessDirection::Unknown:
+    return "Unknown";
+  }
+  return "Unknown";
+}
+
+std::optional<ShellThicknessDirection>
+ShellThicknessDirectionFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "inward") {
+    return ShellThicknessDirection::Inward;
+  }
+  if (value == "outward") {
+    return ShellThicknessDirection::Outward;
+  }
+  return std::nullopt;
+}
+
 void TinyXMLSerializer::SaveFeature(
     XMLDocument &doc, XMLElement *parent,
     const std::shared_ptr<CFeatureBase> &feature) {
@@ -1144,6 +1174,10 @@ void TinyXMLSerializer::SaveFeature(
     case FeatureType::Rib:
       featElem->SetAttribute("Type", "Rib");
       SaveRib(doc, featElem, std::static_pointer_cast<CRib>(feature));
+      break;
+    case FeatureType::Shell:
+      featElem->SetAttribute("Type", "Shell");
+      SaveShell(doc, featElem, std::static_pointer_cast<CShell>(feature));
       break;
     case FeatureType::DatumPlane:
       featElem->SetAttribute("Type", "DatumPlane");
@@ -1576,6 +1610,50 @@ void TinyXMLSerializer::SaveRib(XMLDocument &doc, XMLElement *element,
   element->InsertEndChild(materialElem);
 }
 
+void TinyXMLSerializer::SaveShell(XMLDocument &doc, XMLElement *element,
+                                   const std::shared_ptr<CShell> &shell) {
+  element->SetAttribute("Thickness", shell->thickness);
+  element->SetAttribute("Direction",
+                        ShellThicknessDirectionToString(shell->direction).c_str());
+
+  // FacesToRemove
+  if (!shell->facesToRemove.empty()) {
+    XMLElement *facesElem = doc.NewElement("FacesToRemove");
+    element->InsertEndChild(facesElem);
+    for (const auto &ref : shell->facesToRemove) {
+      SaveRefEntity(doc, facesElem, "FaceRef", ref);
+    }
+  }
+
+  // ThicknessFaces
+  if (!shell->thicknessFaces.empty()) {
+    XMLElement *thicknessFacesElem = doc.NewElement("ThicknessFaces");
+    element->InsertEndChild(thicknessFacesElem);
+    for (const auto &item : shell->thicknessFaces) {
+      XMLElement *itemElem = doc.NewElement("ThicknessFace");
+      itemElem->SetAttribute("Thickness", item.thickness);
+      thicknessFacesElem->InsertEndChild(itemElem);
+      if (item.face) {
+        SaveRefEntity(doc, itemElem, "FaceRef", item.face);
+      }
+    }
+  }
+
+  // TargetBody (Creo-specific, optional)
+  if (shell->targetBody) {
+    SaveRefEntity(doc, element, "TargetBody", shell->targetBody);
+  }
+
+  // ExcludedFaces (Creo-specific, optional)
+  if (!shell->excludedFaces.empty()) {
+    XMLElement *excludedElem = doc.NewElement("ExcludedFaces");
+    element->InsertEndChild(excludedElem);
+    for (const auto &ref : shell->excludedFaces) {
+      SaveRefEntity(doc, excludedElem, "FaceRef", ref);
+    }
+  }
+}
+
 void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
                                    const std::shared_ptr<CFillet> &fillet) {
   std::fprintf(stderr,
@@ -1830,6 +1908,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto rib = std::make_shared<CRib>();
     LoadRib(element, rib);
     feature = rib;
+  } else if (type == "Shell") {
+    auto shell = std::make_shared<CShell>();
+    LoadShell(element, shell);
+    feature = shell;
   } else if (type == "DatumPlane") {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
@@ -2350,6 +2432,68 @@ void TinyXMLSerializer::LoadRib(XMLElement *element,
   } else if (auto *materialSideElem = element->FirstChildElement("MaterialSide")) {
     // Fallback default direction
     rib->materialOption.direction = {0, 0, -1};
+  }
+}
+
+void TinyXMLSerializer::LoadShell(XMLElement *element,
+                                   std::shared_ptr<CShell> &shell) {
+  double doubleValue = 0.0;
+  if (element->QueryDoubleAttribute("Thickness", &doubleValue) == XML_SUCCESS) {
+    shell->thickness = doubleValue;
+  }
+
+  if (auto direction =
+          ShellThicknessDirectionFromString(element->Attribute("Direction"))) {
+    shell->direction = *direction;
+  }
+
+  // FacesToRemove
+  if (XMLElement *facesElem = element->FirstChildElement("FacesToRemove")) {
+    XMLElement *refElem = facesElem->FirstChildElement("FaceRef");
+    while (refElem) {
+      auto ref = LoadRefEntity(refElem);
+      if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+        shell->facesToRemove.push_back(face);
+      }
+      refElem = refElem->NextSiblingElement("FaceRef");
+    }
+  }
+
+  // ThicknessFaces
+  if (XMLElement *thicknessFacesElem = element->FirstChildElement("ThicknessFaces")) {
+    XMLElement *itemElem = thicknessFacesElem->FirstChildElement("ThicknessFace");
+    while (itemElem) {
+      CShellThicknessFace item;
+      double thick = 0.0;
+      if (itemElem->QueryDoubleAttribute("Thickness", &thick) == XML_SUCCESS) {
+        item.thickness = thick;
+      }
+      if (XMLElement *faceElem = itemElem->FirstChildElement("FaceRef")) {
+        auto ref = LoadRefEntity(faceElem);
+        if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+          item.face = face;
+        }
+      }
+      shell->thicknessFaces.push_back(std::move(item));
+      itemElem = itemElem->NextSiblingElement("ThicknessFace");
+    }
+  }
+
+  // TargetBody (Creo-specific, optional)
+  if (XMLElement *targetBodyElem = element->FirstChildElement("TargetBody")) {
+    shell->targetBody = LoadRefEntity(targetBodyElem);
+  }
+
+  // ExcludedFaces (Creo-specific, optional)
+  if (XMLElement *excludedElem = element->FirstChildElement("ExcludedFaces")) {
+    XMLElement *refElem = excludedElem->FirstChildElement("FaceRef");
+    while (refElem) {
+      auto ref = LoadRefEntity(refElem);
+      if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+        shell->excludedFaces.push_back(face);
+      }
+      refElem = refElem->NextSiblingElement("FaceRef");
+    }
   }
 }
 

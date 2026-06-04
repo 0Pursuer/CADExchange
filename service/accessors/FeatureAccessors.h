@@ -10,6 +10,7 @@
 #include "FilletAccessor.h"
 #include "ChamferAccessor.h"
 #include "RibAccessor.h"
+#include "ShellAccessor.h"
 #include "DatumPlaneAccessor.h"
 #include "ModelAccessor.h"
 
