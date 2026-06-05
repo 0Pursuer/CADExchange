@@ -1,4 +1,4 @@
-﻿#include "UnifiedSerialization.h"
+#include "UnifiedSerialization.h"
 #include "../../thirdParty/cereal/archives/json.hpp"
 #include "../../thirdParty/cereal/types/polymorphic.hpp"
 
@@ -62,6 +62,7 @@ CEREAL_REGISTER_TYPE(CFillet)
 CEREAL_REGISTER_TYPE(CChamfer)
 CEREAL_REGISTER_TYPE(CRib)
 CEREAL_REGISTER_TYPE(CShell)
+CEREAL_REGISTER_TYPE(CDraft)
 CEREAL_REGISTER_TYPE(CDatumPlane)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CSketch)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CExtrude)
@@ -71,6 +72,7 @@ CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CFillet)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CChamfer)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CRib)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CShell)
+CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CDraft)
 CEREAL_REGISTER_POLYMORPHIC_RELATION(CFeatureBase, CDatumPlane)
 
 namespace CADExchange {

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // clang-format off
 #include "FeatureAccessorBase.h"
@@ -11,6 +11,7 @@
 #include "ChamferAccessor.h"
 #include "RibAccessor.h"
 #include "ShellAccessor.h"
+#include "DraftAccessor.h"
 #include "DatumPlaneAccessor.h"
 #include "ModelAccessor.h"
 

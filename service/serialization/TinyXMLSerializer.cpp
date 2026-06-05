@@ -1129,6 +1129,31 @@ ShellThicknessDirectionFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string DraftTypeToString(DraftType type) {
+  switch (type) {
+  case DraftType::NeutralPlane:
+    return "NeutralPlane";
+  case DraftType::PartingLine:
+    return "PartingLine";
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<DraftType> DraftTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "neutralplane") {
+    return DraftType::NeutralPlane;
+  }
+  if (value == "partingline") {
+    return DraftType::PartingLine;
+  }
+  return std::nullopt;
+}
+
 void TinyXMLSerializer::SaveFeature(
     XMLDocument &doc, XMLElement *parent,
     const std::shared_ptr<CFeatureBase> &feature) {
@@ -1178,6 +1203,10 @@ void TinyXMLSerializer::SaveFeature(
     case FeatureType::Shell:
       featElem->SetAttribute("Type", "Shell");
       SaveShell(doc, featElem, std::static_pointer_cast<CShell>(feature));
+      break;
+    case FeatureType::Draft:
+      featElem->SetAttribute("Type", "Draft");
+      SaveDraft(doc, featElem, std::static_pointer_cast<CDraft>(feature));
       break;
     case FeatureType::DatumPlane:
       featElem->SetAttribute("Type", "DatumPlane");
@@ -1654,6 +1683,40 @@ void TinyXMLSerializer::SaveShell(XMLDocument &doc, XMLElement *element,
   }
 }
 
+void TinyXMLSerializer::SaveDraft(XMLDocument &doc, XMLElement *element,
+                                  const std::shared_ptr<CDraft> &draft) {
+  element->SetAttribute("DraftType", DraftTypeToString(draft->draftType).c_str());
+  element->SetAttribute("ReversePullDirection", draft->reversePullDirection);
+  element->SetAttribute("DraftAngle", draft->draftAngle);
+  element->SetAttribute("IsTwoSided", draft->isTwoSided);
+  element->SetAttribute("DraftAngleSide2", draft->draftAngleSide2);
+
+  if (draft->pullDirectionRef) {
+    SaveRefEntity(doc, element, "PullDirection", draft->pullDirectionRef);
+  }
+
+  if (!draft->draftFaces.empty()) {
+    XMLElement *facesElem = doc.NewElement("DraftFaces");
+    element->InsertEndChild(facesElem);
+    for (const auto &ref : draft->draftFaces) {
+      SaveRefEntity(doc, facesElem, "FaceRef", ref);
+    }
+  }
+
+  if (draft->neutralPlaneRef) {
+    SaveRefEntity(doc, element, "NeutralPlane", draft->neutralPlaneRef);
+  }
+
+  if (!draft->partingLines.empty()) {
+    XMLElement *linesElem = doc.NewElement("PartingLines");
+    element->InsertEndChild(linesElem);
+    for (const auto &ref : draft->partingLines) {
+      SaveRefEntity(doc, linesElem, "LineRef", ref);
+    }
+  }
+}
+
+
 void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
                                    const std::shared_ptr<CFillet> &fillet) {
   std::fprintf(stderr,
@@ -1912,6 +1975,10 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto shell = std::make_shared<CShell>();
     LoadShell(element, shell);
     feature = shell;
+  } else if (type == "Draft") {
+    auto draft = std::make_shared<CDraft>();
+    LoadDraft(element, draft);
+    feature = draft;
   } else if (type == "DatumPlane") {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
@@ -2496,6 +2563,59 @@ void TinyXMLSerializer::LoadShell(XMLElement *element,
     }
   }
 }
+
+void TinyXMLSerializer::LoadDraft(XMLElement *element,
+                                  std::shared_ptr<CDraft> &draft) {
+  if (auto draftType = DraftTypeFromString(element->Attribute("DraftType"))) {
+    draft->draftType = *draftType;
+  }
+
+  bool boolValue = false;
+  if (element->QueryBoolAttribute("ReversePullDirection", &boolValue) == XML_SUCCESS) {
+    draft->reversePullDirection = boolValue;
+  }
+
+  double doubleValue = 0.0;
+  if (element->QueryDoubleAttribute("DraftAngle", &doubleValue) == XML_SUCCESS) {
+    draft->draftAngle = doubleValue;
+  }
+
+  if (element->QueryBoolAttribute("IsTwoSided", &boolValue) == XML_SUCCESS) {
+    draft->isTwoSided = boolValue;
+  }
+
+  if (element->QueryDoubleAttribute("DraftAngleSide2", &doubleValue) == XML_SUCCESS) {
+    draft->draftAngleSide2 = doubleValue;
+  }
+
+  if (XMLElement *pullElem = element->FirstChildElement("PullDirection")) {
+    draft->pullDirectionRef = LoadRefEntity(pullElem);
+  }
+
+  if (XMLElement *facesElem = element->FirstChildElement("DraftFaces")) {
+    XMLElement *refElem = facesElem->FirstChildElement("FaceRef");
+    while (refElem) {
+      auto ref = LoadRefEntity(refElem);
+      if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+        draft->draftFaces.push_back(face);
+      }
+      refElem = refElem->NextSiblingElement("FaceRef");
+    }
+  }
+
+  if (XMLElement *neutralElem = element->FirstChildElement("NeutralPlane")) {
+    draft->neutralPlaneRef = LoadRefEntity(neutralElem);
+  }
+
+  if (XMLElement *linesElem = element->FirstChildElement("PartingLines")) {
+    XMLElement *refElem = linesElem->FirstChildElement("LineRef");
+    while (refElem) {
+      draft->partingLines.push_back(LoadRefEntity(refElem));
+      refElem = refElem->NextSiblingElement("LineRef");
+    }
+  }
+}
+
 
 void TinyXMLSerializer::LoadFillet(XMLElement *element,
                                    std::shared_ptr<CFillet> &fillet) {

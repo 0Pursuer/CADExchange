@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // clang-format off
 #include "UnifiedTypes.h"
 #include <memory>
@@ -33,7 +33,8 @@ enum class FeatureType {
   Rib,
   Shell,
   Sketch,
-  DatumPlane
+  DatumPlane,
+  Draft
 };
 
 /**
@@ -785,6 +786,40 @@ struct CShell : public CFeatureBase {
 
   CShell() { featureType = FeatureType::Shell; }
 };
+
+/**
+ * @brief 拔模类型枚举（最小标准结构）。
+ */
+enum class DraftType {
+  Unknown = 0,
+  NeutralPlane,          ///< 中性面拔模 (SW: Neutral Plane, Creo: Hinge == PLANE)
+  PartingLine           ///< 分型线拔模 (SW: Parting Line, Creo: Hinge == CURVE)
+};
+
+/**
+ * @brief 拔模特征 (CDraft)。
+ *
+ * 仅包含 SolidWorks 和 Creo 均能原生、无损支持的几何特征参数（通用最小标准结构）。
+ */
+struct CDraft : public CFeatureBase {
+  DraftType draftType{DraftType::Unknown};                  ///< 拔模类型
+  
+  std::shared_ptr<CRefEntityBase> pullDirectionRef;        ///< 拔模/拉伸开模方向参考
+  bool reversePullDirection = false;                        ///< 方向是否反向
+
+  std::vector<std::shared_ptr<CRefFace>> draftFaces;        ///< 被拔模的目标面集合
+  
+  std::shared_ptr<CRefEntityBase> neutralPlaneRef;         ///< 中性面参考 (用于中性面拔模)
+  std::vector<std::shared_ptr<CRefEntityBase>> partingLines; ///< 分型线参考 (用于分型线/台阶拔模)
+  
+  double draftAngle = 0.0;                                  ///< 第一侧/主侧拔模角度 (弧度制)
+
+  bool isTwoSided = false;                                  ///< 是否为双侧拔模
+  double draftAngleSide2 = 0.0;                             ///< 第二侧拔模角度 (弧度制)
+
+  CDraft() { featureType = FeatureType::Draft; }
+};
+
 
 enum class PlaneMethod {
   UNKNOWN = 0,

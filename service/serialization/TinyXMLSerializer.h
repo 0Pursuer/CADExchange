@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../thirdParty/tinyxml2/tinyxml2.h"
 #include "../../core/UnifiedFeatures.h"
@@ -126,6 +126,13 @@ private:
                         const std::shared_ptr<CShell> &shell);
 
   /**
+   * @brief Serialize a `CDraft` feature.
+   */
+  static void SaveDraft(tinyxml2::XMLDocument &doc,
+                        tinyxml2::XMLElement *element,
+                        const std::shared_ptr<CDraft> &draft);
+
+  /**
    * @brief 将 `CDatumPlane` 类型的特征序列化到给定的元素下。
    */
   static void SaveDatumPlane(tinyxml2::XMLDocument &doc,
@@ -233,6 +240,12 @@ private:
    */
   static void LoadShell(tinyxml2::XMLElement *element,
                         std::shared_ptr<CShell> &shell);
+
+  /**
+   * @brief Restore a `CDraft` feature from XML.
+   */
+  static void LoadDraft(tinyxml2::XMLElement *element,
+                        std::shared_ptr<CDraft> &draft);
 
   /**
    * @brief 从 XML 元素恢复 `CDatumPlane`。

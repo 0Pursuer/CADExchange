@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 // clang-format off
 #include "BuilderMacros.h"
 #include "StringHelper.h"
@@ -13,6 +13,7 @@
 #include "ChamferBuilder.h"
 #include "RibBuilder.h"
 #include "ShellBuilder.h"
+#include "DraftBuilder.h"
 #include "DatumPlaneBuilder.h"
 
 // clang-format on

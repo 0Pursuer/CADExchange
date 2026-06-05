@@ -317,6 +317,17 @@ void ScaleShell(CShell &shell, double factor, UnitScaleContext &ctx) {
   }
 }
 
+void ScaleDraft(CDraft &draft, double factor, UnitScaleContext &ctx) {
+  ScaleRefEntity(draft.pullDirectionRef, factor, ctx);
+  for (auto &face : draft.draftFaces) {
+    ScaleRefEntity(face, factor, ctx);
+  }
+  ScaleRefEntity(draft.neutralPlaneRef, factor, ctx);
+  for (auto &line : draft.partingLines) {
+    ScaleRefEntity(line, factor, ctx);
+  }
+}
+
 } // namespace
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
@@ -382,6 +393,9 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Shell:
         ScaleShell(*std::static_pointer_cast<CShell>(feature), factor, ctx);
+        break;
+      case FeatureType::Draft:
+        ScaleDraft(*std::static_pointer_cast<CDraft>(feature), factor, ctx);
         break;
       default:
         break;

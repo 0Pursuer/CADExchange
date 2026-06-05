@@ -673,6 +673,86 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         }
       }
     }
+    // ---- CDraft ----
+    else if (auto draft = std::dynamic_pointer_cast<CDraft>(feature)) {
+      if (draft->draftType == DraftType::Unknown) {
+        addError("[DRAFT_001] Draft '" + draft->featureID + "' draftType is Unknown.");
+      }
+
+      if (!draft->pullDirectionRef) {
+        addError("[DRAFT_002] Draft '" + draft->featureID + "' pullDirectionRef is null.");
+      } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(draft->pullDirectionRef)) {
+        if (!subTopo->parentFeatureID.empty() &&
+            !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+            seen.find(subTopo->parentFeatureID) == seen.end()) {
+          addWarn("[REF_002] Draft '" + draft->featureID + "' references pullDirectionRef parentFeatureID '" +
+                  subTopo->parentFeatureID + "' which is not defined yet.");
+        }
+      }
+
+      if (draft->draftFaces.empty()) {
+        addError("[DRAFT_003] Draft '" + draft->featureID + "' has no draftFaces.");
+      } else {
+        for (size_t i = 0; i < draft->draftFaces.size(); ++i) {
+          const auto &face = draft->draftFaces[i];
+          if (!face) {
+            addError("[DRAFT_004] Draft '" + draft->featureID + "' draftFaces[" + std::to_string(i) + "] is null.");
+          } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(face)) {
+            if (!subTopo->parentFeatureID.empty() &&
+                !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+                seen.find(subTopo->parentFeatureID) == seen.end()) {
+              addWarn("[REF_002] Draft '" + draft->featureID + "' references draftFace parentFeatureID '" +
+                      subTopo->parentFeatureID + "' which is not defined yet.");
+            }
+          }
+        }
+      }
+
+      if (draft->draftType == DraftType::NeutralPlane) {
+        if (!draft->neutralPlaneRef) {
+          addError("[DRAFT_005] Draft '" + draft->featureID + "' of type NeutralPlane missing neutralPlaneRef.");
+        } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(draft->neutralPlaneRef)) {
+          if (!subTopo->parentFeatureID.empty() &&
+              !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+              seen.find(subTopo->parentFeatureID) == seen.end()) {
+            addWarn("[REF_002] Draft '" + draft->featureID + "' references neutralPlaneRef parentFeatureID '" +
+                    subTopo->parentFeatureID + "' which is not defined yet.");
+          }
+        }
+      } else if (draft->draftType == DraftType::PartingLine) {
+        if (draft->partingLines.empty()) {
+          addError("[DRAFT_006] Draft '" + draft->featureID + "' of type PartingLine has no partingLines.");
+        } else {
+          for (size_t i = 0; i < draft->partingLines.size(); ++i) {
+            const auto &line = draft->partingLines[i];
+            if (!line) {
+              addError("[DRAFT_007] Draft '" + draft->featureID + "' partingLines[" + std::to_string(i) + "] is null.");
+            } else if (auto subTopo = std::dynamic_pointer_cast<CRefSubTopo>(line)) {
+              if (!subTopo->parentFeatureID.empty() &&
+                  !IsBuiltinStandardDatumID(subTopo->parentFeatureID) &&
+                  seen.find(subTopo->parentFeatureID) == seen.end()) {
+                addWarn("[REF_002] Draft '" + draft->featureID + "' references partingLine parentFeatureID '" +
+                        subTopo->parentFeatureID + "' which is not defined yet.");
+              }
+            }
+          }
+        }
+      }
+
+      if (draft->draftAngle <= 0.0) {
+        addError("[DRAFT_008] Draft '" + draft->featureID + "' draftAngle=" + std::to_string(draft->draftAngle) + " (must be > 0).");
+      } else if (draft->draftAngle > 1.0) {
+        addWarn("[SCALE_005] Draft '" + draft->featureID + "' draftAngle=" + std::to_string(draft->draftAngle) + " is very large.");
+      }
+
+      if (draft->isTwoSided) {
+        if (draft->draftAngleSide2 <= 0.0) {
+          addError("[DRAFT_009] Draft '" + draft->featureID + "' draftAngleSide2=" + std::to_string(draft->draftAngleSide2) + " (must be > 0 when isTwoSided is true).");
+        } else if (draft->draftAngleSide2 > 1.0) {
+          addWarn("[SCALE_005] Draft '" + draft->featureID + "' draftAngleSide2=" + std::to_string(draft->draftAngleSide2) + " is very large.");
+        }
+      }
+    }
     // ---- CFillet ----
     else if (auto fillet = std::dynamic_pointer_cast<CFillet>(feature)) {
       if (fillet->mode == FilletMode::UNKNOWN) {

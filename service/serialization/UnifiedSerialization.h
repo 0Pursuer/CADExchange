@@ -447,6 +447,19 @@ template <class Archive> void serialize(Archive &ar, CShell &shell) {
      cereal::make_nvp("ExcludedFaces", shell.excludedFaces));
 }
 
+template <class Archive> void serialize(Archive &ar, CDraft &draft) {
+  ar(cereal::base_class<CFeatureBase>(&draft),
+     cereal::make_nvp("DraftType", draft.draftType),
+     cereal::make_nvp("PullDirectionRef", draft.pullDirectionRef),
+     cereal::make_nvp("ReversePullDirection", draft.reversePullDirection),
+     cereal::make_nvp("DraftFaces", draft.draftFaces),
+     cereal::make_nvp("NeutralPlaneRef", draft.neutralPlaneRef),
+     cereal::make_nvp("PartingLines", draft.partingLines),
+     cereal::make_nvp("DraftAngle", draft.draftAngle),
+     cereal::make_nvp("IsTwoSided", draft.isTwoSided),
+     cereal::make_nvp("DraftAngleSide2", draft.draftAngleSide2));
+}
+
 /**
  * @brief 序列化基准面约束，记录约束类型、引用索引和参数。
  */
