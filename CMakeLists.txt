@@ -20,6 +20,7 @@ if(MSVC)
 endif()
 
 option(CADEXCHANGE_BUILD_EXAMPLES "Build CADExchange example executables" ON)
+option(CADEXCHANGE_BUILD_PYTHON_BINDINGS "Build CADExchange Python bindings" OFF)
 
 # Include directories
 include_directories(
@@ -27,6 +28,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/service/builders
     ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization
     ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
+    ${CMAKE_CURRENT_SOURCE_DIR}/service/api/py
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -46,6 +48,7 @@ target_include_directories(cadexchange PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization
     ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
     ${CMAKE_CURRENT_SOURCE_DIR}/service/validation
+    ${CMAKE_CURRENT_SOURCE_DIR}/service/api/py
     ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
@@ -74,6 +77,9 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
     add_executable(MigrationRegressionTest examples/MigrationRegressionTest.cpp)
     target_link_libraries(MigrationRegressionTest PRIVATE cadexchange)
 
+    add_executable(PythonBindingSmokeTest examples/PythonBindingSmokeTest.cpp)
+    target_link_libraries(PythonBindingSmokeTest PRIVATE cadexchange)
+
     add_executable(test_geom examples/test_geom.cpp)
     target_link_libraries(test_geom PRIVATE cadexchange)
 
@@ -82,4 +88,32 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
 
     # add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
     # target_link_libraries(DirectModelDemo PRIVATE cadexchange)
+endif()
+
+if(CADEXCHANGE_BUILD_PYTHON_BINDINGS)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
+    set(PYBIND11_LTO_CXX_FLAGS "" CACHE STRING "" FORCE)
+    set(PYBIND11_LTO_LINKER_FLAGS "" CACHE STRING "" FORCE)
+    find_package(pybind11 CONFIG REQUIRED)
+
+    pybind11_add_module(cadexchange_py
+        service/api/py/module.cpp
+    )
+
+    target_include_directories(cadexchange_py PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/core
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/accessors
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/serialization
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/api/py
+        ${CMAKE_CURRENT_SOURCE_DIR}/service/validation
+        ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+    )
+
+    target_link_libraries(cadexchange_py PRIVATE cadexchange)
+
+    set_target_properties(cadexchange_py PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python/$<CONFIG>"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python/$<CONFIG>"
+    )
 endif()

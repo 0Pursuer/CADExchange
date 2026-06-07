@@ -46,6 +46,9 @@ public:
   ACCESSOR_GETTER(FilletReferenceMode, ReferenceMode, referenceMode,
                   FilletReferenceMode::UNKNOWN)
 
+  // Windows may macro-expand GetDriveType() to GetDriveTypeA().
+  FilletDriveType GetDriveTypeA() const { return GetDriveType(); }
+
   bool HasPrimaryValue() const {
     return IsValid() && Data()->params.primaryValue.has_value();
   }

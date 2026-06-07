@@ -1,4 +1,6 @@
 build/
+build_python/
+build_python_py311/
 build_ninja/
 build_msvc/
 build_shared/
@@ -11,3 +13,4 @@ tmp/
 # Temp/trail files
 std.out
 trail.txt.*
+thirdParty/pybind11/pybind11.egg-info/

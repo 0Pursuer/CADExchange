@@ -2014,12 +2014,17 @@ void TinyXMLSerializer::LoadSketch(XMLElement *element,
   XMLElement *csysElem = element->FirstChildElement("LocalCSys");
   if (csysElem) {
     bool valid = false;
-    csysElem->QueryBoolAttribute("Valid", &valid);
-    sketch->sketchCSys.valid = valid;
     sketch->sketchCSys.origin = LoadPoint3D(csysElem, "Origin");
     sketch->sketchCSys.xDir = LoadVector3D(csysElem, "XDir");
     sketch->sketchCSys.yDir = LoadVector3D(csysElem, "YDir");
     sketch->sketchCSys.zDir = LoadVector3D(csysElem, "ZDir");
+    if (csysElem->QueryBoolAttribute("Valid", &valid) == XML_SUCCESS) {
+      sketch->sketchCSys.valid = valid;
+    } else {
+      // Backward compatibility: older XML samples omitted the Valid flag but
+      // still serialized a complete orthogonal local coordinate system.
+      sketch->sketchCSys.valid = true;
+    }
   }
 
   XMLElement *segsElem = element->FirstChildElement("Segments");
