@@ -267,6 +267,49 @@ void TestRevolveSketchAxisSerializesReferenceEntity() {
          "Loaded revolve profile sketch should not be overwritten by axis parent.");
   Expect(loadedRevolve.GetAxisReferenceLocalID() == "L_1",
          "Loaded revolve should keep axis local ID from sketch-segment reference.");
+
+  auto centerlineSketch = MakeSketch("SK-CL", "SketchCenterline");
+  auto centerline = std::make_shared<CSketchLine>();
+  centerline->localID = "CL_1";
+  centerline->isConstruction = true;
+  centerline->startPos = CPoint3D{0.0, -1.0, 0.0};
+  centerline->endPos = CPoint3D{0.0, 1.0, 0.0};
+  centerlineSketch->segments.push_back(centerline);
+  model.AddFeature(centerlineSketch);
+
+  const std::string centerlineRevolveId =
+      RevolveBuilder(model, "RevolveCenterlineAxis")
+          .SetProfile("SK-PROFILE")
+          .SetAxisRef(
+              static_cast<std::shared_ptr<CRefEntityBase>>(
+                  Ref::SketchSegment("SK-CL", "CL_1", 0)))
+          .SetAxisExplicit(StandardID::kOrigin, StandardID::kAxisZ)
+          .SetAngle(kHalfPi)
+          .Build();
+
+  const std::filesystem::path centerlineXmlPath =
+      std::filesystem::path("tmp") / "cadexchange_revolve_centerline_axis_ref.xml";
+  errorMessage.clear();
+  Expect(SaveModel(model, centerlineXmlPath, &errorMessage,
+                   SerializationFormat::TINYXML),
+         "Saving revolve centerline-axis XML should succeed.");
+
+  UnifiedModel centerlineLoaded;
+  errorMessage.clear();
+  Expect(LoadModel(centerlineLoaded, centerlineXmlPath, &errorMessage,
+                   SerializationFormat::TINYXML),
+         "Loading revolve centerline-axis XML should succeed.");
+  RevolveAccessor loadedCenterlineRevolve(
+      centerlineLoaded.GetFeature(centerlineRevolveId));
+  Expect(loadedCenterlineRevolve.IsValid(),
+         "Loaded centerline-axis revolve should be accessible.");
+  const auto loadedCenterlineAxisRef = loadedCenterlineRevolve.GetAxisReference();
+  Expect(loadedCenterlineAxisRef.GetRefType() == RefType::TOPO_SKETCH_SEG,
+         "Centerline axis should remain a sketch-segment reference.");
+  Expect(loadedCenterlineAxisRef.GetParentFeatureID() == "SK-CL",
+         "Centerline axis should keep its sketch parent.");
+  Expect(loadedCenterlineAxisRef.GetSketchSegmentLocalID() == "CL_1",
+         "Centerline axis should keep its local segment ID.");
 }
 
 void TestSweepBuilderAccessorAndXmlRoundTrip() {
