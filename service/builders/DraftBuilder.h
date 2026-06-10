@@ -63,6 +63,35 @@ public:
     return *this;
   }
 
+  DraftBuilder &SetPartingSplitSketch(
+      const std::shared_ptr<CRefEntityBase> &ref) {
+    if (ref) {
+      ValidateReference(ref);
+    }
+    m_feature->partingSplitSketchRef = ref;
+    return *this;
+  }
+
+  DraftBuilder &AddPartingSplitTargetFace(
+      const std::shared_ptr<CRefFace> &ref) {
+    if (!ref) {
+      throw std::runtime_error("Parting split target face must not be null.");
+    }
+    ValidateReference(ref);
+    m_feature->partingSplitTargetFaces.push_back(ref);
+    return *this;
+  }
+
+  DraftBuilder &SetPartingSplitSingleDirection(bool singleDirection) {
+    m_feature->partingSplitSingleDirection = singleDirection;
+    return *this;
+  }
+
+  DraftBuilder &SetPartingSplitReverseDirection(bool reverseDirection) {
+    m_feature->partingSplitReverseDirection = reverseDirection;
+    return *this;
+  }
+
   DraftBuilder &SetDraftAngle(double angle) {
     m_feature->draftAngle = angle;
     return *this;

@@ -817,6 +817,11 @@ struct CDraft : public CFeatureBase {
   bool isTwoSided = false;                                  ///< 是否为双侧拔模
   double draftAngleSide2 = 0.0;                             ///< 第二侧拔模角度 (弧度制)
 
+  std::shared_ptr<CRefEntityBase> partingSplitSketchRef;
+  std::vector<std::shared_ptr<CRefFace>> partingSplitTargetFaces;
+  bool partingSplitSingleDirection = false;
+  bool partingSplitReverseDirection = false;
+
   CDraft() { featureType = FeatureType::Draft; }
 };
 

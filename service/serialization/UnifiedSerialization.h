@@ -457,7 +457,14 @@ template <class Archive> void serialize(Archive &ar, CDraft &draft) {
      cereal::make_nvp("PartingLines", draft.partingLines),
      cereal::make_nvp("DraftAngle", draft.draftAngle),
      cereal::make_nvp("IsTwoSided", draft.isTwoSided),
-     cereal::make_nvp("DraftAngleSide2", draft.draftAngleSide2));
+     cereal::make_nvp("DraftAngleSide2", draft.draftAngleSide2),
+     cereal::make_nvp("PartingSplitSketchRef", draft.partingSplitSketchRef),
+     cereal::make_nvp("PartingSplitTargetFaces",
+                      draft.partingSplitTargetFaces),
+     cereal::make_nvp("PartingSplitSingleDirection",
+                      draft.partingSplitSingleDirection),
+     cereal::make_nvp("PartingSplitReverseDirection",
+                      draft.partingSplitReverseDirection));
 }
 
 /**

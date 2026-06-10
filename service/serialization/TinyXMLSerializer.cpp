@@ -1714,6 +1714,25 @@ void TinyXMLSerializer::SaveDraft(XMLDocument &doc, XMLElement *element,
       SaveRefEntity(doc, linesElem, "LineRef", ref);
     }
   }
+
+  if (draft->partingSplitSketchRef || !draft->partingSplitTargetFaces.empty()) {
+    XMLElement *splitElem = doc.NewElement("PartingSplitLine");
+    splitElem->SetAttribute("SingleDirection", draft->partingSplitSingleDirection);
+    splitElem->SetAttribute("ReverseDirection", draft->partingSplitReverseDirection);
+    element->InsertEndChild(splitElem);
+
+    if (draft->partingSplitSketchRef) {
+      SaveRefEntity(doc, splitElem, "Sketch", draft->partingSplitSketchRef);
+    }
+
+    if (!draft->partingSplitTargetFaces.empty()) {
+      XMLElement *facesElem = doc.NewElement("TargetFaces");
+      splitElem->InsertEndChild(facesElem);
+      for (const auto &ref : draft->partingSplitTargetFaces) {
+        SaveRefEntity(doc, facesElem, "FaceRef", ref);
+      }
+    }
+  }
 }
 
 
@@ -2617,6 +2636,28 @@ void TinyXMLSerializer::LoadDraft(XMLElement *element,
     while (refElem) {
       draft->partingLines.push_back(LoadRefEntity(refElem));
       refElem = refElem->NextSiblingElement("LineRef");
+    }
+  }
+
+  if (XMLElement *splitElem = element->FirstChildElement("PartingSplitLine")) {
+    splitElem->QueryBoolAttribute("SingleDirection",
+                                  &draft->partingSplitSingleDirection);
+    splitElem->QueryBoolAttribute("ReverseDirection",
+                                  &draft->partingSplitReverseDirection);
+
+    if (XMLElement *sketchElem = splitElem->FirstChildElement("Sketch")) {
+      draft->partingSplitSketchRef = LoadRefEntity(sketchElem);
+    }
+
+    if (XMLElement *facesElem = splitElem->FirstChildElement("TargetFaces")) {
+      XMLElement *refElem = facesElem->FirstChildElement("FaceRef");
+      while (refElem) {
+        auto ref = LoadRefEntity(refElem);
+        if (auto face = std::dynamic_pointer_cast<CRefFace>(ref)) {
+          draft->partingSplitTargetFaces.push_back(face);
+        }
+        refElem = refElem->NextSiblingElement("FaceRef");
+      }
     }
   }
 }

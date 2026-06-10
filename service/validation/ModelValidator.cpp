@@ -690,7 +690,7 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         }
       }
 
-      if (draft->draftFaces.empty()) {
+      if (draft->draftType == DraftType::NeutralPlane && draft->draftFaces.empty()) {
         addError("[DRAFT_003] Draft '" + draft->featureID + "' has no draftFaces.");
       } else {
         for (size_t i = 0; i < draft->draftFaces.size(); ++i) {

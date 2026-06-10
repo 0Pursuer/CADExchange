@@ -69,6 +69,22 @@ public:
     return IsValid() ? Data()->partingLines.size() : 0;
   }
 
+  std::shared_ptr<CRefEntityBase> GetPartingSplitSketchRef() const {
+    return IsValid() ? Data()->partingSplitSketchRef : nullptr;
+  }
+
+  const std::vector<std::shared_ptr<CRefFace>> &GetPartingSplitTargetFaces() const {
+    static const std::vector<std::shared_ptr<CRefFace>> kEmpty;
+    return IsValid() ? Data()->partingSplitTargetFaces : kEmpty;
+  }
+
+  size_t GetPartingSplitTargetFacesCount() const {
+    return IsValid() ? Data()->partingSplitTargetFaces.size() : 0;
+  }
+
+  ACCESSOR_GETTER(bool, PartingSplitSingleDirection, partingSplitSingleDirection, false)
+  ACCESSOR_GETTER(bool, PartingSplitReverseDirection, partingSplitReverseDirection, false)
+
   ACCESSOR_GETTER(double, DraftAngle, draftAngle, 0.0)
   ACCESSOR_GETTER(bool, IsTwoSided, isTwoSided, false)
   ACCESSOR_GETTER(double, DraftAngleSide2, draftAngleSide2, 0.0)
