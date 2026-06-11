@@ -1771,6 +1771,7 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
         "CrossSection",
         FilletCrossSectionToString(fillet->params.crossSection).c_str());
   }
+  paramsElem->SetAttribute("TangentPropagation", fillet->params.tangentPropagation);
   const bool emitConicValue =
       fillet->params.crossSection == FilletCrossSection::CONIC ||
       fillet->params.crossSection ==
@@ -1831,9 +1832,28 @@ void TinyXMLSerializer::SaveFillet(XMLDocument &doc, XMLElement *element,
       doc.DeleteNode(groupElem);
     }
   };
-  saveFaceGroup("Side1Faces", fillet->side1Faces);
+    saveFaceGroup("Side1Faces", fillet->side1Faces);
   saveFaceGroup("Side2Faces", fillet->side2Faces);
   saveFaceGroup("CenterFaces", fillet->centerFaces);
+
+  if (fillet->swKeepFeatures || fillet->swOverflowType.has_value() ||
+      fillet->creoAttachType.has_value() || fillet->creoConicDepOption.has_value()) {
+    XMLElement *extElem = doc.NewElement("VendorExtensions");
+    if (fillet->swKeepFeatures) {
+      extElem->SetAttribute("SwKeepFeatures", fillet->swKeepFeatures);
+    }
+    if (fillet->swOverflowType.has_value()) {
+      extElem->SetAttribute("SwOverflowType", fillet->swOverflowType->c_str());
+    }
+    if (fillet->creoAttachType.has_value()) {
+      extElem->SetAttribute("CreoAttachType", *fillet->creoAttachType);
+    }
+    if (fillet->creoConicDepOption.has_value()) {
+      extElem->SetAttribute("CreoConicDepOption", *fillet->creoConicDepOption);
+    }
+    element->InsertEndChild(extElem);
+  }
+
   std::fprintf(stderr, "[TinyXMLSerializer] SaveFillet done id=%s\n",
                fillet->featureID.c_str());
 }
