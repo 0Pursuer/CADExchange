@@ -292,6 +292,26 @@ void FilterHalfStructureEdges(std::vector<CRefEdge>& open_edges, const std::vect
       open_edges.end());
 }
 
+void FilterHalfStructureArcs(std::vector<NormalizedArc>& arcs,
+                             const std::vector<HalfStructurePointGroup>& groups,
+                             double tol) {
+  if (groups.empty() || arcs.empty()) {
+    return;
+  }
+  arcs.erase(
+      std::remove_if(arcs.begin(), arcs.end(),
+                     [&](const NormalizedArc& arc) {
+                       for (const auto& group : groups) {
+                         if (PointInGroup(arc.startPt, group, tol) ||
+                             PointInGroup(arc.endPt, group, tol)) {
+                           return true;
+                         }
+                       }
+                       return false;
+                     }),
+      arcs.end());
+}
+
 void ClassifyEdges(const std::vector<CRefEdge>& edges,
                   std::vector<CRefEdge>& open_out,
                   std::vector<NormalizedArc>& arc_out,
@@ -825,11 +845,15 @@ ComparisonResult CompareDetailedImpl(const std::vector<CRefEdge>& src_edges,
   // Filter by line groups first, then by arc groups
   FilterHalfStructureEdges(src_open, *src_line_groups_to_use, tol);
   FilterHalfStructureEdges(dst_open, *dst_line_groups_to_use, tol);
+  FilterHalfStructureArcs(src_arcs, *src_line_groups_to_use, tol);
+  FilterHalfStructureArcs(dst_arcs, *dst_line_groups_to_use, tol);
 
   const auto* src_groups = global_src_half_groups ? global_src_half_groups : &src_half_structure_groups;
   const auto* dst_groups = global_dst_half_groups ? global_dst_half_groups : &dst_half_structure_groups;
   FilterHalfStructureEdges(src_open, *src_groups, tol);
   FilterHalfStructureEdges(dst_open, *dst_groups, tol);
+  FilterHalfStructureArcs(src_arcs, *src_groups, tol);
+  FilterHalfStructureArcs(dst_arcs, *dst_groups, tol);
 
   std::vector<CircleType> src_unmatched_circles;
   std::vector<CircleType> dst_unmatched_circles;
