@@ -271,6 +271,8 @@ bool CompareSets(const GeometrySet &srcSet, const GeometrySet &dstSet,
 
   auto global_src_groups = Collector::ExtractHalfStructureGroups(all_src_edges, tol);
   auto global_dst_groups = Collector::ExtractHalfStructureGroups(all_dst_edges, tol);
+  auto global_src_line_groups = Collector::ExtractHalfStructureLineGroups(all_src_edges, tol);
+  auto global_dst_line_groups = Collector::ExtractHalfStructureLineGroups(all_dst_edges, tol);
 
   for (const auto &[featureId, srcCollector] : srcSet.features) {
     auto dstIt = dstSet.features.find(featureId);
@@ -281,7 +283,9 @@ bool CompareSets(const GeometrySet &srcSet, const GeometrySet &dstSet,
       continue;
     }
 
-    ComparisonResult comparison = srcCollector.CompareDetailed(dstIt->second, tol, &global_src_groups, &global_dst_groups);
+    ComparisonResult comparison = srcCollector.CompareDetailed(
+        dstIt->second, tol, &global_src_groups, &global_dst_groups,
+        &global_src_line_groups, &global_dst_line_groups);
     if (!comparison.equivalent) {
       diffs.push_back("feature mismatch: " + featureId);
       featureDiffs.push_back(FeatureDiff{featureId, std::move(comparison.diagnostics)});

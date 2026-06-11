@@ -39,6 +39,7 @@ add_library(cadexchange STATIC
     service/serialization/SerializationRegistry.cpp
     service/serialization/TinyXMLSerializer.cpp
     service/validation/ModelValidator.cpp
+    service/geometry/GeometryCompareHelpers.cpp
     thirdParty/tinyxml2/tinyxml2.cpp
 )
 
