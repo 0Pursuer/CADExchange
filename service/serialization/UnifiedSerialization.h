@@ -101,7 +101,8 @@ template <class Archive> void serialize(Archive &ar, CRefSketch &sketch) {
 template <class Archive> void serialize(Archive &ar, CRefFace &face) {
   ar(cereal::base_class<CRefSubTopo>(&face),
      cereal::make_nvp("Normal", face.normal),
-     cereal::make_nvp("Centroid", face.centroid));
+     cereal::make_nvp("Centroid", face.centroid),
+     cereal::make_nvp("SurfaceType", face.surfaceType));
 }
 
 /**

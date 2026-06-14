@@ -248,6 +248,16 @@ public:
   }
 
   /**
+   * @brief 获取面的曲面类型；若当前不是面引用则返回 UNKNOWN。
+   */
+  CGeoSurfaceType GetFaceSurfaceType() const {
+    if (auto face = std::dynamic_pointer_cast<const CRefFace>(m_ref)) {
+      return face->surfaceType;
+    }
+    return CGeoSurfaceType::UNKNOWN;
+  }
+
+  /**
    * @brief 尝试获取顶点位置（如果是顶点引用）。
    */
   bool GetVertexPosition(CPoint3D &outPos) const {

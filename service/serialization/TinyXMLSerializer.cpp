@@ -176,6 +176,48 @@ std::optional<CGeoCurveType> CurveTypeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string SurfaceTypeToString(CGeoSurfaceType type) {
+  switch (type) {
+  case CGeoSurfaceType::PLANE:
+    return "Plane";
+  case CGeoSurfaceType::CYLINDER:
+    return "Cylinder";
+  case CGeoSurfaceType::CONE:
+    return "Cone";
+  case CGeoSurfaceType::SPHERE:
+    return "Sphere";
+  case CGeoSurfaceType::TORUS:
+    return "Torus";
+  case CGeoSurfaceType::BSURFACE:
+    return "BSurface";
+  case CGeoSurfaceType::UNKNOWN:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<CGeoSurfaceType> SurfaceTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "plane")
+    return CGeoSurfaceType::PLANE;
+  if (value == "cylinder")
+    return CGeoSurfaceType::CYLINDER;
+  if (value == "cone")
+    return CGeoSurfaceType::CONE;
+  if (value == "sphere")
+    return CGeoSurfaceType::SPHERE;
+  if (value == "torus")
+    return CGeoSurfaceType::TORUS;
+  if (value == "bsurface")
+    return CGeoSurfaceType::BSURFACE;
+  if (value == "unknown")
+    return CGeoSurfaceType::UNKNOWN;
+  return std::nullopt;
+}
+
 std::string SegTypeToString(CSketchSeg::SegType type) {
   switch (type) {
   case CSketchSeg::SegType::LINE:
@@ -940,6 +982,7 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
          element->SetAttribute("V", FormatVector(face->vDir).c_str());
          element->SetAttribute("Normal", FormatVector(face->normal).c_str());
          element->SetAttribute("Center", FormatPoint(face->centroid).c_str());
+         element->SetAttribute("SurfaceType", SurfaceTypeToString(face->surfaceType).c_str());
        }
      },
      [](XMLElement *element) {
@@ -954,6 +997,17 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        face->vDir = ParseVectorAttribute(element, "V");
        face->normal = ParseVectorAttribute(element, "Normal");
        face->centroid = ParsePointAttribute(element, "Center");
+       if (const char *surfaceTypeText = element->Attribute("SurfaceType")) {
+         if (auto mapped = SurfaceTypeFromString(surfaceTypeText)) {
+           face->surfaceType = *mapped;
+         } else {
+           char *end = nullptr;
+           const long surfaceTypeValue = std::strtol(surfaceTypeText, &end, 10);
+           if (end != surfaceTypeText && end != nullptr && *end == '\\0') {
+             face->surfaceType = static_cast<CGeoSurfaceType>(surfaceTypeValue);
+           }
+         }
+       }
        return face;
      }},
     {RefType::TOPO_EDGE, "Edge", "edge",

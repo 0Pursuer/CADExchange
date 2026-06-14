@@ -104,6 +104,19 @@ struct CRefSketch : public CRefFeature {
   CRefSketch() : CRefFeature(RefType::FEATURE_WHOLE_SKETCH) {}
 };
 
+/**
+ * @brief 拓扑面的曲面类型。
+ */
+enum class CGeoSurfaceType {
+  UNKNOWN = 0,
+  PLANE = 4001,
+  CYLINDER = 4002,
+  CONE = 4003,
+  SPHERE = 4004,
+  TORUS = 4005,
+  BSURFACE = 4006
+};
+
 struct CRefFace : public CRefSubTopo {
   CVector3D normal;
   /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles)
@@ -112,6 +125,7 @@ struct CRefFace : public CRefSubTopo {
   CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
+  CGeoSurfaceType surfaceType = CGeoSurfaceType::PLANE;
 
   CRefFace() : CRefSubTopo(RefType::TOPO_FACE) {}
 };
