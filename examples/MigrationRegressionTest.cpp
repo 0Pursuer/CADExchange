@@ -4,12 +4,14 @@
 #include "../service/accessors/SweepAccessor.h"
 #include "../service/accessors/FilletAccessor.h"
 #include "../service/accessors/ChamferAccessor.h"
+#include "../service/accessors/DatumPlaneAccessor.h"
 #include "../service/builders/EndConditionBuilder.h"
 #include "../service/builders/ExtrudeBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
 #include "../service/builders/SketchBuilder.h"
 #include "../service/builders/SweepBuilder.h"
+#include "../service/builders/DatumPlaneBuilder.h"
 #include "../service/builders/FilletBuilder.h"
 #include "../service/builders/ChamferBuilder.h"
 #include "../service/serialization/CADSerializer.h"
@@ -1099,6 +1101,89 @@ void TestRefEdgeCurveTypeRoundTripAndUnitConversion() {
          "Loaded edge reference should preserve curve type.");
 }
 
+void TestDatumPlaneGeometryRoundTripAndUnitConversion() {
+  UnifiedModel model(UnitType::METER, "datum-plane-geometry-roundtrip");
+
+  auto planeRef =
+      RefPlaneBuilder(StandardID::PLANE_XY)
+          .Origin(StandardID::kOrigin)
+          .XDir(StandardID::kAxisX)
+          .YDir(StandardID::kAxisY)
+          .Normal(StandardID::kPlaneXYNormal)
+          .Build();
+
+  const std::string planeId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometry")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .SetNormal(CVector3D{0.0, 0.0, 1.0})
+          .SetProjectedOrigin(CPoint3D{0.0, 0.0, 0.123})
+          .Build();
+
+  DatumPlaneAccessor plane(model.GetFeature(planeId));
+  Expect(plane.IsValid(), "DatumPlaneAccessor should be valid.");
+  CVector3D normal = plane.GetNormal();
+  Expect(std::abs(normal.x - 0.0) < 1e-12 && std::abs(normal.y - 0.0) < 1e-12 &&
+             std::abs(normal.z - 1.0) < 1e-12,
+         "Datum plane normal should be readable.");
+  CPoint3D projectedOrigin = plane.GetProjectedOrigin();
+  Expect(std::abs(projectedOrigin.x - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin.y - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin.z - 0.123) < 1e-12,
+         "Datum plane projectedOrigin should be readable.");
+
+  double tol = 0.0;
+  Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::METER, tol),
+         "Geometry compare tolerance should resolve for meters.");
+  Expect(std::abs(tol - 0.00002) < 1e-12,
+         "Geometry compare tolerance should equal 0.02mm in meters.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("tmp") / "cadexchange_datum_plane_geometry.xml";
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving datum plane XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("ProjectedOrigin=\"(0,0,0.123)\"") != std::string::npos,
+         "Datum plane XML should serialize projectedOrigin.");
+  Expect(xml.find("Normal=\"(0,0,1)\"") != std::string::npos,
+         "Datum plane XML should serialize normal.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading datum plane XML should succeed: " + errorMessage);
+  DatumPlaneAccessor loadedPlane(loaded.GetFeature(planeId));
+  Expect(loadedPlane.IsValid(), "Loaded datum plane should be accessible.");
+  CPoint3D loadedProjectedOrigin = loadedPlane.GetProjectedOrigin();
+  Expect(std::abs(loadedProjectedOrigin.z - 0.123) < 1e-12,
+         "Loaded datum plane should preserve projectedOrigin.");
+  CVector3D loadedNormal = loadedPlane.GetNormal();
+  Expect(std::abs(loadedNormal.z - 1.0) < 1e-12,
+         "Loaded datum plane should preserve normal.");
+
+  errorMessage.clear();
+  Expect(ConvertModelUnit(model, UnitType::MILLIMETER, &errorMessage),
+         "ConvertModelUnit should scale datum plane geometry: " + errorMessage);
+  DatumPlaneAccessor convertedPlane(model.GetFeature(planeId));
+  CPoint3D convertedProjectedOrigin = convertedPlane.GetProjectedOrigin();
+  Expect(std::abs(convertedProjectedOrigin.z - 123.0) < 1e-9,
+         "Datum plane projectedOrigin should scale to millimeters.");
+  CVector3D convertedNormal = convertedPlane.GetNormal();
+  Expect(std::abs(convertedNormal.z - 1.0) < 1e-12,
+         "Datum plane normal should remain unchanged by unit conversion.");
+
+  double mmTol = 0.0;
+  Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::MILLIMETER, mmTol),
+         "Geometry compare tolerance should resolve for millimeters.");
+  Expect(std::abs(mmTol - 0.02) < 1e-12,
+         "Geometry compare tolerance should equal 0.02 in millimeters.");
+}
+
 void TestFilletBuilderAccessorAndXmlRoundTrip() {
   UnifiedModel model(UnitType::METER, "fillet-builder-accessor-xml");
   auto sketch = MakeSketch("SK-FILLET", "FilletSketch");
@@ -1358,6 +1443,7 @@ int main() {
   TestChamferOffsetModeRoundTrip();
   TestChamferValidationAndUnitConversion();
   TestRefEdgeCurveTypeRoundTripAndUnitConversion();
+  TestDatumPlaneGeometryRoundTripAndUnitConversion();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

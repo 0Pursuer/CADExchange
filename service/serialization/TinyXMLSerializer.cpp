@@ -1567,6 +1567,15 @@ void TinyXMLSerializer::SaveDatumPlane(
     XMLDocument &doc, XMLElement *element,
     const std::shared_ptr<CDatumPlane> &datumPlane) {
   element->SetAttribute("Method", PlaneMethodToString(datumPlane->method).c_str());
+  element->SetAttribute(
+      "ProjectedOrigin",
+      FormatTriple(datumPlane->projectedOrigin.x, datumPlane->projectedOrigin.y,
+                   datumPlane->projectedOrigin.z)
+          .c_str());
+  element->SetAttribute("Normal",
+                        FormatTriple(datumPlane->normal.x, datumPlane->normal.y,
+                                     datumPlane->normal.z)
+                            .c_str());
 
   XMLElement *refsElem = doc.NewElement("ReferenceEntities");
   element->InsertEndChild(refsElem);
@@ -2485,6 +2494,13 @@ void TinyXMLSerializer::LoadDatumPlane(
     XMLElement *element, std::shared_ptr<CDatumPlane> &datumPlane) {
   if (auto method = PlaneMethodFromString(element->Attribute("Method"))) {
     datumPlane->method = *method;
+  }
+  if (element->Attribute("ProjectedOrigin")) {
+    datumPlane->projectedOrigin =
+        ParsePointAttribute(element, "ProjectedOrigin");
+  }
+  if (element->Attribute("Normal")) {
+    datumPlane->normal = ParseVectorAttribute(element, "Normal");
   }
 
   if (XMLElement *refsElem = element->FirstChildElement("ReferenceEntities")) {

@@ -42,6 +42,14 @@ public:
 
   ACCESSOR_GETTER(PlaneMethod, Method, method, PlaneMethod::UNKNOWN)
 
+  CPoint3D GetProjectedOrigin() const {
+    return IsValid() ? Data()->projectedOrigin : CPoint3D{};
+  }
+
+  CVector3D GetNormal() const {
+    return IsValid() ? Data()->normal : CVector3D{};
+  }
+
   bool IsLineMethod() const {
     return IsValid() && Data()->method == PlaneMethod::LINE;
   }

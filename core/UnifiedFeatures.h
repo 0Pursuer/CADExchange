@@ -895,6 +895,8 @@ struct CDatumPlane : public CFeatureBase {
   PlaneMethod method{PlaneMethod::UNKNOWN};
   std::vector<PlaneConstraint> constraints;
   std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
+  CPoint3D projectedOrigin{};
+  CVector3D normal{};
 
   CDatumPlane() { featureType = FeatureType::DatumPlane; }
 };
