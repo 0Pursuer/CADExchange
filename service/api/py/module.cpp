@@ -415,12 +415,21 @@ PYBIND11_MODULE(cadexchange_py, m) {
   py::class_<DatumPlaneAccessor>(m, "DatumPlaneAccessor")
       .def("is_valid", &DatumPlaneAccessor::IsValid)
       .def_property_readonly("method", &DatumPlaneAccessor::GetMethod)
+      .def_property_readonly("has_projected_origin",
+                             &DatumPlaneAccessor::HasProjectedOrigin)
       .def_property_readonly("projected_origin",
                              [](const DatumPlaneAccessor &a) {
-                               return PointToVector(a.GetProjectedOrigin());
+                               std::optional<CPoint3D> origin =
+                                   a.GetProjectedOrigin();
+                               return origin.has_value()
+                                          ? py::cast(PointToVector(*origin))
+                                          : py::none();
                              })
+      .def_property_readonly("has_normal", &DatumPlaneAccessor::HasNormal)
       .def_property_readonly("normal", [](const DatumPlaneAccessor &a) {
-        return VectorToVector(a.GetNormal());
+        std::optional<CVector3D> normal = a.GetNormal();
+        return normal.has_value() ? py::cast(VectorToVector(*normal))
+                                  : py::none();
       })
       .def_property_readonly("is_line_method", &DatumPlaneAccessor::IsLineMethod)
       .def_property_readonly("has_constraints", &DatumPlaneAccessor::HasConstraints)

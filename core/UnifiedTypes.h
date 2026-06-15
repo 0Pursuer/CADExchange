@@ -106,6 +106,33 @@ inline bool IsParallel(const CVector3D &a, const CVector3D &b) {
   return a.IsParallel(b);
 }
 
+/**
+ * @brief Project a point on a plane to the closest point on that plane to the
+ * global origin.
+ *
+ * The plane is defined by any point on the plane plus its normal. Returns
+ * nullopt if the input normal is zero or cannot be normalized.
+ */
+inline std::optional<CPoint3D>
+ProjectPointToPlaneOrigin(const CPoint3D &pointOnPlane,
+                          const CVector3D &planeNormal) {
+  CVector3D normalizedNormal = planeNormal;
+  normalizedNormal.Normalize();
+  const double lenSq = normalizedNormal.x * normalizedNormal.x +
+                       normalizedNormal.y * normalizedNormal.y +
+                       normalizedNormal.z * normalizedNormal.z;
+  if (lenSq < GeoUtils::EPSILON) {
+    return std::nullopt;
+  }
+  const double signedDistance =
+      pointOnPlane.x * normalizedNormal.x +
+      pointOnPlane.y * normalizedNormal.y +
+      pointOnPlane.z * normalizedNormal.z;
+  return CPoint3D{pointOnPlane.x - signedDistance * normalizedNormal.x,
+                  pointOnPlane.y - signedDistance * normalizedNormal.y,
+                  pointOnPlane.z - signedDistance * normalizedNormal.z};
+}
+
 /// Compute the multiplicative factor to convert a length value from `src` to
 /// `dst` units. Returns false if either unit is unsupported.
 bool TryGetUnitConversionFactor(UnitType src, UnitType dst, double &factor);

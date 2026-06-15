@@ -895,8 +895,10 @@ struct CDatumPlane : public CFeatureBase {
   PlaneMethod method{PlaneMethod::UNKNOWN};
   std::vector<PlaneConstraint> constraints;
   std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
-  CPoint3D projectedOrigin{};
-  CVector3D normal{};
+  // Optional geometry supplement extracted from source CAD. Absence means the
+  // source path did not provide stable plane geometry; zero values remain valid.
+  std::optional<CPoint3D> projectedOrigin;
+  std::optional<CVector3D> normal;
 
   CDatumPlane() { featureType = FeatureType::DatumPlane; }
 };

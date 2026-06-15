@@ -890,14 +890,22 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
         addError("[DATUM_001] DatumPlane '" + datumPlane->featureID +
                  "' method is UNKNOWN.");
       }
-      const double normalLen = vecLen(datumPlane->normal);
-      if (normalLen < GeoUtils::EPSILON) {
+      const bool hasProjectedOrigin = datumPlane->projectedOrigin.has_value();
+      const bool hasNormal = datumPlane->normal.has_value();
+      if (hasProjectedOrigin && !hasNormal) {
         addWarn("[GEOM_009] DatumPlane '" + datumPlane->featureID +
-                "' normal is zero or missing.");
-      } else if (std::abs(normalLen - 1.0) > 0.01) {
-        addWarn("[GEOM_010] DatumPlane '" + datumPlane->featureID +
-                "' normal length=" + std::to_string(normalLen) +
-                " is not normalized.");
+                "' has projectedOrigin but missing normal.");
+      }
+      if (hasNormal) {
+        const double normalLen = vecLen(*datumPlane->normal);
+        if (normalLen < GeoUtils::EPSILON) {
+          addWarn("[GEOM_010] DatumPlane '" + datumPlane->featureID +
+                  "' normal is zero.");
+        } else if (std::abs(normalLen - 1.0) > 0.01) {
+          addWarn("[GEOM_011] DatumPlane '" + datumPlane->featureID +
+                  "' normal length=" + std::to_string(normalLen) +
+                  " is not normalized.");
+        }
       }
       if (datumPlane->referenceEntities.empty()) {
         addError("[DATUM_002] DatumPlane '" + datumPlane->featureID +

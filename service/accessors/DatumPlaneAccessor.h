@@ -42,12 +42,18 @@ public:
 
   ACCESSOR_GETTER(PlaneMethod, Method, method, PlaneMethod::UNKNOWN)
 
-  CPoint3D GetProjectedOrigin() const {
-    return IsValid() ? Data()->projectedOrigin : CPoint3D{};
+  bool HasProjectedOrigin() const {
+    return IsValid() && Data()->projectedOrigin.has_value();
   }
 
-  CVector3D GetNormal() const {
-    return IsValid() ? Data()->normal : CVector3D{};
+  std::optional<CPoint3D> GetProjectedOrigin() const {
+    return IsValid() ? Data()->projectedOrigin : std::nullopt;
+  }
+
+  bool HasNormal() const { return IsValid() && Data()->normal.has_value(); }
+
+  std::optional<CVector3D> GetNormal() const {
+    return IsValid() ? Data()->normal : std::nullopt;
   }
 
   bool IsLineMethod() const {

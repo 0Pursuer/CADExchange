@@ -1120,17 +1120,62 @@ void TestDatumPlaneGeometryRoundTripAndUnitConversion() {
           .SetProjectedOrigin(CPoint3D{0.0, 0.0, 0.123})
           .Build();
 
+  const std::string originPlaneId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometryAtOrigin")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .SetNormal(CVector3D{0.0, 0.0, 1.0})
+          .SetProjectedOrigin(CPoint3D{0.0, 0.0, 0.0})
+          .Build();
+
+  const std::string missingGeometryPlaneId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometryMissing")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .Build();
+
   DatumPlaneAccessor plane(model.GetFeature(planeId));
   Expect(plane.IsValid(), "DatumPlaneAccessor should be valid.");
-  CVector3D normal = plane.GetNormal();
-  Expect(std::abs(normal.x - 0.0) < 1e-12 && std::abs(normal.y - 0.0) < 1e-12 &&
-             std::abs(normal.z - 1.0) < 1e-12,
+  Expect(plane.HasNormal(), "Datum plane normal should be marked present.");
+  std::optional<CVector3D> normal = plane.GetNormal();
+  Expect(normal.has_value(), "Datum plane normal should be readable.");
+  Expect(std::abs(normal->x - 0.0) < 1e-12 &&
+             std::abs(normal->y - 0.0) < 1e-12 &&
+             std::abs(normal->z - 1.0) < 1e-12,
          "Datum plane normal should be readable.");
-  CPoint3D projectedOrigin = plane.GetProjectedOrigin();
-  Expect(std::abs(projectedOrigin.x - 0.0) < 1e-12 &&
-             std::abs(projectedOrigin.y - 0.0) < 1e-12 &&
-             std::abs(projectedOrigin.z - 0.123) < 1e-12,
+  Expect(plane.HasProjectedOrigin(),
+         "Datum plane projectedOrigin should be marked present.");
+  std::optional<CPoint3D> projectedOrigin = plane.GetProjectedOrigin();
+  Expect(projectedOrigin.has_value(),
          "Datum plane projectedOrigin should be readable.");
+  Expect(std::abs(projectedOrigin->x - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin->y - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin->z - 0.123) < 1e-12,
+         "Datum plane projectedOrigin should be readable.");
+
+  DatumPlaneAccessor originPlane(model.GetFeature(originPlaneId));
+  Expect(originPlane.IsValid(), "Origin datum plane accessor should be valid.");
+  Expect(originPlane.HasProjectedOrigin(),
+         "Zero projectedOrigin should still be marked present.");
+  std::optional<CPoint3D> zeroProjectedOrigin = originPlane.GetProjectedOrigin();
+  Expect(zeroProjectedOrigin.has_value(),
+         "Zero projectedOrigin should be distinguishable from missing geometry.");
+  Expect(std::abs(zeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(zeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(zeroProjectedOrigin->z) < 1e-12,
+         "Zero projectedOrigin should round-trip as a legitimate value.");
+
+  DatumPlaneAccessor missingGeometryPlane(model.GetFeature(missingGeometryPlaneId));
+  Expect(missingGeometryPlane.IsValid(),
+         "Missing-geometry datum plane accessor should be valid.");
+  Expect(!missingGeometryPlane.HasProjectedOrigin(),
+         "Datum plane without extracted projectedOrigin should report absence.");
+  Expect(!missingGeometryPlane.GetProjectedOrigin().has_value(),
+         "Datum plane without extracted projectedOrigin should return nullopt.");
+  Expect(!missingGeometryPlane.HasNormal(),
+         "Datum plane without extracted normal should report absence.");
+  Expect(!missingGeometryPlane.GetNormal().has_value(),
+         "Datum plane without extracted normal should return nullopt.");
 
   double tol = 0.0;
   Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::METER, tol),
@@ -1159,23 +1204,66 @@ void TestDatumPlaneGeometryRoundTripAndUnitConversion() {
          "Loading datum plane XML should succeed: " + errorMessage);
   DatumPlaneAccessor loadedPlane(loaded.GetFeature(planeId));
   Expect(loadedPlane.IsValid(), "Loaded datum plane should be accessible.");
-  CPoint3D loadedProjectedOrigin = loadedPlane.GetProjectedOrigin();
-  Expect(std::abs(loadedProjectedOrigin.z - 0.123) < 1e-12,
+  Expect(loadedPlane.HasProjectedOrigin(),
+         "Loaded datum plane should preserve projectedOrigin presence.");
+  std::optional<CPoint3D> loadedProjectedOrigin = loadedPlane.GetProjectedOrigin();
+  Expect(loadedProjectedOrigin.has_value() &&
+             std::abs(loadedProjectedOrigin->z - 0.123) < 1e-12,
          "Loaded datum plane should preserve projectedOrigin.");
-  CVector3D loadedNormal = loadedPlane.GetNormal();
-  Expect(std::abs(loadedNormal.z - 1.0) < 1e-12,
+  Expect(loadedPlane.HasNormal(),
+         "Loaded datum plane should preserve normal presence.");
+  std::optional<CVector3D> loadedNormal = loadedPlane.GetNormal();
+  Expect(loadedNormal.has_value() && std::abs(loadedNormal->z - 1.0) < 1e-12,
          "Loaded datum plane should preserve normal.");
+
+  DatumPlaneAccessor loadedOriginPlane(loaded.GetFeature(originPlaneId));
+  Expect(loadedOriginPlane.IsValid(),
+         "Loaded zero-origin datum plane should be accessible.");
+  Expect(loadedOriginPlane.HasProjectedOrigin(),
+         "Loaded zero-origin datum plane should preserve projectedOrigin presence.");
+  std::optional<CPoint3D> loadedZeroProjectedOrigin =
+      loadedOriginPlane.GetProjectedOrigin();
+  Expect(loadedZeroProjectedOrigin.has_value() &&
+             std::abs(loadedZeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(loadedZeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(loadedZeroProjectedOrigin->z) < 1e-12,
+         "Loaded zero-origin datum plane should preserve the zero projectedOrigin.");
+
+  DatumPlaneAccessor loadedMissingGeometryPlane(
+      loaded.GetFeature(missingGeometryPlaneId));
+  Expect(loadedMissingGeometryPlane.IsValid(),
+         "Loaded missing-geometry datum plane should be accessible.");
+  Expect(!loadedMissingGeometryPlane.HasProjectedOrigin(),
+         "Loaded missing-geometry datum plane should still report absent projectedOrigin.");
+  Expect(!loadedMissingGeometryPlane.GetProjectedOrigin().has_value(),
+         "Loaded missing-geometry datum plane should still return nullopt projectedOrigin.");
+  Expect(!loadedMissingGeometryPlane.HasNormal(),
+         "Loaded missing-geometry datum plane should still report absent normal.");
+  Expect(!loadedMissingGeometryPlane.GetNormal().has_value(),
+         "Loaded missing-geometry datum plane should still return nullopt normal.");
 
   errorMessage.clear();
   Expect(ConvertModelUnit(model, UnitType::MILLIMETER, &errorMessage),
          "ConvertModelUnit should scale datum plane geometry: " + errorMessage);
   DatumPlaneAccessor convertedPlane(model.GetFeature(planeId));
-  CPoint3D convertedProjectedOrigin = convertedPlane.GetProjectedOrigin();
-  Expect(std::abs(convertedProjectedOrigin.z - 123.0) < 1e-9,
+  std::optional<CPoint3D> convertedProjectedOrigin =
+      convertedPlane.GetProjectedOrigin();
+  Expect(convertedProjectedOrigin.has_value() &&
+             std::abs(convertedProjectedOrigin->z - 123.0) < 1e-9,
          "Datum plane projectedOrigin should scale to millimeters.");
-  CVector3D convertedNormal = convertedPlane.GetNormal();
-  Expect(std::abs(convertedNormal.z - 1.0) < 1e-12,
+  std::optional<CVector3D> convertedNormal = convertedPlane.GetNormal();
+  Expect(convertedNormal.has_value() &&
+             std::abs(convertedNormal->z - 1.0) < 1e-12,
          "Datum plane normal should remain unchanged by unit conversion.");
+
+  DatumPlaneAccessor convertedOriginPlane(model.GetFeature(originPlaneId));
+  std::optional<CPoint3D> convertedZeroProjectedOrigin =
+      convertedOriginPlane.GetProjectedOrigin();
+  Expect(convertedZeroProjectedOrigin.has_value() &&
+             std::abs(convertedZeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(convertedZeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(convertedZeroProjectedOrigin->z) < 1e-12,
+         "Zero projectedOrigin should remain present and unchanged by unit conversion.");
 
   double mmTol = 0.0;
   Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::MILLIMETER, mmTol),
