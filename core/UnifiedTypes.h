@@ -128,9 +128,9 @@ ProjectPointToPlaneOrigin(const CPoint3D &pointOnPlane,
       pointOnPlane.x * normalizedNormal.x +
       pointOnPlane.y * normalizedNormal.y +
       pointOnPlane.z * normalizedNormal.z;
-  return CPoint3D{pointOnPlane.x - signedDistance * normalizedNormal.x,
-                  pointOnPlane.y - signedDistance * normalizedNormal.y,
-                  pointOnPlane.z - signedDistance * normalizedNormal.z};
+  return CPoint3D{signedDistance * normalizedNormal.x,
+                  signedDistance * normalizedNormal.y,
+                  signedDistance * normalizedNormal.z};
 }
 
 /// Compute the multiplicative factor to convert a length value from `src` to
