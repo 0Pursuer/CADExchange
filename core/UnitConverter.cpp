@@ -293,6 +293,9 @@ void ScaleDatumPlane(CDatumPlane &datumPlane, double factor, UnitScaleContext &c
       constraint.value *= factor;
     }
   }
+  if (datumPlane.projectedOrigin.has_value()) {
+    ScalePoint(*datumPlane.projectedOrigin, factor);
+  }
 }
 
 void ScaleRib(CRib &rib, double factor, UnitScaleContext &ctx) {

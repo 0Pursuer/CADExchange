@@ -59,6 +59,14 @@ public:
    * @brief 设置面引用的V方向。
    */
   BUILDER_ADD_VECTOR_SETTER(RefFaceBuilder, vDir, VDir)
+
+  /**
+   * @brief 设置面的曲面类型。
+   */
+  RefFaceBuilder &SurfaceType(CGeoSurfaceType type) {
+    m_ptr->surfaceType = type;
+    return *this;
+  }
   
   /**
    * @brief 构建完成，返回面引用指针。

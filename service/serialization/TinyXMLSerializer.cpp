@@ -176,6 +176,48 @@ std::optional<CGeoCurveType> CurveTypeFromString(const char *text) {
   return std::nullopt;
 }
 
+std::string SurfaceTypeToString(CGeoSurfaceType type) {
+  switch (type) {
+  case CGeoSurfaceType::PLANE:
+    return "Plane";
+  case CGeoSurfaceType::CYLINDER:
+    return "Cylinder";
+  case CGeoSurfaceType::CONE:
+    return "Cone";
+  case CGeoSurfaceType::SPHERE:
+    return "Sphere";
+  case CGeoSurfaceType::TORUS:
+    return "Torus";
+  case CGeoSurfaceType::BSURFACE:
+    return "BSurface";
+  case CGeoSurfaceType::UNKNOWN:
+  default:
+    return "Unknown";
+  }
+}
+
+std::optional<CGeoSurfaceType> SurfaceTypeFromString(const char *text) {
+  if (!text) {
+    return std::nullopt;
+  }
+  const std::string value = ToLower(text);
+  if (value == "plane")
+    return CGeoSurfaceType::PLANE;
+  if (value == "cylinder")
+    return CGeoSurfaceType::CYLINDER;
+  if (value == "cone")
+    return CGeoSurfaceType::CONE;
+  if (value == "sphere")
+    return CGeoSurfaceType::SPHERE;
+  if (value == "torus")
+    return CGeoSurfaceType::TORUS;
+  if (value == "bsurface")
+    return CGeoSurfaceType::BSURFACE;
+  if (value == "unknown")
+    return CGeoSurfaceType::UNKNOWN;
+  return std::nullopt;
+}
+
 std::string SegTypeToString(CSketchSeg::SegType type) {
   switch (type) {
   case CSketchSeg::SegType::LINE:
@@ -956,6 +998,7 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
          element->SetAttribute("V", FormatVector(face->vDir).c_str());
          element->SetAttribute("Normal", FormatVector(face->normal).c_str());
          element->SetAttribute("Center", FormatPoint(face->centroid).c_str());
+         element->SetAttribute("SurfaceType", SurfaceTypeToString(face->surfaceType).c_str());
        }
      },
      [](XMLElement *element) {
@@ -970,6 +1013,17 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
        face->vDir = ParseVectorAttribute(element, "V");
        face->normal = ParseVectorAttribute(element, "Normal");
        face->centroid = ParsePointAttribute(element, "Center");
+       if (const char *surfaceTypeText = element->Attribute("SurfaceType")) {
+         if (auto mapped = SurfaceTypeFromString(surfaceTypeText)) {
+           face->surfaceType = *mapped;
+         } else {
+           char *end = nullptr;
+           const long surfaceTypeValue = std::strtol(surfaceTypeText, &end, 10);
+           if (end != surfaceTypeText && end != nullptr && *end == '\\0') {
+             face->surfaceType = static_cast<CGeoSurfaceType>(surfaceTypeValue);
+           }
+         }
+       }
        return face;
      }},
     {RefType::TOPO_EDGE, "Edge", "edge",
@@ -1543,6 +1597,20 @@ void TinyXMLSerializer::SaveDatumPlane(
     XMLDocument &doc, XMLElement *element,
     const std::shared_ptr<CDatumPlane> &datumPlane) {
   element->SetAttribute("Method", PlaneMethodToString(datumPlane->method).c_str());
+  if (datumPlane->projectedOrigin.has_value()) {
+    element->SetAttribute(
+        "ProjectedOrigin",
+        FormatTriple(datumPlane->projectedOrigin->x, datumPlane->projectedOrigin->y,
+                     datumPlane->projectedOrigin->z)
+            .c_str());
+  }
+  if (datumPlane->normal.has_value()) {
+    element->SetAttribute(
+        "Normal",
+        FormatTriple(datumPlane->normal->x, datumPlane->normal->y,
+                     datumPlane->normal->z)
+            .c_str());
+  }
 
   XMLElement *refsElem = doc.NewElement("ReferenceEntities");
   element->InsertEndChild(refsElem);
@@ -2476,6 +2544,17 @@ void TinyXMLSerializer::LoadDatumPlane(
     XMLElement *element, std::shared_ptr<CDatumPlane> &datumPlane) {
   if (auto method = PlaneMethodFromString(element->Attribute("Method"))) {
     datumPlane->method = *method;
+  }
+  if (element->Attribute("ProjectedOrigin")) {
+    datumPlane->projectedOrigin =
+        ParsePointAttribute(element, "ProjectedOrigin");
+  } else {
+    datumPlane->projectedOrigin = std::nullopt;
+  }
+  if (element->Attribute("Normal")) {
+    datumPlane->normal = ParseVectorAttribute(element, "Normal");
+  } else {
+    datumPlane->normal = std::nullopt;
   }
 
   if (XMLElement *refsElem = element->FirstChildElement("ReferenceEntities")) {

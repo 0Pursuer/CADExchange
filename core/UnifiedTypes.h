@@ -16,6 +16,8 @@ namespace CADExchange {
 namespace GeoUtils {
 /// 几何比较容差，用于浮点判断。
 constexpr double EPSILON = 1e-6;
+/// 通用几何比对容差基值，单位为毫米。
+constexpr double GEOMETRY_COMPARE_TOLERANCE_MM = 0.02;
 /// PI 常数。
 constexpr double PI = 3.14159265358979323846;
 
@@ -102,6 +104,60 @@ inline double Dot(const CVector3D &a, const CVector3D &b) { return a.Dot(b); }
  */
 inline bool IsParallel(const CVector3D &a, const CVector3D &b) {
   return a.IsParallel(b);
+}
+
+/**
+ * @brief Project a point on a plane to the closest point on that plane to the
+ * global origin.
+ *
+ * The plane is defined by any point on the plane plus its normal. Returns
+ * nullopt if the input normal is zero or cannot be normalized.
+ */
+inline std::optional<CPoint3D>
+ProjectPointToPlaneOrigin(const CPoint3D &pointOnPlane,
+                          const CVector3D &planeNormal) {
+  CVector3D normalizedNormal = planeNormal;
+  normalizedNormal.Normalize();
+  const double lenSq = normalizedNormal.x * normalizedNormal.x +
+                       normalizedNormal.y * normalizedNormal.y +
+                       normalizedNormal.z * normalizedNormal.z;
+  if (lenSq < GeoUtils::EPSILON) {
+    return std::nullopt;
+  }
+  const double signedDistance =
+      pointOnPlane.x * normalizedNormal.x +
+      pointOnPlane.y * normalizedNormal.y +
+      pointOnPlane.z * normalizedNormal.z;
+  return CPoint3D{signedDistance * normalizedNormal.x,
+                  signedDistance * normalizedNormal.y,
+                  signedDistance * normalizedNormal.z};
+}
+
+/// Compute the multiplicative factor to convert a length value from `src` to
+/// `dst` units. Returns false if either unit is unsupported.
+bool TryGetUnitConversionFactor(UnitType src, UnitType dst, double &factor);
+
+/// Resolve the common geometry compare tolerance in the requested unit system.
+inline bool TryGetGeometryCompareTolerance(UnitType unit, double &tolerance) {
+  switch (unit) {
+  case UnitType::METER:
+    tolerance = GeoUtils::GEOMETRY_COMPARE_TOLERANCE_MM * 1e-3;
+    return true;
+  case UnitType::CENTIMETER:
+    tolerance = GeoUtils::GEOMETRY_COMPARE_TOLERANCE_MM * 1e-1;
+    return true;
+  case UnitType::MILLIMETER:
+    tolerance = GeoUtils::GEOMETRY_COMPARE_TOLERANCE_MM;
+    return true;
+  case UnitType::INCH:
+    tolerance = GeoUtils::GEOMETRY_COMPARE_TOLERANCE_MM / 25.4;
+    return true;
+  case UnitType::FOOT:
+    tolerance = GeoUtils::GEOMETRY_COMPARE_TOLERANCE_MM / 304.8;
+    return true;
+  default:
+    return false;
+  }
 }
 
 // 支持点减点得到向量

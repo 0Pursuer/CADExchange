@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../../core/TypeAdapters.h"
 #include "../../core/UnifiedFeatures.h"
 #include <memory>
@@ -255,6 +255,16 @@ public:
       return edge->curveType;
     }
     return CGeoCurveType::UNKNOWN;
+  }
+
+  /**
+   * @brief 获取面的曲面类型；若当前不是面引用则返回 UNKNOWN。
+   */
+  CGeoSurfaceType GetFaceSurfaceType() const {
+    if (auto face = std::dynamic_pointer_cast<const CRefFace>(m_ref)) {
+      return face->surfaceType;
+    }
+    return CGeoSurfaceType::UNKNOWN;
   }
 
   /**

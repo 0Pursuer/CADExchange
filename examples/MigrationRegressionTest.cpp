@@ -4,12 +4,14 @@
 #include "../service/accessors/SweepAccessor.h"
 #include "../service/accessors/FilletAccessor.h"
 #include "../service/accessors/ChamferAccessor.h"
+#include "../service/accessors/DatumPlaneAccessor.h"
 #include "../service/builders/EndConditionBuilder.h"
 #include "../service/builders/ExtrudeBuilder.h"
 #include "../service/builders/ReferenceBuilder.h"
 #include "../service/builders/RevolveBuilder.h"
 #include "../service/builders/SketchBuilder.h"
 #include "../service/builders/SweepBuilder.h"
+#include "../service/builders/DatumPlaneBuilder.h"
 #include "../service/builders/FilletBuilder.h"
 #include "../service/builders/ChamferBuilder.h"
 #include "../service/serialization/CADSerializer.h"
@@ -1099,6 +1101,177 @@ void TestRefEdgeCurveTypeRoundTripAndUnitConversion() {
          "Loaded edge reference should preserve curve type.");
 }
 
+void TestDatumPlaneGeometryRoundTripAndUnitConversion() {
+  UnifiedModel model(UnitType::METER, "datum-plane-geometry-roundtrip");
+
+  auto planeRef =
+      RefPlaneBuilder(StandardID::PLANE_XY)
+          .Origin(StandardID::kOrigin)
+          .XDir(StandardID::kAxisX)
+          .YDir(StandardID::kAxisY)
+          .Normal(StandardID::kPlaneXYNormal)
+          .Build();
+
+  const std::string planeId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometry")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .SetNormal(CVector3D{0.0, 0.0, 1.0})
+          .SetProjectedOrigin(CPoint3D{0.0, 0.0, 0.123})
+          .Build();
+
+  const std::string originPlaneId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometryAtOrigin")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .SetNormal(CVector3D{0.0, 0.0, 1.0})
+          .SetProjectedOrigin(CPoint3D{0.0, 0.0, 0.0})
+          .Build();
+
+  const std::string missingGeometryPlaneId =
+      DatumPlaneBuilder(model, "DatumPlaneGeometryMissing")
+          .SetMethod(PlaneMethod::FIXED)
+          .AddReference(planeRef)
+          .Build();
+
+  DatumPlaneAccessor plane(model.GetFeature(planeId));
+  Expect(plane.IsValid(), "DatumPlaneAccessor should be valid.");
+  Expect(plane.HasNormal(), "Datum plane normal should be marked present.");
+  std::optional<CVector3D> normal = plane.GetNormal();
+  Expect(normal.has_value(), "Datum plane normal should be readable.");
+  Expect(std::abs(normal->x - 0.0) < 1e-12 &&
+             std::abs(normal->y - 0.0) < 1e-12 &&
+             std::abs(normal->z - 1.0) < 1e-12,
+         "Datum plane normal should be readable.");
+  Expect(plane.HasProjectedOrigin(),
+         "Datum plane projectedOrigin should be marked present.");
+  std::optional<CPoint3D> projectedOrigin = plane.GetProjectedOrigin();
+  Expect(projectedOrigin.has_value(),
+         "Datum plane projectedOrigin should be readable.");
+  Expect(std::abs(projectedOrigin->x - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin->y - 0.0) < 1e-12 &&
+             std::abs(projectedOrigin->z - 0.123) < 1e-12,
+         "Datum plane projectedOrigin should be readable.");
+
+  DatumPlaneAccessor originPlane(model.GetFeature(originPlaneId));
+  Expect(originPlane.IsValid(), "Origin datum plane accessor should be valid.");
+  Expect(originPlane.HasProjectedOrigin(),
+         "Zero projectedOrigin should still be marked present.");
+  std::optional<CPoint3D> zeroProjectedOrigin = originPlane.GetProjectedOrigin();
+  Expect(zeroProjectedOrigin.has_value(),
+         "Zero projectedOrigin should be distinguishable from missing geometry.");
+  Expect(std::abs(zeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(zeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(zeroProjectedOrigin->z) < 1e-12,
+         "Zero projectedOrigin should round-trip as a legitimate value.");
+
+  DatumPlaneAccessor missingGeometryPlane(model.GetFeature(missingGeometryPlaneId));
+  Expect(missingGeometryPlane.IsValid(),
+         "Missing-geometry datum plane accessor should be valid.");
+  Expect(!missingGeometryPlane.HasProjectedOrigin(),
+         "Datum plane without extracted projectedOrigin should report absence.");
+  Expect(!missingGeometryPlane.GetProjectedOrigin().has_value(),
+         "Datum plane without extracted projectedOrigin should return nullopt.");
+  Expect(!missingGeometryPlane.HasNormal(),
+         "Datum plane without extracted normal should report absence.");
+  Expect(!missingGeometryPlane.GetNormal().has_value(),
+         "Datum plane without extracted normal should return nullopt.");
+
+  double tol = 0.0;
+  Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::METER, tol),
+         "Geometry compare tolerance should resolve for meters.");
+  Expect(std::abs(tol - 0.00002) < 1e-12,
+         "Geometry compare tolerance should equal 0.02mm in meters.");
+
+  const std::filesystem::path xmlPath =
+      std::filesystem::path("tmp") / "cadexchange_datum_plane_geometry.xml";
+  std::filesystem::create_directories(xmlPath.parent_path());
+  std::string errorMessage;
+  Expect(SaveModel(model, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Saving datum plane XML should succeed: " + errorMessage);
+
+  std::ifstream in(xmlPath, std::ios::binary);
+  const std::string xml((std::istreambuf_iterator<char>(in)),
+                        std::istreambuf_iterator<char>());
+  Expect(xml.find("ProjectedOrigin=\"(0,0,0.123)\"") != std::string::npos,
+         "Datum plane XML should serialize projectedOrigin.");
+  Expect(xml.find("Normal=\"(0,0,1)\"") != std::string::npos,
+         "Datum plane XML should serialize normal.");
+
+  UnifiedModel loaded;
+  errorMessage.clear();
+  Expect(LoadModel(loaded, xmlPath, &errorMessage, SerializationFormat::TINYXML),
+         "Loading datum plane XML should succeed: " + errorMessage);
+  DatumPlaneAccessor loadedPlane(loaded.GetFeature(planeId));
+  Expect(loadedPlane.IsValid(), "Loaded datum plane should be accessible.");
+  Expect(loadedPlane.HasProjectedOrigin(),
+         "Loaded datum plane should preserve projectedOrigin presence.");
+  std::optional<CPoint3D> loadedProjectedOrigin = loadedPlane.GetProjectedOrigin();
+  Expect(loadedProjectedOrigin.has_value() &&
+             std::abs(loadedProjectedOrigin->z - 0.123) < 1e-12,
+         "Loaded datum plane should preserve projectedOrigin.");
+  Expect(loadedPlane.HasNormal(),
+         "Loaded datum plane should preserve normal presence.");
+  std::optional<CVector3D> loadedNormal = loadedPlane.GetNormal();
+  Expect(loadedNormal.has_value() && std::abs(loadedNormal->z - 1.0) < 1e-12,
+         "Loaded datum plane should preserve normal.");
+
+  DatumPlaneAccessor loadedOriginPlane(loaded.GetFeature(originPlaneId));
+  Expect(loadedOriginPlane.IsValid(),
+         "Loaded zero-origin datum plane should be accessible.");
+  Expect(loadedOriginPlane.HasProjectedOrigin(),
+         "Loaded zero-origin datum plane should preserve projectedOrigin presence.");
+  std::optional<CPoint3D> loadedZeroProjectedOrigin =
+      loadedOriginPlane.GetProjectedOrigin();
+  Expect(loadedZeroProjectedOrigin.has_value() &&
+             std::abs(loadedZeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(loadedZeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(loadedZeroProjectedOrigin->z) < 1e-12,
+         "Loaded zero-origin datum plane should preserve the zero projectedOrigin.");
+
+  DatumPlaneAccessor loadedMissingGeometryPlane(
+      loaded.GetFeature(missingGeometryPlaneId));
+  Expect(loadedMissingGeometryPlane.IsValid(),
+         "Loaded missing-geometry datum plane should be accessible.");
+  Expect(!loadedMissingGeometryPlane.HasProjectedOrigin(),
+         "Loaded missing-geometry datum plane should still report absent projectedOrigin.");
+  Expect(!loadedMissingGeometryPlane.GetProjectedOrigin().has_value(),
+         "Loaded missing-geometry datum plane should still return nullopt projectedOrigin.");
+  Expect(!loadedMissingGeometryPlane.HasNormal(),
+         "Loaded missing-geometry datum plane should still report absent normal.");
+  Expect(!loadedMissingGeometryPlane.GetNormal().has_value(),
+         "Loaded missing-geometry datum plane should still return nullopt normal.");
+
+  errorMessage.clear();
+  Expect(ConvertModelUnit(model, UnitType::MILLIMETER, &errorMessage),
+         "ConvertModelUnit should scale datum plane geometry: " + errorMessage);
+  DatumPlaneAccessor convertedPlane(model.GetFeature(planeId));
+  std::optional<CPoint3D> convertedProjectedOrigin =
+      convertedPlane.GetProjectedOrigin();
+  Expect(convertedProjectedOrigin.has_value() &&
+             std::abs(convertedProjectedOrigin->z - 123.0) < 1e-9,
+         "Datum plane projectedOrigin should scale to millimeters.");
+  std::optional<CVector3D> convertedNormal = convertedPlane.GetNormal();
+  Expect(convertedNormal.has_value() &&
+             std::abs(convertedNormal->z - 1.0) < 1e-12,
+         "Datum plane normal should remain unchanged by unit conversion.");
+
+  DatumPlaneAccessor convertedOriginPlane(model.GetFeature(originPlaneId));
+  std::optional<CPoint3D> convertedZeroProjectedOrigin =
+      convertedOriginPlane.GetProjectedOrigin();
+  Expect(convertedZeroProjectedOrigin.has_value() &&
+             std::abs(convertedZeroProjectedOrigin->x) < 1e-12 &&
+             std::abs(convertedZeroProjectedOrigin->y) < 1e-12 &&
+             std::abs(convertedZeroProjectedOrigin->z) < 1e-12,
+         "Zero projectedOrigin should remain present and unchanged by unit conversion.");
+
+  double mmTol = 0.0;
+  Expect(CADExchange::TryGetGeometryCompareTolerance(UnitType::MILLIMETER, mmTol),
+         "Geometry compare tolerance should resolve for millimeters.");
+  Expect(std::abs(mmTol - 0.02) < 1e-12,
+         "Geometry compare tolerance should equal 0.02 in millimeters.");
+}
+
 void TestFilletBuilderAccessorAndXmlRoundTrip() {
   UnifiedModel model(UnitType::METER, "fillet-builder-accessor-xml");
   auto sketch = MakeSketch("SK-FILLET", "FilletSketch");
@@ -1358,6 +1531,7 @@ int main() {
   TestChamferOffsetModeRoundTrip();
   TestChamferValidationAndUnitConversion();
   TestRefEdgeCurveTypeRoundTripAndUnitConversion();
+  TestDatumPlaneGeometryRoundTripAndUnitConversion();
   std::cout << "[PASS] MigrationRegressionTest" << std::endl;
   return 0;
 }

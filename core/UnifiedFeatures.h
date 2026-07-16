@@ -107,6 +107,9 @@ struct CRefSketch : public CRefFeature {
   CRefSketch() : CRefFeature(RefType::FEATURE_WHOLE_SKETCH) {}
 };
 
+/**
+ * @brief 拓扑面的曲面类型。
+ */
 enum class CGeoSurfaceType {
   UNKNOWN = 0,
   PLANE = 4001,
@@ -125,7 +128,7 @@ struct CRefFace : public CRefSubTopo {
   CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
-  CGeoSurfaceType surfaceType{CGeoSurfaceType::UNKNOWN};
+  CGeoSurfaceType surfaceType = CGeoSurfaceType::PLANE;
 
   CRefFace() : CRefSubTopo(RefType::TOPO_FACE) {}
 };
@@ -895,9 +898,10 @@ struct CDatumPlane : public CFeatureBase {
   PlaneMethod method{PlaneMethod::UNKNOWN};
   std::vector<PlaneConstraint> constraints;
   std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
-  
-  CVector3D normal;
-  CPoint3D projectedOrigin;
+  // Optional geometry supplement extracted from source CAD. Absence means the
+  // source path did not provide stable plane geometry; zero values remain valid.
+  std::optional<CPoint3D> projectedOrigin;
+  std::optional<CVector3D> normal;
 
   CDatumPlane() { featureType = FeatureType::DatumPlane; }
 };

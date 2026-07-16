@@ -490,8 +490,8 @@ template <class Archive> void serialize(Archive &ar, CDatumPlane &datumPlane) {
      cereal::make_nvp("Method", datumPlane.method),
      cereal::make_nvp("Constraints", datumPlane.constraints),
      cereal::make_nvp("ReferenceEntities", datumPlane.referenceEntities),
-     cereal::make_nvp("Normal", datumPlane.normal),
-     cereal::make_nvp("ProjectedOrigin", datumPlane.projectedOrigin));
+     cereal::make_nvp("ProjectedOrigin", datumPlane.projectedOrigin),
+     cereal::make_nvp("Normal", datumPlane.normal));
 }
 
 // ==========================================

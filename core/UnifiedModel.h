@@ -181,4 +181,7 @@ bool TryParseUnitType(const std::string &unitStr, UnitType &out);
 /// `dst` units.  Returns false if either unit is unsupported.
 bool TryGetUnitConversionFactor(UnitType src, UnitType dst, double &factor);
 
+/// Resolve the shared geometry compare tolerance in the requested unit system.
+bool TryGetGeometryCompareTolerance(UnitType unit, double &tolerance);
+
 } // namespace CADExchange

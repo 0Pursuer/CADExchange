@@ -40,15 +40,23 @@ public:
 
   bool IsValid() const override { return m_plane != nullptr; }
 
-  CPoint3D GetProjectedOrigin() const {
-    return IsValid() ? Data()->projectedOrigin : CPoint3D{};
-  }
 
-  CVector3D GetNormal() const {
-    return IsValid() ? Data()->normal : CVector3D{};
-  }
 
   ACCESSOR_GETTER(PlaneMethod, Method, method, PlaneMethod::UNKNOWN)
+
+  bool HasProjectedOrigin() const {
+    return IsValid() && Data()->projectedOrigin.has_value();
+  }
+
+  std::optional<CPoint3D> GetProjectedOrigin() const {
+    return IsValid() ? Data()->projectedOrigin : std::nullopt;
+  }
+
+  bool HasNormal() const { return IsValid() && Data()->normal.has_value(); }
+
+  std::optional<CVector3D> GetNormal() const {
+    return IsValid() ? Data()->normal : std::nullopt;
+  }
 
   bool IsLineMethod() const {
     return IsValid() && Data()->method == PlaneMethod::LINE;
