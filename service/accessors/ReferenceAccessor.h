@@ -164,15 +164,7 @@ public:
   /**
    * @brief 尝试获取面 V 方向（如果是面引用）。
    */
-  /**
-   * @brief 尝试获取面几何类型；若当前不是面引用则返回 UNKNOWN。
-   */
-  CGeoSurfaceType GetFaceSurfaceType() const {
-    if (auto face = std::dynamic_pointer_cast<const CRefFace>(m_ref)) {
-      return face->surfaceType;
-    }
-    return CGeoSurfaceType::UNKNOWN;
-  }
+
 
     bool GetFaceVDir(CVector3D &outVDir) const {
     if (auto face = std::dynamic_pointer_cast<const CRefFace>(m_ref)) {

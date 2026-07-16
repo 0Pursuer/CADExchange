@@ -265,33 +265,9 @@ inline std::optional<std::string> MatchAxis(const CVector3D &direction) {
 // };
 
 
-inline std::optional<CPoint3D> ProjectPointToPlaneOrigin(const CPoint3D &point, const CVector3D &normal) {
-  double len2 = normal.x * normal.x + normal.y * normal.y + normal.z * normal.z;
-  if (len2 < 1e-12) {
-    return std::nullopt;
-  }
-  double len = std::sqrt(len2);
-  CVector3D n{normal.x / len, normal.y / len, normal.z / len};
-  double dot = point.x * n.x + point.y * n.y + point.z * n.z;
-  return CPoint3D{point.x - dot * n.x, point.y - dot * n.y, point.z - dot * n.z};
-}
 
-inline bool TryGetGeometryCompareTolerance(UnitType unit, double &tolerance) {
-  switch (unit) {
-    case UnitType::METER:
-      tolerance = 2e-6;
-      return true;
-    case UnitType::CENTIMETER:
-      tolerance = 2e-4;
-      return true;
-    case UnitType::MILLIMETER:
-      tolerance = 2e-3;
-      return true;
-    default:
-      tolerance = 2e-3;
-      return true;
-  }
-}
+
+
 
 } // namespace CADExchange
 

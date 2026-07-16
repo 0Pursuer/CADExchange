@@ -130,15 +130,7 @@ public:
    */
   DatumPlaneBuilder &SetLineMethod() { return SetMethod(PlaneMethod::LINE); }
 
-  DatumPlaneBuilder &SetProjectedOrigin(const CPoint3D &origin) {
-    m_feature->projectedOrigin = origin;
-    return *this;
-  }
 
-  DatumPlaneBuilder &SetNormal(const CVector3D &normal) {
-    m_feature->normal = normal;
-    return *this;
-  }
 
   /**
    * @brief Add one reference from ReferenceBuilder facade/builder objects.
