@@ -139,6 +139,16 @@ private:
                              tinyxml2::XMLElement *element,
                              const std::shared_ptr<CDatumPlane> &datumPlane);
 
+  static void SaveLinearPattern(tinyxml2::XMLDocument &doc,
+                                tinyxml2::XMLElement *element,
+                                const std::shared_ptr<CLinearPattern> &pattern);
+  static void SaveCircularPattern(tinyxml2::XMLDocument &doc,
+                                  tinyxml2::XMLElement *element,
+                                  const std::shared_ptr<CCircularPattern> &pattern);
+  static void SaveMirrorPattern(tinyxml2::XMLDocument &doc,
+                                tinyxml2::XMLElement *element,
+                                const std::shared_ptr<CMirrorPattern> &pattern);
+
   /**
    * @brief 序列化草图的单个段（线、圆、点等）。
    * @param doc 当前 XML 文档对象。
@@ -252,6 +262,13 @@ private:
    */
   static void LoadDatumPlane(tinyxml2::XMLElement *element,
                              std::shared_ptr<CDatumPlane> &datumPlane);
+
+  static void LoadLinearPattern(tinyxml2::XMLElement *element,
+                                std::shared_ptr<CLinearPattern> &pattern);
+  static void LoadCircularPattern(tinyxml2::XMLElement *element,
+                                  std::shared_ptr<CCircularPattern> &pattern);
+  static void LoadMirrorPattern(tinyxml2::XMLElement *element,
+                                std::shared_ptr<CMirrorPattern> &pattern);
 
   /**
    * @brief 从 Segment 元素构建 `CSketchSeg`

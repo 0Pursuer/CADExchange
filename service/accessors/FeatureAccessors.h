@@ -13,6 +13,7 @@
 #include "ShellAccessor.h"
 #include "DraftAccessor.h"
 #include "DatumPlaneAccessor.h"
+#include "PatternAccessor.h"
 #include "ModelAccessor.h"
 
 // clang-format on

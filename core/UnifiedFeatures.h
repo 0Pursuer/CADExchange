@@ -34,7 +34,10 @@ enum class FeatureType {
   Shell,
   Sketch,
   DatumPlane,
-  Draft
+  Draft,
+  LinearPattern,
+  CircularPattern,
+  MirrorPattern
 };
 
 /**
@@ -104,6 +107,16 @@ struct CRefSketch : public CRefFeature {
   CRefSketch() : CRefFeature(RefType::FEATURE_WHOLE_SKETCH) {}
 };
 
+enum class CGeoSurfaceType {
+  UNKNOWN = 0,
+  PLANE = 4001,
+  CYLINDER = 4002,
+  CONE = 4003,
+  SPHERE = 4004,
+  TORUS = 4005,
+  BSURFACE = 4006
+};
+
 struct CRefFace : public CRefSubTopo {
   CVector3D normal;
   /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles)
@@ -112,6 +125,7 @@ struct CRefFace : public CRefSubTopo {
   CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
+  CGeoSurfaceType surfaceType{CGeoSurfaceType::UNKNOWN};
 
   CRefFace() : CRefSubTopo(RefType::TOPO_FACE) {}
 };
@@ -881,8 +895,114 @@ struct CDatumPlane : public CFeatureBase {
   PlaneMethod method{PlaneMethod::UNKNOWN};
   std::vector<PlaneConstraint> constraints;
   std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
+  
+  CVector3D normal;
+  CPoint3D projectedOrigin;
 
   CDatumPlane() { featureType = FeatureType::DatumPlane; }
+};
+
+
+/**
+ * @brief 阵列作用域：特征、拓扑面、还是整个实体
+ */
+enum class PatternScope {
+  FEATURES, ///< 针对特征列表阵列
+  FACES,    ///< 针对指定的一组面阵列
+  BODIES    ///< 针对多实体环境下的体阵列
+};
+
+/**
+ * @brief 阵列间距/分布模式
+ */
+enum class PatternSpacingType {
+  PITCH_AND_COUNT, // 给定 数量(Count) + 间距(Pitch)
+  SPAN_AND_COUNT,  // 给定 数量(Count) + 总跨度(Span)
+};
+
+/**
+ * @brief 网格坐标，用于精确标记需要跳过（抑制）的阵列实例
+ */
+struct CPatternIndex {
+  int dir1Index = 0; // 方向 1 索引（从0开始）
+  int dir2Index = 0; // 方向 2 索引（如果不启用方向2，则为0）
+
+  bool operator==(const CPatternIndex& other) const {
+    return dir1Index == other.dir1Index && dir2Index == other.dir2Index;
+  }
+};
+
+/**
+ * @brief 线性阵列的方向控制参数
+ */
+struct CLinearPatternDir {
+  std::shared_ptr<CRefEntityBase> directionRef; ///< 方向参考（边、轴、面法线等）
+  bool reverse = false;                         ///< 是否反转方向
+  
+  PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
+  double spacing = 0.0;                         ///< 线性间距值（按模型单位，SW提取时需从米转为模型单位）
+  int count = 1;                                ///< 包含源特征在内的实例总数
+};
+
+/**
+ * @brief 统一线性阵列特征
+ */
+struct CLinearPattern : public CFeatureBase {
+  CLinearPatternDir dir1;
+  std::optional<CLinearPatternDir> dir2;
+  
+  bool patternSeedOnly = false; ///< 方向二是否仅对“源特征”进行阵列（而不阵列方向1产生的拷贝）
+  
+  PatternScope scope = PatternScope::FEATURES;
+  std::vector<std::shared_ptr<CRefEntityBase>> seedObjects; ///< 特征、面、或实体的引用列表
+  
+  std::vector<CPatternIndex> skippedInstances; ///< 跳过的阵列实例索引列表
+  bool geometryPattern = false;                ///< 是否启用几何阵列（加速复制）
+
+  CLinearPattern() { featureType = FeatureType::LinearPattern; }
+};
+
+/**
+ * @brief 圆周阵列的旋转方向参数
+ */
+struct CCircularPatternDir {
+  std::shared_ptr<CRefEntityBase> axisRef; ///< 旋转轴参考（基准轴、线性边、圆柱面等）
+  bool reverse = false;                    ///< 是否反向
+
+  PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
+  double angle = 0.0;                      ///< 旋转角（统一使用弧度制，Creo和UG的度需转换）
+  int count = 1;                           ///< 实例数量
+};
+
+/**
+ * @brief 统一圆周阵列特征
+ */
+struct CCircularPattern : public CFeatureBase {
+  CCircularPatternDir dir1;
+  std::optional<CLinearPatternDir> dir2; // 径向线性平移扩展（同心圆环阵列）
+  bool patternSeedOnly = false;
+
+  PatternScope scope = PatternScope::FEATURES;
+  std::vector<std::shared_ptr<CRefEntityBase>> seedObjects;
+  
+  std::vector<CPatternIndex> skippedInstances;
+  bool geometryPattern = false;
+
+  CCircularPattern() { featureType = FeatureType::CircularPattern; }
+};
+
+/**
+ * @brief 统一镜像特征
+ */
+struct CMirrorPattern : public CFeatureBase {
+  std::shared_ptr<CRefEntityBase> mirrorPlaneRef; ///< 镜像平面（基准面、实体平面）
+  
+  PatternScope scope = PatternScope::FEATURES;
+  std::vector<std::shared_ptr<CRefEntityBase>> seedObjects;
+  
+  bool geometryPattern = false;
+
+  CMirrorPattern() { featureType = FeatureType::MirrorPattern; }
 };
 
 } // namespace CADExchange

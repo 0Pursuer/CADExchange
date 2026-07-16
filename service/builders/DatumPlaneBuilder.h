@@ -97,6 +97,16 @@ public:
   DatumPlaneBuilder(UnifiedModel &model, const std::string &name)
       : FeatureBuilderBase(model, name) {}
 
+  DatumPlaneBuilder &SetNormal(const CVector3D &normal) {
+    m_feature->normal = normal;
+    return *this;
+  }
+
+  DatumPlaneBuilder &SetProjectedOrigin(const CPoint3D &origin) {
+    m_feature->projectedOrigin = origin;
+    return *this;
+  }
+
   /**
    * @brief Set datum plane construction method.
    */

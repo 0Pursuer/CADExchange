@@ -63,6 +63,14 @@ public:
   /**
    * @brief 构建完成，返回面引用指针。
    */
+    /**
+   * @brief 设置面引用的几何类型。
+   */
+  RefFaceBuilder &SurfaceType(CGeoSurfaceType type) {
+    m_ptr->surfaceType = type;
+    return *this;
+  }
+
   std::shared_ptr<CRefFace> Build() const { return m_ptr; }
   
   operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; } // 转换为基类指针

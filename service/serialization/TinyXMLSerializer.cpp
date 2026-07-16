@@ -1,4 +1,4 @@
-#include "TinyXMLSerializer.h"
+﻿#include "TinyXMLSerializer.h"
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -900,17 +900,33 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
      }},
     {RefType::FEATURE_DATUM_AXIS, "Axis", "axis",
      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       SaveFeatureReference(element, ref);
+       if (auto axis = std::dynamic_pointer_cast<CRefAxis>(ref)) {
+         element->SetAttribute("TargetFeatureID", axis->targetFeatureID.c_str());
+         element->SetAttribute("Origin", FormatPoint(axis->origin).c_str());
+         element->SetAttribute("Direction", FormatVector(axis->direction).c_str());
+       }
      },
      [](XMLElement *element) {
-       return LoadFeatureReference(element, RefType::FEATURE_DATUM_AXIS);
+       auto axis = std::make_shared<CRefAxis>();
+       if (const char *tid = element->Attribute("TargetFeatureID"))
+         axis->targetFeatureID = tid;
+       axis->origin = ParsePointAttribute(element, "Origin");
+       axis->direction = ParseVectorAttribute(element, "Direction");
+       return axis;
      }},
     {RefType::FEATURE_DATUM_POINT, "Point", "point",
      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
-       SaveFeatureReference(element, ref);
+       if (auto pt = std::dynamic_pointer_cast<CRefPoint>(ref)) {
+         element->SetAttribute("TargetFeatureID", pt->targetFeatureID.c_str());
+         element->SetAttribute("Position", FormatPoint(pt->position).c_str());
+       }
      },
      [](XMLElement *element) {
-       return LoadFeatureReference(element, RefType::FEATURE_DATUM_POINT);
+       auto pt = std::make_shared<CRefPoint>();
+       if (const char *tid = element->Attribute("TargetFeatureID"))
+         pt->targetFeatureID = tid;
+       pt->position = ParsePointAttribute(element, "Position");
+       return pt;
      }},
     {RefType::FEATURE_WHOLE_SKETCH, "Sketch", "sketch",
      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
@@ -1069,6 +1085,8 @@ const RefSerializerEntry *FindRefEntryByName(const std::string &value) {
 std::string RefTypeToString(RefType type) {
   if (auto entry = FindRefEntry(type))
     return entry->name;
+  if (type == RefType::UNKNOWN)
+    return "FeatureRef";
   return "Unknown";
 }
 
@@ -1212,6 +1230,18 @@ void TinyXMLSerializer::SaveFeature(
       featElem->SetAttribute("Type", "DatumPlane");
       SaveDatumPlane(doc, featElem,
                      std::static_pointer_cast<CDatumPlane>(feature));
+      break;
+    case FeatureType::LinearPattern:
+      featElem->SetAttribute("Type", "LinearPattern");
+      SaveLinearPattern(doc, featElem, std::static_pointer_cast<CLinearPattern>(feature));
+      break;
+    case FeatureType::CircularPattern:
+      featElem->SetAttribute("Type", "CircularPattern");
+      SaveCircularPattern(doc, featElem, std::static_pointer_cast<CCircularPattern>(feature));
+      break;
+    case FeatureType::MirrorPattern:
+      featElem->SetAttribute("Type", "MirrorPattern");
+      SaveMirrorPattern(doc, featElem, std::static_pointer_cast<CMirrorPattern>(feature));
       break;
     default:
       featElem->SetAttribute("Type", "Unknown");
@@ -1968,6 +1998,9 @@ TinyXMLSerializer::LoadRefEntity(XMLElement *element) {
   if (!ref && normalizedType == "feature")
     ref = LoadFeatureReference(element, RefType::FEATURE_DATUM_PLANE);
 
+  if (!ref && normalizedType == "featureref")
+    ref = LoadFeatureReference(element, RefType::UNKNOWN);
+
   if (ref && resolvedType)
     ref->refType = *resolvedType;
   return ref;
@@ -2022,6 +2055,18 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
     auto datumPlane = std::make_shared<CDatumPlane>();
     LoadDatumPlane(element, datumPlane);
     feature = datumPlane;
+  } else if (type == "LinearPattern") {
+    auto linearPattern = std::make_shared<CLinearPattern>();
+    LoadLinearPattern(element, linearPattern);
+    feature = linearPattern;
+  } else if (type == "CircularPattern") {
+    auto circularPattern = std::make_shared<CCircularPattern>();
+    LoadCircularPattern(element, circularPattern);
+    feature = circularPattern;
+  } else if (type == "MirrorPattern") {
+    auto mirrorPattern = std::make_shared<CMirrorPattern>();
+    LoadMirrorPattern(element, mirrorPattern);
+    feature = mirrorPattern;
   } else {
     return nullptr; // 未知 Type，调用方会打印 warn
   }
@@ -2912,6 +2957,289 @@ void TinyXMLSerializer::LoadFillet(XMLElement *element,
     if (extElem->QueryIntAttribute("CreoConicDepOption", &intValue) ==
         XML_SUCCESS) {
       fillet->creoConicDepOption = intValue;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pattern Enums ↔ String Converters
+// ---------------------------------------------------------------------------
+static std::string PatternScopeToString(PatternScope scope) {
+  switch (scope) {
+    case PatternScope::FEATURES: return "FEATURES";
+    case PatternScope::FACES: return "FACES";
+    case PatternScope::BODIES: return "BODIES";
+    default: return "FEATURES";
+  }
+}
+
+static PatternScope PatternScopeFromString(const char* str) {
+  if (!str) return PatternScope::FEATURES;
+  std::string s(str);
+  if (s == "FEATURES") return PatternScope::FEATURES;
+  if (s == "FACES") return PatternScope::FACES;
+  if (s == "BODIES") return PatternScope::BODIES;
+  return PatternScope::FEATURES;
+}
+
+static std::string PatternSpacingTypeToString(PatternSpacingType type) {
+  switch (type) {
+    case PatternSpacingType::PITCH_AND_COUNT: return "PITCH_AND_COUNT";
+    case PatternSpacingType::SPAN_AND_COUNT: return "SPAN_AND_COUNT";
+    default: return "PITCH_AND_COUNT";
+  }
+}
+
+static PatternSpacingType PatternSpacingTypeFromString(const char* str) {
+  if (!str) return PatternSpacingType::PITCH_AND_COUNT;
+  std::string s(str);
+  if (s == "PITCH_AND_COUNT") return PatternSpacingType::PITCH_AND_COUNT;
+  if (s == "SPAN_AND_COUNT") return PatternSpacingType::SPAN_AND_COUNT;
+  return PatternSpacingType::PITCH_AND_COUNT;
+}
+
+// ---------------------------------------------------------------------------
+// LinearPattern, CircularPattern, MirrorPattern Save/Load Implementation
+// ---------------------------------------------------------------------------
+void TinyXMLSerializer::SaveLinearPattern(XMLDocument &doc, XMLElement *element,
+                                          const std::shared_ptr<CLinearPattern> &pattern) {
+  element->SetAttribute("PatternSeedOnly", pattern->patternSeedOnly);
+  element->SetAttribute("GeometryPattern", pattern->geometryPattern);
+  element->SetAttribute("Scope", PatternScopeToString(pattern->scope).c_str());
+
+  // Dir1
+  XMLElement *dir1Elem = doc.NewElement("Dir1");
+  dir1Elem->SetAttribute("Reverse", pattern->dir1.reverse);
+  dir1Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir1.spacingType).c_str());
+  dir1Elem->SetAttribute("Spacing", pattern->dir1.spacing);
+  dir1Elem->SetAttribute("Count", pattern->dir1.count);
+  SaveRefEntity(doc, dir1Elem, "DirectionReference", pattern->dir1.directionRef);
+  element->InsertEndChild(dir1Elem);
+
+  // Dir2
+  if (pattern->dir2) {
+    XMLElement *dir2Elem = doc.NewElement("Dir2");
+    dir2Elem->SetAttribute("Reverse", pattern->dir2->reverse);
+    dir2Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir2->spacingType).c_str());
+    dir2Elem->SetAttribute("Spacing", pattern->dir2->spacing);
+    dir2Elem->SetAttribute("Count", pattern->dir2->count);
+    SaveRefEntity(doc, dir2Elem, "DirectionReference", pattern->dir2->directionRef);
+    element->InsertEndChild(dir2Elem);
+  }
+
+  // SeedObjects
+  XMLElement *seedsElem = doc.NewElement("SeedObjects");
+  for (const auto &ref : pattern->seedObjects) {
+    SaveRefEntity(doc, seedsElem, "ReferenceEntity", ref);
+  }
+  element->InsertEndChild(seedsElem);
+
+  // SkippedInstances
+  if (!pattern->skippedInstances.empty()) {
+    XMLElement *skippedElem = doc.NewElement("SkippedInstances");
+    for (const auto &idx : pattern->skippedInstances) {
+      XMLElement *idxElem = doc.NewElement("Instance");
+      idxElem->SetAttribute("Dir1Index", idx.dir1Index);
+      idxElem->SetAttribute("Dir2Index", idx.dir2Index);
+      skippedElem->InsertEndChild(idxElem);
+    }
+    element->InsertEndChild(skippedElem);
+  }
+}
+
+void TinyXMLSerializer::SaveCircularPattern(XMLDocument &doc, XMLElement *element,
+                                            const std::shared_ptr<CCircularPattern> &pattern) {
+  element->SetAttribute("PatternSeedOnly", pattern->patternSeedOnly);
+  element->SetAttribute("GeometryPattern", pattern->geometryPattern);
+  element->SetAttribute("Scope", PatternScopeToString(pattern->scope).c_str());
+
+  // Dir1
+  XMLElement *dir1Elem = doc.NewElement("Dir1");
+  dir1Elem->SetAttribute("Reverse", pattern->dir1.reverse);
+  dir1Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir1.spacingType).c_str());
+  dir1Elem->SetAttribute("Angle", pattern->dir1.angle);
+  dir1Elem->SetAttribute("Count", pattern->dir1.count);
+  SaveRefEntity(doc, dir1Elem, "AxisReference", pattern->dir1.axisRef);
+  element->InsertEndChild(dir1Elem);
+
+  // Dir2
+  if (pattern->dir2) {
+    XMLElement *dir2Elem = doc.NewElement("Dir2");
+    dir2Elem->SetAttribute("Reverse", pattern->dir2->reverse);
+    dir2Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir2->spacingType).c_str());
+    dir2Elem->SetAttribute("Spacing", pattern->dir2->spacing);
+    dir2Elem->SetAttribute("Count", pattern->dir2->count);
+    SaveRefEntity(doc, dir2Elem, "DirectionReference", pattern->dir2->directionRef);
+    element->InsertEndChild(dir2Elem);
+  }
+
+  // SeedObjects
+  XMLElement *seedsElem = doc.NewElement("SeedObjects");
+  for (const auto &ref : pattern->seedObjects) {
+    SaveRefEntity(doc, seedsElem, "ReferenceEntity", ref);
+  }
+  element->InsertEndChild(seedsElem);
+
+  // SkippedInstances
+  if (!pattern->skippedInstances.empty()) {
+    XMLElement *skippedElem = doc.NewElement("SkippedInstances");
+    for (const auto &idx : pattern->skippedInstances) {
+      XMLElement *idxElem = doc.NewElement("Instance");
+      idxElem->SetAttribute("Dir1Index", idx.dir1Index);
+      idxElem->SetAttribute("Dir2Index", idx.dir2Index);
+      skippedElem->InsertEndChild(idxElem);
+    }
+    element->InsertEndChild(skippedElem);
+  }
+}
+
+void TinyXMLSerializer::SaveMirrorPattern(XMLDocument &doc, XMLElement *element,
+                                          const std::shared_ptr<CMirrorPattern> &pattern) {
+  element->SetAttribute("GeometryPattern", pattern->geometryPattern);
+  element->SetAttribute("Scope", PatternScopeToString(pattern->scope).c_str());
+  SaveRefEntity(doc, element, "MirrorPlaneReference", pattern->mirrorPlaneRef);
+
+  // SeedObjects
+  XMLElement *seedsElem = doc.NewElement("SeedObjects");
+  for (const auto &ref : pattern->seedObjects) {
+    SaveRefEntity(doc, seedsElem, "ReferenceEntity", ref);
+  }
+  element->InsertEndChild(seedsElem);
+}
+
+void TinyXMLSerializer::LoadLinearPattern(XMLElement *element,
+                                          std::shared_ptr<CLinearPattern> &pattern) {
+  element->QueryBoolAttribute("PatternSeedOnly", &pattern->patternSeedOnly);
+  element->QueryBoolAttribute("GeometryPattern", &pattern->geometryPattern);
+  if (const char *scopeStr = element->Attribute("Scope")) {
+    pattern->scope = PatternScopeFromString(scopeStr);
+  }
+
+  // Dir1
+  if (XMLElement *dir1Elem = element->FirstChildElement("Dir1")) {
+    dir1Elem->QueryBoolAttribute("Reverse", &pattern->dir1.reverse);
+    if (const char *spacingTypeStr = dir1Elem->Attribute("SpacingType")) {
+      pattern->dir1.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
+    }
+    dir1Elem->QueryDoubleAttribute("Spacing", &pattern->dir1.spacing);
+    dir1Elem->QueryIntAttribute("Count", &pattern->dir1.count);
+    if (XMLElement *refElem = dir1Elem->FirstChildElement("DirectionReference")) {
+      pattern->dir1.directionRef = LoadRefEntity(refElem);
+    }
+  }
+
+  // Dir2
+  if (XMLElement *dir2Elem = element->FirstChildElement("Dir2")) {
+    CLinearPatternDir dir2;
+    dir2Elem->QueryBoolAttribute("Reverse", &dir2.reverse);
+    if (const char *spacingTypeStr = dir2Elem->Attribute("SpacingType")) {
+      dir2.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
+    }
+    dir2Elem->QueryDoubleAttribute("Spacing", &dir2.spacing);
+    dir2Elem->QueryIntAttribute("Count", &dir2.count);
+    if (XMLElement *refElem = dir2Elem->FirstChildElement("DirectionReference")) {
+      dir2.directionRef = LoadRefEntity(refElem);
+    }
+    pattern->dir2 = dir2;
+  }
+
+  // SeedObjects
+  if (XMLElement *seedsElem = element->FirstChildElement("SeedObjects")) {
+    for (XMLElement *refElem = seedsElem->FirstChildElement("ReferenceEntity");
+         refElem != nullptr; refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+      if (auto ref = LoadRefEntity(refElem)) {
+        pattern->seedObjects.push_back(ref);
+      }
+    }
+  }
+
+  // SkippedInstances
+  if (XMLElement *skippedElem = element->FirstChildElement("SkippedInstances")) {
+    for (XMLElement *idxElem = skippedElem->FirstChildElement("Instance");
+         idxElem != nullptr; idxElem = idxElem->NextSiblingElement("Instance")) {
+      CPatternIndex idx;
+      idxElem->QueryIntAttribute("Dir1Index", &idx.dir1Index);
+      idxElem->QueryIntAttribute("Dir2Index", &idx.dir2Index);
+      pattern->skippedInstances.push_back(idx);
+    }
+  }
+}
+
+void TinyXMLSerializer::LoadCircularPattern(XMLElement *element,
+                                            std::shared_ptr<CCircularPattern> &pattern) {
+  element->QueryBoolAttribute("PatternSeedOnly", &pattern->patternSeedOnly);
+  element->QueryBoolAttribute("GeometryPattern", &pattern->geometryPattern);
+  if (const char *scopeStr = element->Attribute("Scope")) {
+    pattern->scope = PatternScopeFromString(scopeStr);
+  }
+
+  // Dir1
+  if (XMLElement *dir1Elem = element->FirstChildElement("Dir1")) {
+    dir1Elem->QueryBoolAttribute("Reverse", &pattern->dir1.reverse);
+    if (const char *spacingTypeStr = dir1Elem->Attribute("SpacingType")) {
+      pattern->dir1.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
+    }
+    dir1Elem->QueryDoubleAttribute("Angle", &pattern->dir1.angle);
+    dir1Elem->QueryIntAttribute("Count", &pattern->dir1.count);
+    if (XMLElement *refElem = dir1Elem->FirstChildElement("AxisReference")) {
+      pattern->dir1.axisRef = LoadRefEntity(refElem);
+    }
+  }
+
+  // Dir2
+  if (XMLElement *dir2Elem = element->FirstChildElement("Dir2")) {
+    CLinearPatternDir dir2;
+    dir2Elem->QueryBoolAttribute("Reverse", &dir2.reverse);
+    if (const char *spacingTypeStr = dir2Elem->Attribute("SpacingType")) {
+      dir2.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
+    }
+    dir2Elem->QueryDoubleAttribute("Spacing", &dir2.spacing);
+    dir2Elem->QueryIntAttribute("Count", &dir2.count);
+    if (XMLElement *refElem = dir2Elem->FirstChildElement("DirectionReference")) {
+      dir2.directionRef = LoadRefEntity(refElem);
+    }
+    pattern->dir2 = dir2;
+  }
+
+  // SeedObjects
+  if (XMLElement *seedsElem = element->FirstChildElement("SeedObjects")) {
+    for (XMLElement *refElem = seedsElem->FirstChildElement("ReferenceEntity");
+         refElem != nullptr; refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+      if (auto ref = LoadRefEntity(refElem)) {
+        pattern->seedObjects.push_back(ref);
+      }
+    }
+  }
+
+  // SkippedInstances
+  if (XMLElement *skippedElem = element->FirstChildElement("SkippedInstances")) {
+    for (XMLElement *idxElem = skippedElem->FirstChildElement("Instance");
+         idxElem != nullptr; idxElem = idxElem->NextSiblingElement("Instance")) {
+      CPatternIndex idx;
+      idxElem->QueryIntAttribute("Dir1Index", &idx.dir1Index);
+      idxElem->QueryIntAttribute("Dir2Index", &idx.dir2Index);
+      pattern->skippedInstances.push_back(idx);
+    }
+  }
+}
+
+void TinyXMLSerializer::LoadMirrorPattern(XMLElement *element,
+                                          std::shared_ptr<CMirrorPattern> &pattern) {
+  element->QueryBoolAttribute("GeometryPattern", &pattern->geometryPattern);
+  if (const char *scopeStr = element->Attribute("Scope")) {
+    pattern->scope = PatternScopeFromString(scopeStr);
+  }
+  if (XMLElement *refElem = element->FirstChildElement("MirrorPlaneReference")) {
+    pattern->mirrorPlaneRef = LoadRefEntity(refElem);
+  }
+
+  // SeedObjects
+  if (XMLElement *seedsElem = element->FirstChildElement("SeedObjects")) {
+    for (XMLElement *refElem = seedsElem->FirstChildElement("ReferenceEntity");
+         refElem != nullptr; refElem = refElem->NextSiblingElement("ReferenceEntity")) {
+      if (auto ref = LoadRefEntity(refElem)) {
+        pattern->seedObjects.push_back(ref);
+      }
     }
   }
 }

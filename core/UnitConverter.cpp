@@ -328,6 +328,42 @@ void ScaleDraft(CDraft &draft, double factor, UnitScaleContext &ctx) {
   }
 }
 
+void ScaleLinearPatternDir(CLinearPatternDir &dir, double factor, UnitScaleContext &ctx) {
+  ScaleRefEntity(dir.directionRef, factor, ctx);
+  dir.spacing *= factor;
+}
+
+void ScaleLinearPattern(CLinearPattern &pattern, double factor, UnitScaleContext &ctx) {
+  ScaleLinearPatternDir(pattern.dir1, factor, ctx);
+  if (pattern.dir2) {
+    ScaleLinearPatternDir(*pattern.dir2, factor, ctx);
+  }
+  for (auto &seed : pattern.seedObjects) {
+    ScaleRefEntity(seed, factor, ctx);
+  }
+}
+
+void ScaleCircularPatternDir(CCircularPatternDir &dir, double factor, UnitScaleContext &ctx) {
+  ScaleRefEntity(dir.axisRef, factor, ctx);
+}
+
+void ScaleCircularPattern(CCircularPattern &pattern, double factor, UnitScaleContext &ctx) {
+  ScaleCircularPatternDir(pattern.dir1, factor, ctx);
+  if (pattern.dir2) {
+    ScaleLinearPatternDir(*pattern.dir2, factor, ctx);
+  }
+  for (auto &seed : pattern.seedObjects) {
+    ScaleRefEntity(seed, factor, ctx);
+  }
+}
+
+void ScaleMirrorPattern(CMirrorPattern &pattern, double factor, UnitScaleContext &ctx) {
+  ScaleRefEntity(pattern.mirrorPlaneRef, factor, ctx);
+  for (auto &seed : pattern.seedObjects) {
+    ScaleRefEntity(seed, factor, ctx);
+  }
+}
+
 } // namespace
 
 bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
@@ -396,6 +432,15 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
         break;
       case FeatureType::Draft:
         ScaleDraft(*std::static_pointer_cast<CDraft>(feature), factor, ctx);
+        break;
+      case FeatureType::LinearPattern:
+        ScaleLinearPattern(*std::static_pointer_cast<CLinearPattern>(feature), factor, ctx);
+        break;
+      case FeatureType::CircularPattern:
+        ScaleCircularPattern(*std::static_pointer_cast<CCircularPattern>(feature), factor, ctx);
+        break;
+      case FeatureType::MirrorPattern:
+        ScaleMirrorPattern(*std::static_pointer_cast<CMirrorPattern>(feature), factor, ctx);
         break;
       default:
         break;

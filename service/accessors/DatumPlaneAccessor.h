@@ -40,6 +40,14 @@ public:
 
   bool IsValid() const override { return m_plane != nullptr; }
 
+  CPoint3D GetProjectedOrigin() const {
+    return IsValid() ? Data()->projectedOrigin : CPoint3D{};
+  }
+
+  CVector3D GetNormal() const {
+    return IsValid() ? Data()->normal : CVector3D{};
+  }
+
   ACCESSOR_GETTER(PlaneMethod, Method, method, PlaneMethod::UNKNOWN)
 
   bool IsLineMethod() const {

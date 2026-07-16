@@ -101,7 +101,10 @@ template <class Archive> void serialize(Archive &ar, CRefSketch &sketch) {
 template <class Archive> void serialize(Archive &ar, CRefFace &face) {
   ar(cereal::base_class<CRefSubTopo>(&face),
      cereal::make_nvp("Normal", face.normal),
-     cereal::make_nvp("Centroid", face.centroid));
+     cereal::make_nvp("Centroid", face.centroid),
+     cereal::make_nvp("UDir", face.uDir),
+     cereal::make_nvp("VDir", face.vDir),
+     cereal::make_nvp("SurfaceType", face.surfaceType));
 }
 
 /**
@@ -486,7 +489,9 @@ template <class Archive> void serialize(Archive &ar, CDatumPlane &datumPlane) {
   ar(cereal::base_class<CFeatureBase>(&datumPlane),
      cereal::make_nvp("Method", datumPlane.method),
      cereal::make_nvp("Constraints", datumPlane.constraints),
-     cereal::make_nvp("ReferenceEntities", datumPlane.referenceEntities));
+     cereal::make_nvp("ReferenceEntities", datumPlane.referenceEntities),
+     cereal::make_nvp("Normal", datumPlane.normal),
+     cereal::make_nvp("ProjectedOrigin", datumPlane.projectedOrigin));
 }
 
 // ==========================================
@@ -496,6 +501,61 @@ template <class Archive> void serialize(Archive &ar, CDatumPlane &datumPlane) {
  * @brief 序列化 UnifiedModel，包含单位、名称与特征树。
  *        拆分为 save/load 以支持扁平化结构。
  */
+
+// ==========================================
+// 阵列特征序列化
+// ==========================================
+template <class Archive> void serialize(Archive &ar, CPatternIndex &idx) {
+  ar(cereal::make_nvp("Dir1Index", idx.dir1Index),
+     cereal::make_nvp("Dir2Index", idx.dir2Index));
+}
+
+template <class Archive> void serialize(Archive &ar, CLinearPatternDir &dir) {
+  ar(cereal::make_nvp("DirectionRef", dir.directionRef),
+     cereal::make_nvp("Reverse", dir.reverse),
+     cereal::make_nvp("SpacingType", dir.spacingType),
+     cereal::make_nvp("Spacing", dir.spacing),
+     cereal::make_nvp("Count", dir.count));
+}
+
+template <class Archive> void serialize(Archive &ar, CLinearPattern &pat) {
+  ar(cereal::base_class<CFeatureBase>(&pat),
+     cereal::make_nvp("Dir1", pat.dir1),
+     cereal::make_nvp("Dir2", pat.dir2),
+     cereal::make_nvp("PatternSeedOnly", pat.patternSeedOnly),
+     cereal::make_nvp("Scope", pat.scope),
+     cereal::make_nvp("SeedObjects", pat.seedObjects),
+     cereal::make_nvp("SkippedInstances", pat.skippedInstances),
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+}
+
+template <class Archive> void serialize(Archive &ar, CCircularPatternDir &dir) {
+  ar(cereal::make_nvp("AxisRef", dir.axisRef),
+     cereal::make_nvp("Reverse", dir.reverse),
+     cereal::make_nvp("SpacingType", dir.spacingType),
+     cereal::make_nvp("Angle", dir.angle),
+     cereal::make_nvp("Count", dir.count));
+}
+
+template <class Archive> void serialize(Archive &ar, CCircularPattern &pat) {
+  ar(cereal::base_class<CFeatureBase>(&pat),
+     cereal::make_nvp("Dir1", pat.dir1),
+     cereal::make_nvp("Dir2", pat.dir2),
+     cereal::make_nvp("PatternSeedOnly", pat.patternSeedOnly),
+     cereal::make_nvp("Scope", pat.scope),
+     cereal::make_nvp("SeedObjects", pat.seedObjects),
+     cereal::make_nvp("SkippedInstances", pat.skippedInstances),
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+}
+
+template <class Archive> void serialize(Archive &ar, CMirrorPattern &pat) {
+  ar(cereal::base_class<CFeatureBase>(&pat),
+     cereal::make_nvp("MirrorPlaneRef", pat.mirrorPlaneRef),
+     cereal::make_nvp("Scope", pat.scope),
+     cereal::make_nvp("SeedObjects", pat.seedObjects),
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+}
+
 template <class Archive> void save(Archive &ar, const UnifiedModel &model) {
   ar(cereal::make_nvp("UnitSystem", model.unit),
      cereal::make_nvp("ModelName", model.modelName));
