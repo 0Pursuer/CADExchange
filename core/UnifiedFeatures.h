@@ -941,7 +941,7 @@ struct CPatternIndex {
  */
 struct CLinearPatternDir {
   std::shared_ptr<CRefEntityBase> directionRef; ///< 方向参考（边、轴、面法线等）
-  bool reverse = false;                         ///< 是否反转方向
+  CVector3D direction{0.0, 0.0, 1.0};           ///< 绝对方向物理向量 (归一化)
   
   PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
   double spacing = 0.0;                         ///< 线性间距值（按模型单位，SW提取时需从米转为模型单位）
@@ -971,7 +971,7 @@ struct CLinearPattern : public CFeatureBase {
  */
 struct CCircularPatternDir {
   std::shared_ptr<CRefEntityBase> axisRef; ///< 旋转轴参考（基准轴、线性边、圆柱面等）
-  bool reverse = false;                    ///< 是否反向
+  CVector3D direction{0.0, 0.0, 1.0};      ///< 绝对旋转轴物理向量 (归一化)
 
   PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
   double angle = 0.0;                      ///< 旋转角（统一使用弧度制，Creo和UG的度需转换）

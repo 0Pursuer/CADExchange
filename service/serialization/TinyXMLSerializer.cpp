@@ -1,4 +1,4 @@
-﻿#include "TinyXMLSerializer.h"
+#include "TinyXMLSerializer.h"
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -3088,7 +3088,7 @@ void TinyXMLSerializer::SaveLinearPattern(XMLDocument &doc, XMLElement *element,
 
   // Dir1
   XMLElement *dir1Elem = doc.NewElement("Dir1");
-  dir1Elem->SetAttribute("Reverse", pattern->dir1.reverse);
+  dir1Elem->SetAttribute("Direction", FormatVector(pattern->dir1.direction).c_str());
   dir1Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir1.spacingType).c_str());
   dir1Elem->SetAttribute("Spacing", pattern->dir1.spacing);
   dir1Elem->SetAttribute("Count", pattern->dir1.count);
@@ -3098,7 +3098,7 @@ void TinyXMLSerializer::SaveLinearPattern(XMLDocument &doc, XMLElement *element,
   // Dir2
   if (pattern->dir2) {
     XMLElement *dir2Elem = doc.NewElement("Dir2");
-    dir2Elem->SetAttribute("Reverse", pattern->dir2->reverse);
+    dir2Elem->SetAttribute("Direction", FormatVector(pattern->dir2->direction).c_str());
     dir2Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir2->spacingType).c_str());
     dir2Elem->SetAttribute("Spacing", pattern->dir2->spacing);
     dir2Elem->SetAttribute("Count", pattern->dir2->count);
@@ -3134,7 +3134,7 @@ void TinyXMLSerializer::SaveCircularPattern(XMLDocument &doc, XMLElement *elemen
 
   // Dir1
   XMLElement *dir1Elem = doc.NewElement("Dir1");
-  dir1Elem->SetAttribute("Reverse", pattern->dir1.reverse);
+  dir1Elem->SetAttribute("Direction", FormatVector(pattern->dir1.direction).c_str());
   dir1Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir1.spacingType).c_str());
   dir1Elem->SetAttribute("Angle", pattern->dir1.angle);
   dir1Elem->SetAttribute("Count", pattern->dir1.count);
@@ -3144,7 +3144,7 @@ void TinyXMLSerializer::SaveCircularPattern(XMLDocument &doc, XMLElement *elemen
   // Dir2
   if (pattern->dir2) {
     XMLElement *dir2Elem = doc.NewElement("Dir2");
-    dir2Elem->SetAttribute("Reverse", pattern->dir2->reverse);
+    dir2Elem->SetAttribute("Direction", FormatVector(pattern->dir2->direction).c_str());
     dir2Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir2->spacingType).c_str());
     dir2Elem->SetAttribute("Spacing", pattern->dir2->spacing);
     dir2Elem->SetAttribute("Count", pattern->dir2->count);
@@ -3196,7 +3196,9 @@ void TinyXMLSerializer::LoadLinearPattern(XMLElement *element,
 
   // Dir1
   if (XMLElement *dir1Elem = element->FirstChildElement("Dir1")) {
-    dir1Elem->QueryBoolAttribute("Reverse", &pattern->dir1.reverse);
+    if (dir1Elem->Attribute("Direction")) {
+      pattern->dir1.direction = ParseVectorAttribute(dir1Elem, "Direction");
+    }
     if (const char *spacingTypeStr = dir1Elem->Attribute("SpacingType")) {
       pattern->dir1.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
     }
@@ -3210,7 +3212,9 @@ void TinyXMLSerializer::LoadLinearPattern(XMLElement *element,
   // Dir2
   if (XMLElement *dir2Elem = element->FirstChildElement("Dir2")) {
     CLinearPatternDir dir2;
-    dir2Elem->QueryBoolAttribute("Reverse", &dir2.reverse);
+    if (dir2Elem->Attribute("Direction")) {
+      dir2.direction = ParseVectorAttribute(dir2Elem, "Direction");
+    }
     if (const char *spacingTypeStr = dir2Elem->Attribute("SpacingType")) {
       dir2.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
     }
@@ -3254,7 +3258,9 @@ void TinyXMLSerializer::LoadCircularPattern(XMLElement *element,
 
   // Dir1
   if (XMLElement *dir1Elem = element->FirstChildElement("Dir1")) {
-    dir1Elem->QueryBoolAttribute("Reverse", &pattern->dir1.reverse);
+    if (dir1Elem->Attribute("Direction")) {
+      pattern->dir1.direction = ParseVectorAttribute(dir1Elem, "Direction");
+    }
     if (const char *spacingTypeStr = dir1Elem->Attribute("SpacingType")) {
       pattern->dir1.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
     }
@@ -3268,7 +3274,9 @@ void TinyXMLSerializer::LoadCircularPattern(XMLElement *element,
   // Dir2
   if (XMLElement *dir2Elem = element->FirstChildElement("Dir2")) {
     CLinearPatternDir dir2;
-    dir2Elem->QueryBoolAttribute("Reverse", &dir2.reverse);
+    if (dir2Elem->Attribute("Direction")) {
+      dir2.direction = ParseVectorAttribute(dir2Elem, "Direction");
+    }
     if (const char *spacingTypeStr = dir2Elem->Attribute("SpacingType")) {
       dir2.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
     }
