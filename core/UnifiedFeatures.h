@@ -88,7 +88,8 @@ struct CRefSubTopo : public CRefEntityBase {
    * @deprecated Legacy topology hint kept only for backward compatibility.
    * New read/write logic should not rely on this value for reference matching.
    */
-  [[deprecated("Legacy compatibility only; do not use TopologyIndex for new references.")]]
+  [[deprecated("Legacy compatibility only; do not use TopologyIndex for new "
+               "references.")]]
   int topologyIndex = -1;
 
   CRefSubTopo(RefType type = RefType::UNKNOWN) { refType = type; }
@@ -237,8 +238,8 @@ struct CSketchPoint : public CSketchSeg {
  *   可指向外部边、面、轴、点、基准面、其他草图段等。
  */
 enum class SketchConstraintRefKind {
-  SketchEntity,      ///< 当前草图内部图元，由 `sketchEntityLocalID` 定位
-  ExternalReference  ///< 草图外部引用对象，由 `refEntity` 定位
+  SketchEntity,     ///< 当前草图内部图元，由 `sketchEntityLocalID` 定位
+  ExternalReference ///< 草图外部引用对象，由 `refEntity` 定位
 };
 
 /**
@@ -260,11 +261,11 @@ enum class SketchConstraintRefKind {
  *   约束作用于线段中点，常用于中点约束或某些对称辅助语义。
  */
 enum class SketchConstraintSubEntity {
-  Whole,     ///< 整个实体
-  Start,     ///< 起点
-  End,       ///< 终点
-  Center,    ///< 圆心/中心点
-  Midpoint   ///< 中点
+  Whole,   ///< 整个实体
+  Start,   ///< 起点
+  End,     ///< 终点
+  Center,  ///< 圆心/中心点
+  Midpoint ///< 中点
 };
 
 /**
@@ -409,7 +410,8 @@ struct CSketchCSys {
   bool valid = false;
 
   bool IsValid() const {
-    if (!valid) return false;
+    if (!valid)
+      return false;
     CVector3D zCross = Cross(xDir, yDir);
     zCross.Normalize();
     CVector3D zDirNorm = zDir;
@@ -462,9 +464,9 @@ struct ThinWallOption {
  */
 struct SweepExtent {
   enum class Type {
-    VALUE,                  // 数值（Extrude: 深度 / Revolve: 角度，内部统一用弧度）
-    SYMMETRIC,              // 对称
-    THROUGH_ALL,            // 贯穿
+    VALUE,       // 数值（Extrude: 深度 / Revolve: 角度，内部统一用弧度）
+    SYMMETRIC,   // 对称
+    THROUGH_ALL, // 贯穿
     THROUGH_ALL_BOTH_SIDES, // 双向贯穿（保留给 Extrude 兼容）
     UP_TO_NEXT,             // 到下一面
     UP_TO_ENTITY,           // 到指定参考实体
@@ -513,7 +515,8 @@ struct CRevolveAxis {
   std::string referenceLocalID;
   std::shared_ptr<CRefEntityBase> referenceEntity;
   CPoint3D origin;
-  CVector3D direction; ///< 统一语义：特征正旋转方向；ReferenceEntity 保留原始几何方向
+  CVector3D
+      direction; ///< 统一语义：特征正旋转方向；ReferenceEntity 保留原始几何方向
 };
 
 /**
@@ -521,7 +524,7 @@ struct CRevolveAxis {
  */
 struct CRevolve : public CProfiledFeatureBase {
   CRevolveAxis axis;
-  SweepExtent extent1;              ///< Revolve 角度值统一使用弧度
+  SweepExtent extent1;                ///< Revolve 角度值统一使用弧度
   std::optional<SweepExtent> extent2; ///< Revolve 第二方向角度值统一使用弧度
 
   CRevolve() { featureType = FeatureType::Revolve; }
@@ -613,12 +616,7 @@ enum class FilletReferenceMode {
   FULL_ROUND_THREE_FACES
 };
 
-enum class FilletConicValueMode {
-  NONE = 0,
-  RHO,
-  RADIUS,
-  GENERIC_VALUE
-};
+enum class FilletConicValueMode { NONE = 0, RHO, RADIUS, GENERIC_VALUE };
 
 enum class FilletDriveType {
   UNKNOWN = 0,
@@ -683,11 +681,11 @@ struct CFillet : public CFeatureBase {
  */
 enum class ChamferMode {
   UNKNOWN = 0,
-  EQUAL_DISTANCE,    ///< 等距倒角
-  TWO_DISTANCES,     ///< 双距离倒角
-  TWO_OFFSETS,       ///< 双偏移倒角
-  DISTANCE_ANGLE,    ///< 距离 + 角度倒角
-  VERTEX_3DISTANCES  ///< 顶点倒角，三边距离
+  EQUAL_DISTANCE,   ///< 等距倒角
+  TWO_DISTANCES,    ///< 双距离倒角
+  TWO_OFFSETS,      ///< 双偏移倒角
+  DISTANCE_ANGLE,   ///< 距离 + 角度倒角
+  VERTEX_3DISTANCES ///< 顶点倒角，三边距离
 };
 
 /**
@@ -732,22 +730,23 @@ struct CChamfer : public CFeatureBase {
 
 // 厚度情况
 struct RibThicknessOption {
-  bool symmetric = true; // 是否对称
-  double thickness = 0.0; // 厚度值
+  bool symmetric = true;              // 是否对称
+  double thickness = 0.0;             // 厚度值
   std::optional<CVector3D> direction; // 如果不对称，提供具体方向值
 };
 
 // 材料情况
 struct RibMaterialOption {
   CVector3D direction; // 材料方向
-  CPoint3D referencePoint; // 标记面，方向值是该点处的法向相反方向，辅助确定材料方向
+  CPoint3D
+      referencePoint; // 标记面，方向值是该点处的法向相反方向，辅助确定材料方向
 };
 
 // Rib特征定义
 struct CRib : public CFeatureBase {
-  std::string sketchID; // 草图ID
+  std::string sketchID;               // 草图ID
   RibThicknessOption thicknessOption; // 厚度情况
-  RibMaterialOption materialOption; // 材料情况
+  RibMaterialOption materialOption;   // 材料情况
 
   CRib() { featureType = FeatureType::Rib; }
 };
@@ -759,26 +758,28 @@ struct CRib : public CFeatureBase {
  */
 enum class ShellThicknessDirection {
   Unknown = 0,
-  Inward,   ///< 内侧抽壳：向实体内部偏移厚度
-  Outward   ///< 外侧抽壳：向实体外部偏移厚度
+  Inward, ///< 内侧抽壳：向实体内部偏移厚度
+  Outward ///< 外侧抽壳：向实体外部偏移厚度
 };
 
 /**
  * @brief 壳特征中具有独立厚度的面。
  *
  * 例如 Creo `PRO_E_ST_SHELL_LOCL_LIST` 中的单条多厚度记录，
- * 或 SW `IShellFeatureData` 中 `MultipleThicknessFaces` 与 `GetMultipleThicknessAtIndex` 的组合。
+ * 或 SW `IShellFeatureData` 中 `MultipleThicknessFaces` 与
+ * `GetMultipleThicknessAtIndex` 的组合。
  */
 struct CShellThicknessFace {
-  std::shared_ptr<CRefFace> face;  ///< 具有独立厚度的面引用
-  double thickness = 0.0;           ///< 该面的独立厚度值（跟随模型单位）
+  std::shared_ptr<CRefFace> face; ///< 具有独立厚度的面引用
+  double thickness = 0.0;         ///< 该面的独立厚度值（跟随模型单位）
 };
 
 /**
  * @brief 壳特征（抽壳）。
  *
  * 壳特征属于非草图驱动的面操作类特征，直接引用拓扑面（`CRefFace`），
- * 与 `CFillet` / `CChamfer` 同属一类（继承 `CFeatureBase`，不继承 `CProfiledFeatureBase`）。
+ * 与 `CFillet` / `CChamfer` 同属一类（继承 `CFeatureBase`，不继承
+ * `CProfiledFeatureBase`）。
  *
  * 核心参数（跨系统共同）：
  * - `thickness` + `direction`：默认壳壁厚度与偏移方向
@@ -791,15 +792,19 @@ struct CShellThicknessFace {
  */
 struct CShell : public CFeatureBase {
   // ---- 核心参数（跨系统共同） ----
-  double thickness = 0.0;                                   ///< 默认壳壁厚度
-  ShellThicknessDirection direction{ShellThicknessDirection::Unknown}; ///< 抽壳方向
+  double thickness = 0.0; ///< 默认壳壁厚度
+  ShellThicknessDirection direction{
+      ShellThicknessDirection::Unknown}; ///< 抽壳方向
 
-  std::vector<std::shared_ptr<CRefFace>> facesToRemove;     ///< 被移除的面（开口面）
-  std::vector<CShellThicknessFace> thicknessFaces;          ///< 非默认厚度的面
+  std::vector<std::shared_ptr<CRefFace>>
+      facesToRemove;                               ///< 被移除的面（开口面）
+  std::vector<CShellThicknessFace> thicknessFaces; ///< 非默认厚度的面
 
   // ---- 系统专有扩展（Phase-1 可选） ----
-  std::shared_ptr<CRefEntityBase> targetBody;               ///< 目标实体引用（Creo: PRO_E_BODY_SELECT）
-  std::vector<std::shared_ptr<CRefFace>> excludedFaces;     ///< 排除曲面（Creo: PRO_E_STD_SURF_COLLECTION_APPL）
+  std::shared_ptr<CRefEntityBase>
+      targetBody; ///< 目标实体引用（Creo: PRO_E_BODY_SELECT）
+  std::vector<std::shared_ptr<CRefFace>>
+      excludedFaces; ///< 排除曲面（Creo: PRO_E_STD_SURF_COLLECTION_APPL）
 
   CShell() { featureType = FeatureType::Shell; }
 };
@@ -809,30 +814,33 @@ struct CShell : public CFeatureBase {
  */
 enum class DraftType {
   Unknown = 0,
-  NeutralPlane,          ///< 中性面拔模 (SW: Neutral Plane, Creo: Hinge == PLANE)
-  PartingLine           ///< 分型线拔模 (SW: Parting Line, Creo: Hinge == CURVE)
+  NeutralPlane, ///< 中性面拔模 (SW: Neutral Plane, Creo: Hinge == PLANE)
+  PartingLine   ///< 分型线拔模 (SW: Parting Line, Creo: Hinge == CURVE)
 };
 
 /**
  * @brief 拔模特征 (CDraft)。
  *
- * 仅包含 SolidWorks 和 Creo 均能原生、无损支持的几何特征参数（通用最小标准结构）。
+ * 仅包含 SolidWorks 和 Creo
+ * 均能原生、无损支持的几何特征参数（通用最小标准结构）。
  */
 struct CDraft : public CFeatureBase {
-  DraftType draftType{DraftType::Unknown};                  ///< 拔模类型
-  
-  std::shared_ptr<CRefEntityBase> pullDirectionRef;        ///< 拔模/拉伸开模方向参考
-  bool reversePullDirection = false;                        ///< 方向是否反向
+  DraftType draftType{DraftType::Unknown}; ///< 拔模类型
 
-  std::vector<std::shared_ptr<CRefFace>> draftFaces;        ///< 被拔模的目标面集合
-  
-  std::shared_ptr<CRefEntityBase> neutralPlaneRef;         ///< 中性面参考 (用于中性面拔模)
-  std::vector<std::shared_ptr<CRefEntityBase>> partingLines; ///< 分型线参考 (用于分型线/台阶拔模)
-  
-  double draftAngle = 0.0;                                  ///< 第一侧/主侧拔模角度 (弧度制)
+  std::shared_ptr<CRefEntityBase> pullDirectionRef; ///< 拔模/拉伸开模方向参考
+  bool reversePullDirection = false;                ///< 方向是否反向
 
-  bool isTwoSided = false;                                  ///< 是否为双侧拔模
-  double draftAngleSide2 = 0.0;                             ///< 第二侧拔模角度 (弧度制)
+  std::vector<std::shared_ptr<CRefFace>> draftFaces; ///< 被拔模的目标面集合
+
+  std::shared_ptr<CRefEntityBase>
+      neutralPlaneRef; ///< 中性面参考 (用于中性面拔模)
+  std::vector<std::shared_ptr<CRefEntityBase>>
+      partingLines; ///< 分型线参考 (用于分型线/台阶拔模)
+
+  double draftAngle = 0.0; ///< 第一侧/主侧拔模角度 (弧度制)
+
+  bool isTwoSided = false;      ///< 是否为双侧拔模
+  double draftAngleSide2 = 0.0; ///< 第二侧拔模角度 (弧度制)
 
   std::shared_ptr<CRefEntityBase> partingSplitSketchRef;
   std::vector<std::shared_ptr<CRefFace>> partingSplitTargetFaces;
@@ -841,7 +849,6 @@ struct CDraft : public CFeatureBase {
 
   CDraft() { featureType = FeatureType::Draft; }
 };
-
 
 enum class PlaneMethod {
   UNKNOWN = 0,
@@ -899,13 +906,13 @@ struct CDatumPlane : public CFeatureBase {
   std::vector<PlaneConstraint> constraints;
   std::vector<std::shared_ptr<CRefEntityBase>> referenceEntities;
   // Optional geometry supplement extracted from source CAD. Absence means the
-  // source path did not provide stable plane geometry; zero values remain valid.
+  // source path did not provide stable plane geometry; zero values remain
+  // valid.
   std::optional<CPoint3D> projectedOrigin;
   std::optional<CVector3D> normal;
 
   CDatumPlane() { featureType = FeatureType::DatumPlane; }
 };
-
 
 /**
  * @brief 阵列作用域：特征、拓扑面、还是整个实体
@@ -931,7 +938,7 @@ struct CPatternIndex {
   int dir1Index = 0; // 方向 1 索引（从0开始）
   int dir2Index = 0; // 方向 2 索引（如果不启用方向2，则为0）
 
-  bool operator==(const CPatternIndex& other) const {
+  bool operator==(const CPatternIndex &other) const {
     return dir1Index == other.dir1Index && dir2Index == other.dir2Index;
   }
 };
@@ -940,12 +947,14 @@ struct CPatternIndex {
  * @brief 线性阵列的方向控制参数
  */
 struct CLinearPatternDir {
-  std::shared_ptr<CRefEntityBase> directionRef; ///< 方向参考（边、轴、面法线等）
-  CVector3D direction{0.0, 0.0, 1.0};           ///< 绝对方向物理向量 (归一化)
-  
+  std::shared_ptr<CRefEntityBase>
+      directionRef;                   ///< 方向参考（边、轴、面法线等）
+  CVector3D direction{0.0, 0.0, 1.0}; ///< 绝对方向物理向量 (归一化)
+
   PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
-  double spacing = 0.0;                         ///< 线性间距值（按模型单位，SW提取时需从米转为模型单位）
-  int count = 1;                                ///< 包含源特征在内的实例总数
+  double spacing =
+      0.0;       ///< 线性间距值（按模型单位，SW提取时需从米转为模型单位）
+  int count = 1; ///< 包含源特征在内的实例总数
 };
 
 /**
@@ -954,12 +963,14 @@ struct CLinearPatternDir {
 struct CLinearPattern : public CFeatureBase {
   CLinearPatternDir dir1;
   std::optional<CLinearPatternDir> dir2;
-  
-  bool patternSeedOnly = false; ///< 方向二是否仅对“源特征”进行阵列（而不阵列方向1产生的拷贝）
-  
+
+  bool patternSeedOnly =
+      false; ///< 方向二是否仅对“源特征”进行阵列（而不阵列方向1产生的拷贝）
+
   PatternScope scope = PatternScope::FEATURES;
-  std::vector<std::shared_ptr<CRefEntityBase>> seedObjects; ///< 特征、面、或实体的引用列表
-  
+  std::vector<std::shared_ptr<CRefEntityBase>>
+      seedObjects; ///< 特征、面、或实体的引用列表
+
   std::vector<CPatternIndex> skippedInstances; ///< 跳过的阵列实例索引列表
   bool geometryPattern = false;                ///< 是否启用几何阵列（加速复制）
 
@@ -970,12 +981,14 @@ struct CLinearPattern : public CFeatureBase {
  * @brief 圆周阵列的旋转方向参数
  */
 struct CCircularPatternDir {
-  std::shared_ptr<CRefEntityBase> axisRef; ///< 旋转轴参考（基准轴、线性边、圆柱面等）
-  CVector3D direction{0.0, 0.0, 1.0};      ///< 绝对旋转轴物理向量 (归一化)
+  std::shared_ptr<CRefEntityBase>
+      axisRef; ///< 旋转轴参考（基准轴、线性边、圆柱面等）
+  CVector3D direction{0.0, 0.0, 1.0}; ///< 绝对旋转轴物理向量 (归一化)
+  CPoint3D origin{0.0, 0.0, 0.0};     ///< 旋转轴原点（绝对坐标）
 
   PatternSpacingType spacingType = PatternSpacingType::PITCH_AND_COUNT;
-  double angle = 0.0;                      ///< 旋转角（统一使用弧度制，Creo和UG的度需转换）
-  int count = 1;                           ///< 实例数量
+  double angle = 0.0; ///< 旋转角（统一使用弧度制，Creo和UG的度需转换）
+  int count = 1;      ///< 实例数量
 };
 
 /**
@@ -988,7 +1001,7 @@ struct CCircularPattern : public CFeatureBase {
 
   PatternScope scope = PatternScope::FEATURES;
   std::vector<std::shared_ptr<CRefEntityBase>> seedObjects;
-  
+
   std::vector<CPatternIndex> skippedInstances;
   bool geometryPattern = false;
 
@@ -999,11 +1012,12 @@ struct CCircularPattern : public CFeatureBase {
  * @brief 统一镜像特征
  */
 struct CMirrorPattern : public CFeatureBase {
-  std::shared_ptr<CRefEntityBase> mirrorPlaneRef; ///< 镜像平面（基准面、实体平面）
-  
+  std::shared_ptr<CRefEntityBase>
+      mirrorPlaneRef; ///< 镜像平面（基准面、实体平面）
+
   PatternScope scope = PatternScope::FEATURES;
   std::vector<std::shared_ptr<CRefEntityBase>> seedObjects;
-  
+
   bool geometryPattern = false;
 
   CMirrorPattern() { featureType = FeatureType::MirrorPattern; }

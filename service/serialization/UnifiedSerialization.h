@@ -532,6 +532,7 @@ template <class Archive> void serialize(Archive &ar, CLinearPattern &pat) {
 template <class Archive> void serialize(Archive &ar, CCircularPatternDir &dir) {
   ar(cereal::make_nvp("AxisRef", dir.axisRef),
      cereal::make_nvp("Direction", dir.direction),
+     cereal::make_nvp("Origin", dir.origin),
      cereal::make_nvp("SpacingType", dir.spacingType),
      cereal::make_nvp("Angle", dir.angle),
      cereal::make_nvp("Count", dir.count));

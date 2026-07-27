@@ -3135,6 +3135,7 @@ void TinyXMLSerializer::SaveCircularPattern(XMLDocument &doc, XMLElement *elemen
   // Dir1
   XMLElement *dir1Elem = doc.NewElement("Dir1");
   dir1Elem->SetAttribute("Direction", FormatVector(pattern->dir1.direction).c_str());
+  dir1Elem->SetAttribute("Origin", FormatPoint(pattern->dir1.origin).c_str());
   dir1Elem->SetAttribute("SpacingType", PatternSpacingTypeToString(pattern->dir1.spacingType).c_str());
   dir1Elem->SetAttribute("Angle", pattern->dir1.angle);
   dir1Elem->SetAttribute("Count", pattern->dir1.count);
@@ -3260,6 +3261,9 @@ void TinyXMLSerializer::LoadCircularPattern(XMLElement *element,
   if (XMLElement *dir1Elem = element->FirstChildElement("Dir1")) {
     if (dir1Elem->Attribute("Direction")) {
       pattern->dir1.direction = ParseVectorAttribute(dir1Elem, "Direction");
+    }
+    if (dir1Elem->Attribute("Origin")) {
+      pattern->dir1.origin = ParsePointAttribute(dir1Elem, "Origin");
     }
     if (const char *spacingTypeStr = dir1Elem->Attribute("SpacingType")) {
       pattern->dir1.spacingType = PatternSpacingTypeFromString(spacingTypeStr);
