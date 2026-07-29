@@ -7,6 +7,7 @@ build_shared/
 .cache/
 tmp/
 **/tmp/
+vcpkg_installed/
 
 **/demo/
 

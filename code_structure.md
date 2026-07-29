@@ -1,5 +1,18 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 独立 STEP 终态比较器
+
+- `tools/step_compare/StepCompare.h/.cpp`：STEP 读取、单位归一到毫米、单闭合
+  Solid 门禁、属性审计、双向 `BRepAlgoAPI_Cut` 和 JSON 结果。
+- `tools/step_compare/main.cpp`：`cad_step_compare` 命令行入口及固定退出码。
+- `tests/step_compare_tests.cpp`：箱体、平移、尺寸变化、碎平面表达、多实体和
+  纯曲面回归。
+- `vcpkg.json`：锁定 OCCT 7.9.3；仅在
+  `CADEXCHANGE_BUILD_STEP_COMPARE=ON` 时查找并链接 OCCT。
+
+该工具不能并入 `cadexchange` 静态库，避免 SolidWorks、Creo、NX 桥接被迫
+链接 OCCT。
+
 > 说明：本文仅基于 `E:\MyProject\CADExchange` 当前代码与目录，不基于历史设计假设。  
 > 术语与代码一致：`UnifiedModel`、`Builder`、`Accessor`、`SweepExtent`、`SaveModel/LoadModel` 等。
 
@@ -801,4 +814,3 @@ graph TD
 - Revolve 角度值内部按弧度处理（Accessor/测试均按该语义）。  
 - `SaveModel/LoadModel` 默认挂接 `Validate()`（除显式 `skipValidation=true`）。  
 - `TopologyIndex` 在引用体系中保留为兼容字段，非新逻辑主判定键（代码注释已明确）。
-
