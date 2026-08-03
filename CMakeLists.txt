@@ -84,6 +84,12 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
     add_executable(test_geom examples/test_geom.cpp)
     target_link_libraries(test_geom PRIVATE cadexchange)
 
+    add_executable(cad_step_compare examples/cad_step_compare.cpp)
+    target_link_libraries(cad_step_compare PRIVATE cadexchange)
+    set_target_properties(cad_step_compare PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+    )
+
     # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
     # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
 
