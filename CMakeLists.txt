@@ -86,12 +86,6 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
     add_executable(test_geom examples/test_geom.cpp)
     target_link_libraries(test_geom PRIVATE cadexchange)
 
-    add_executable(cad_step_compare examples/cad_step_compare.cpp)
-    target_link_libraries(cad_step_compare PRIVATE cadexchange)
-    set_target_properties(cad_step_compare PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
-    )
-
     # add_executable(BuilderDemoAdvanced examples/BuilderDemoAdvanced.cpp)
     # target_link_libraries(BuilderDemoAdvanced PRIVATE cadexchange)
 
@@ -100,20 +94,36 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
 endif()
 
 if(CADEXCHANGE_BUILD_STEP_COMPARE)
-    find_package(OpenCASCADE CONFIG REQUIRED)
+    find_package(OpenCASCADE CONFIG QUIET)
 
-    add_library(cad_step_compare_core STATIC
-        tools/step_compare/StepCompare.cpp
-    )
-    target_include_directories(cad_step_compare_core
-        PUBLIC
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/step_compare
-        PRIVATE
-            ${OpenCASCADE_INCLUDE_DIR}
-            ${OpenCASCADE_INCLUDE_DIRS}
-            ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
-    )
-    target_link_libraries(cad_step_compare_core PRIVATE ${OpenCASCADE_LIBRARIES})
+    if(OpenCASCADE_FOUND)
+        message(STATUS "OpenCASCADE found: Enabling full OCCT B-Rep & Boolean step compare")
+        add_library(cad_step_compare_core STATIC
+            tools/step_compare/StepCompare.cpp
+        )
+        target_compile_definitions(cad_step_compare_core PUBLIC CADEXCHANGE_HAS_OCCT)
+        target_include_directories(cad_step_compare_core
+            PUBLIC
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/step_compare
+            PRIVATE
+                ${OpenCASCADE_INCLUDE_DIR}
+                ${OpenCASCADE_INCLUDE_DIRS}
+                ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+        )
+        target_link_libraries(cad_step_compare_core PRIVATE ${OpenCASCADE_LIBRARIES})
+    else()
+        message(STATUS "OpenCASCADE not found: Enabling light-weight STEP parser & metadata step compare")
+        add_library(cad_step_compare_core STATIC
+            tools/step_compare/StepCompareFallback.cpp
+        )
+        target_include_directories(cad_step_compare_core
+            PUBLIC
+                ${CMAKE_CURRENT_SOURCE_DIR}/tools/step_compare
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+        )
+    endif()
+
     set_target_properties(cad_step_compare_core PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
@@ -126,7 +136,7 @@ if(CADEXCHANGE_BUILD_STEP_COMPARE)
     )
 
     include(CTest)
-    if(BUILD_TESTING)
+    if(BUILD_TESTING AND OpenCASCADE_FOUND)
         add_executable(cad_step_compare_tests
             tests/step_compare_tests.cpp
         )
