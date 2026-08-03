@@ -21,6 +21,8 @@ endif()
 
 option(CADEXCHANGE_BUILD_EXAMPLES "Build CADExchange example executables" ON)
 option(CADEXCHANGE_BUILD_PYTHON_BINDINGS "Build CADExchange Python bindings" OFF)
+option(CADEXCHANGE_BUILD_STEP_COMPARE
+       "Build the independent OCCT STEP final-solid comparator" OFF)
 
 # Include directories
 include_directories(
@@ -95,6 +97,57 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
 
     # add_executable(DirectModelDemo examples/DirectModelDemo.cpp)
     # target_link_libraries(DirectModelDemo PRIVATE cadexchange)
+endif()
+
+if(CADEXCHANGE_BUILD_STEP_COMPARE)
+    find_package(OpenCASCADE CONFIG REQUIRED)
+
+    add_library(cad_step_compare_core STATIC
+        tools/step_compare/StepCompare.cpp
+    )
+    target_include_directories(cad_step_compare_core
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/step_compare
+        PRIVATE
+            ${OpenCASCADE_INCLUDE_DIR}
+            ${OpenCASCADE_INCLUDE_DIRS}
+            ${CMAKE_CURRENT_SOURCE_DIR}/thirdParty
+    )
+    target_link_libraries(cad_step_compare_core PRIVATE ${OpenCASCADE_LIBRARIES})
+    set_target_properties(cad_step_compare_core PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+
+    add_executable(cad_step_compare tools/step_compare/main.cpp)
+    target_link_libraries(cad_step_compare PRIVATE cad_step_compare_core)
+    set_target_properties(cad_step_compare PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+    )
+
+    include(CTest)
+    if(BUILD_TESTING)
+        add_executable(cad_step_compare_tests
+            tests/step_compare_tests.cpp
+        )
+        target_include_directories(cad_step_compare_tests PRIVATE
+            ${OpenCASCADE_INCLUDE_DIR}
+            ${OpenCASCADE_INCLUDE_DIRS}
+        )
+        target_link_libraries(cad_step_compare_tests
+            PRIVATE
+                cad_step_compare_core
+                ${OpenCASCADE_LIBRARIES}
+        )
+        set_target_properties(cad_step_compare_tests PROPERTIES
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        )
+        add_test(
+            NAME cad_step_compare_tests
+            COMMAND cad_step_compare_tests
+                    "${CMAKE_CURRENT_SOURCE_DIR}/../tmp/geometry_compare/unit"
+        )
+    endif()
 endif()
 
 if(CADEXCHANGE_BUILD_PYTHON_BINDINGS)

@@ -6,6 +6,13 @@ CADExchange
 
 # CADExchange
 
+## STEP / OCCT 终态实体比较
+
+`cad_step_compare` 是可选的独立工具，不属于 `cadexchange` 静态库。它读取两个
+STEP，要求每侧恰好一个合法闭合实体，再以体积、质心、包围盒和双向布尔差判断
+终态几何。构建及使用说明见父仓库
+`script/STEP终态几何对比MVP.md`。
+
 `CADExchange` 是一个轻量级的跨 CAD 平台统一模型框架，核心目标是
 用统一数据结构（`UnifiedModel` + `UnifiedFeatures`）封装草图、拉伸、旋转
 等常见几何特征，并提供多种序列化路径（TinyXML 为人类可读、

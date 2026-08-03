@@ -1,0 +1,128 @@
+#include "StepCompare.h"
+
+#include <algorithm>
+#include <filesystem>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+namespace {
+
+struct CliOptions {
+  std::filesystem::path reference;
+  std::filesystem::path candidate;
+  std::filesystem::path output;
+  cadstep::CompareConfig config;
+  bool help = false;
+};
+
+void PrintUsage() {
+  std::cout << "Usage: cad_step_compare"
+               " --reference <source.step>"
+               " --candidate <target.step>"
+               " --output <directory>"
+               " [--distance-tol-mm 0.01]"
+               " [--abs-volume-tol-mm3 0.000001]"
+               " [--rel-volume-tol 1e-8]\n";
+}
+
+double ParseNumber(const std::wstring &text, const char *name) {
+  std::size_t parsed = 0;
+  const double value = std::stod(text, &parsed);
+  if (parsed != text.size()) {
+    throw std::invalid_argument(std::string("invalid ") + name);
+  }
+  return value;
+}
+
+CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
+  CliOptions options;
+  for (std::size_t index = 0; index < arguments.size(); ++index) {
+    const std::wstring &argument = arguments[index];
+    const auto requireValue = [&]() -> const std::wstring & {
+      if (index + 1 >= arguments.size()) {
+        throw std::invalid_argument("missing value for command-line option");
+      }
+      return arguments[++index];
+    };
+
+    if (argument == L"--reference") {
+      options.reference = requireValue();
+    } else if (argument == L"--candidate") {
+      options.candidate = requireValue();
+    } else if (argument == L"--output") {
+      options.output = requireValue();
+    } else if (argument == L"--distance-tol-mm") {
+      options.config.distanceToleranceMm =
+          ParseNumber(requireValue(), "--distance-tol-mm");
+    } else if (argument == L"--abs-volume-tol-mm3") {
+      options.config.absoluteVolumeToleranceMm3 =
+          ParseNumber(requireValue(), "--abs-volume-tol-mm3");
+    } else if (argument == L"--rel-volume-tol") {
+      options.config.relativeVolumeTolerance =
+          ParseNumber(requireValue(), "--rel-volume-tol");
+    } else if (argument == L"--help" || argument == L"-h") {
+      options.help = true;
+    } else {
+      throw std::invalid_argument("unknown command-line option");
+    }
+  }
+
+  if (!options.help && (options.reference.empty() ||
+                        options.candidate.empty() || options.output.empty())) {
+    throw std::invalid_argument(
+        "--reference, --candidate, and --output are required");
+  }
+  return options;
+}
+
+int Run(const std::vector<std::wstring> &arguments) {
+  CliOptions options;
+  try {
+    options = ParseArguments(arguments);
+  } catch (const std::exception &error) {
+    std::cerr << "INTERNAL_ERROR: " << error.what() << '\n';
+    PrintUsage();
+    return cadstep::ExitCode(cadstep::CompareStatus::InternalError);
+  }
+
+  if (options.help) {
+    PrintUsage();
+    return 0;
+  }
+
+  cadstep::CompareResult result = cadstep::CompareStepFiles(
+      options.reference, options.candidate, options.config);
+  std::string writeError;
+  if (!cadstep::WriteResultJson(options.output, result, writeError)) {
+    std::cerr << "INTERNAL_ERROR: " << writeError << '\n';
+    return cadstep::ExitCode(cadstep::CompareStatus::InternalError);
+  }
+
+  std::cout << cadstep::ToJson(result);
+  return cadstep::ExitCode(result.status);
+}
+
+} // namespace
+
+#ifdef _WIN32
+int wmain(int argc, wchar_t **argv) {
+  std::vector<std::wstring> arguments;
+  arguments.reserve(static_cast<std::size_t>(std::max(0, argc - 1)));
+  for (int index = 1; index < argc; ++index) {
+    arguments.emplace_back(argv[index]);
+  }
+  return Run(arguments);
+}
+#else
+int main(int argc, char **argv) {
+  std::vector<std::wstring> arguments;
+  arguments.reserve(static_cast<std::size_t>(std::max(0, argc - 1)));
+  for (int index = 1; index < argc; ++index) {
+    const std::string value = argv[index];
+    arguments.emplace_back(value.begin(), value.end());
+  }
+  return Run(arguments);
+}
+#endif
