@@ -93,7 +93,7 @@ int Run(const std::vector<std::wstring> &arguments) {
   }
 
   cadstep::CompareResult result = cadstep::CompareStepFiles(
-      options.reference, options.candidate, options.config);
+      options.reference, options.candidate, options.config, options.output);
   std::string writeError;
   if (!cadstep::WriteResultJson(options.output, result, writeError)) {
     std::cerr << "INTERNAL_ERROR: " << writeError << '\n';

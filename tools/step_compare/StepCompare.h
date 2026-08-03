@@ -75,7 +75,8 @@ struct CompareResult {
 
 CompareResult CompareStepFiles(const std::filesystem::path &reference,
                                const std::filesystem::path &candidate,
-                               const CompareConfig &config);
+                               const CompareConfig &config,
+                               const std::filesystem::path &outputDirectory = "");
 
 const char *ToString(CompareStatus status);
 int ExitCode(CompareStatus status);

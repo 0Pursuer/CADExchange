@@ -4,12 +4,14 @@
 #include <BRepBndLib.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
 #include <IFSelect_PrintCount.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <STEPControl_Reader.hxx>
+#include <StlAPI_Writer.hxx>
 #include <Standard_Failure.hxx>
 #include <TColStd_SequenceOfAsciiString.hxx>
 #include <TopExp_Explorer.hxx>
@@ -273,7 +275,17 @@ double MaximumBoundsDifference(const Bounds3 &left, const Bounds3 &right) {
                    std::abs(left.maximum.z - right.maximum.z)});
 }
 
-DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool) {
+void ExportShapeStl(const TopoDS_Shape &shape, const std::filesystem::path &outPath) {
+  if (shape.IsNull()) return;
+  try {
+    BRepMesh_IncrementalMesh mesh(shape, 0.1);
+    mesh.Perform();
+    StlAPI_Writer writer;
+    writer.Write(shape, outPath.string().c_str());
+  } catch (...) {}
+}
+
+DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool, const std::filesystem::path &stlOutPath = "") {
   DifferenceAudit result;
   BRepAlgoAPI_Cut cut;
   TopTools_ListOfShape arguments;
@@ -308,6 +320,10 @@ DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool) {
     BRepGProp::VolumeProperties(difference, properties, Standard_True,
                                 Standard_False, Standard_False);
     result.volumeMm3 = std::abs(properties.Mass());
+
+    if (!stlOutPath.empty()) {
+      ExportShapeStl(difference, stlOutPath);
+    }
   }
   return result;
 }
@@ -364,7 +380,8 @@ CompareStatus FailedLoadStatus(LoadClass classification) {
 
 CompareResult CompareStepFiles(const std::filesystem::path &reference,
                                const std::filesystem::path &candidate,
-                               const CompareConfig &config) {
+                               const CompareConfig &config,
+                               const std::filesystem::path &outputDirectory) {
   CompareResult result;
   result.thresholds = config;
   result.reference.path = PathText(reference);
@@ -389,12 +406,14 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
 
     if (referenceSolid.classification != LoadClass::Ready) {
       result.status = FailedLoadStatus(referenceSolid.classification);
-      result.reason = "reference: " + referenceSolid.reason;
+      result.reason =
+          "reference shape load failed: " + referenceSolid.audit.loadDiagnostics;
       return result;
     }
     if (candidateSolid.classification != LoadClass::Ready) {
       result.status = FailedLoadStatus(candidateSolid.classification);
-      result.reason = "candidate: " + candidateSolid.reason;
+      result.reason =
+          "candidate shape load failed: " + candidateSolid.audit.loadDiagnostics;
       return result;
     }
 
@@ -411,8 +430,16 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     result.maximumBoundsDifferenceMm = MaximumBoundsDifference(
         referenceSolid.audit.boundsMm, candidateSolid.audit.boundsMm);
 
-    result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid);
-    result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid);
+    if (!outputDirectory.empty()) {
+      std::error_code ec;
+      std::filesystem::create_directories(outputDirectory, ec);
+      ExportShapeStl(referenceSolid.solid, outputDirectory / "reference_base.stl");
+      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid, outputDirectory / "missing_material.stl");
+      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid, outputDirectory / "added_material.stl");
+    } else {
+      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid);
+      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid);
+    }
     if (!result.missingMaterial.succeeded || !result.addedMaterial.succeeded) {
       result.status = CompareStatus::Indeterminate;
       result.reason =
