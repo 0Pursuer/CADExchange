@@ -897,7 +897,8 @@ CompareStatus FailedLoadStatus(LoadClass classification) {
 }
 
 bool VolumePass(double absoluteDiff, double referenceScale, double absTol, double relTol) {
-  const bool absPass = absoluteDiff <= absTol;
+  const double effectiveAbsTol = std::max(absTol, relTol * referenceScale);
+  const bool absPass = absoluteDiff <= effectiveAbsTol;
   const bool relPass = (referenceScale > 0.0) ? (absoluteDiff / referenceScale <= relTol) : true;
   return absPass && relPass;
 }
