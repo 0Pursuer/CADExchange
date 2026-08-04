@@ -33,18 +33,339 @@
 #include <gp_Pnt.hxx>
 #include <json/single_include/nlohmann/json.hpp>
 
+#include <GCPnts_QuasiUniformDeflection.hxx>
+#include <Poly_Triangulation.hxx>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
-#include <fstream>
-#include <iomanip>
+namespace cadstep {
+
+int FindShapeIndex(const TopTools_IndexedMapOfShape &shapeMap, const TopoDS_Shape &target) {
+  for (int i = 1; i <= shapeMap.Extent(); ++i) {
+    if (shapeMap(i).IsSame(target)) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+int SurfaceTypeCode(const std::string &type) {
+  if (type == "PLANE") return 0;
+  if (type == "CYLINDER") return 1;
+  if (type == "CONE") return 2;
+  if (type == "SPHERE") return 3;
+  if (type == "TORUS") return 4;
+  if (type == "BSPLINE") return 5;
+  return 6;
+}
+
+int CurveTypeCode(const std::string &type) {
+  if (type == "LINE") return 0;
+  if (type == "CIRCLE") return 1;
+  if (type == "ELLIPSE") return 2;
+  if (type == "BSPLINE") return 3;
+  return 4;
+}
+
+int MatchStatusCode(MatchStatus status) {
+  switch (status) {
+    case MatchStatus::Matched: return 0;
+    case MatchStatus::Unmatched: return 1;
+    case MatchStatus::Ambiguous: return 2;
+    default: return 3;
+  }
+}
+
+bool ExportFacesVtp(const TopoDS_Shape &solid,
+                    const TopTools_IndexedMapOfShape &normalizedFaces,
+                    const std::vector<NormalizedFaceInfo> &faceInfos,
+                    const MatchCollection &faceMatches,
+                    EntitySide side,
+                    const std::filesystem::path &outputPath) {
+  if (solid.IsNull() || normalizedFaces.IsEmpty()) return false;
+
+  std::map<int, int> matchStatusMap;
+  for (const auto &item : faceMatches.items) {
+    std::string id = (side == EntitySide::Reference) ? item.referenceId : item.candidateId;
+    if (!id.empty()) {
+      int idx = 0;
+      size_t pos = id.find_last_of(':');
+      if (pos != std::string::npos) {
+        try {
+          idx = std::stoi(id.substr(pos + 1));
+        } catch (...) {}
+      }
+      if (idx > 0) {
+        matchStatusMap[idx] = MatchStatusCode(item.status);
+      }
+    }
+  }
+
+  std::map<int, NormalizedFaceInfo> infoMap;
+  for (const auto &info : faceInfos) {
+    infoMap[info.visualIndex] = info;
+  }
+
+  BRepMesh_IncrementalMesh mesh(solid, 0.05, Standard_False, 0.5, Standard_True);
+
+  struct Point3D { double x, y, z; };
+  struct Triangle { int p0, p1, p2; };
+
+  std::vector<Point3D> points;
+  std::vector<Triangle> polys;
+  std::vector<int> cellEntityIdx;
+  std::vector<int> cellMatchStatus;
+  std::vector<int> cellGeomType;
+  std::vector<int> cellSourceCount;
+  std::vector<int> cellSideCode;
+
+  int sideCodeVal = (side == EntitySide::Reference) ? 0 : 1;
+
+  for (int i = 1; i <= normalizedFaces.Extent(); ++i) {
+    const TopoDS_Face face = TopoDS::Face(normalizedFaces(i));
+    TopLoc_Location loc;
+    Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
+    if (tri.IsNull() || tri->NbTriangles() == 0) continue;
+
+    const gp_Trsf trsf = loc.Transformation();
+    const bool isReversed = (face.Orientation() == TopAbs_REVERSED);
+
+    int startPtIdx = static_cast<int>(points.size());
+    for (int p = 1; p <= tri->NbNodes(); ++p) {
+      gp_Pnt pt = tri->Node(p).Transformed(trsf);
+      points.push_back({pt.X(), pt.Y(), pt.Z()});
+    }
+
+    int matchStatus = matchStatusMap.count(i) ? matchStatusMap[i] : 1;
+    int geomTypeCode = infoMap.count(i) ? SurfaceTypeCode(infoMap[i].surfaceType) : 6;
+    int sourceCount = infoMap.count(i) ? infoMap[i].sourceCount : 1;
+
+    for (int t = 1; t <= tri->NbTriangles(); ++t) {
+      int n1, n2, n3;
+      tri->Triangle(t).Get(n1, n2, n3);
+      if (isReversed) {
+        std::swap(n2, n3);
+      }
+      polys.push_back({startPtIdx + n1 - 1, startPtIdx + n2 - 1, startPtIdx + n3 - 1});
+      cellEntityIdx.push_back(i);
+      cellMatchStatus.push_back(matchStatus);
+      cellGeomType.push_back(geomTypeCode);
+      cellSourceCount.push_back(sourceCount);
+      cellSideCode.push_back(sideCodeVal);
+    }
+  }
+
+  if (points.empty()) return false;
+
+  std::ofstream out(outputPath);
+  if (!out.is_open()) return false;
+
+  out << "<?xml version=\"1.0\"?>\n";
+  out << "<VTKFile type=\"PolyData\" version=\"0.1\" byte_order=\"LittleEndian\">\n";
+  out << "  <PolyData>\n";
+  out << "    <Piece NumberOfPoints=\"" << points.size() << "\" NumberOfVerts=\"0\" NumberOfLines=\"0\" NumberOfStrips=\"0\" NumberOfPolys=\"" << polys.size() << "\">\n";
+  out << "      <Points>\n";
+  out << "        <DataArray type=\"Float64\" Name=\"Points\" NumberOfComponents=\"3\" format=\"ascii\">\n";
+  for (const auto &p : points) {
+    out << p.x << " " << p.y << " " << p.z << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "      </Points>\n";
+
+  out << "      <Polys>\n";
+  out << "        <DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\n";
+  for (const auto &tri : polys) {
+    out << tri.p0 << " " << tri.p1 << " " << tri.p2 << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "        <DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n";
+  for (size_t c = 1; c <= polys.size(); ++c) {
+    out << (c * 3) << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "      </Polys>\n";
+
+  out << "      <CellData>\n";
+  out << "        <DataArray type=\"Int32\" Name=\"entity_index\" format=\"ascii\">\n";
+  for (int v : cellEntityIdx) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"match_status_code\" format=\"ascii\">\n";
+  for (int v : cellMatchStatus) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"geometry_type_code\" format=\"ascii\">\n";
+  for (int v : cellGeomType) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"source_count\" format=\"ascii\">\n";
+  for (int v : cellSourceCount) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"side_code\" format=\"ascii\">\n";
+  for (int v : cellSideCode) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "      </CellData>\n";
+  out << "    </Piece>\n";
+  out << "  </PolyData>\n";
+  out << "</VTKFile>\n";
+
+  return true;
+}
+
+bool ExportEdgesVtp(const TopoDS_Shape &solid,
+                    const TopTools_IndexedMapOfShape &normalizedEdges,
+                    const std::vector<NormalizedEdgeInfo> &edgeInfos,
+                    const MatchCollection &edgeMatches,
+                    EntitySide side,
+                    const std::filesystem::path &outputPath) {
+  if (solid.IsNull() || normalizedEdges.IsEmpty()) return false;
+
+  std::map<int, int> matchStatusMap;
+  for (const auto &item : edgeMatches.items) {
+    std::string id = (side == EntitySide::Reference) ? item.referenceId : item.candidateId;
+    if (!id.empty()) {
+      int idx = 0;
+      size_t pos = id.find_last_of(':');
+      if (pos != std::string::npos) {
+        try {
+          idx = std::stoi(id.substr(pos + 1));
+        } catch (...) {}
+      }
+      if (idx > 0) {
+        matchStatusMap[idx] = MatchStatusCode(item.status);
+      }
+    }
+  }
+
+  std::map<int, NormalizedEdgeInfo> infoMap;
+  for (const auto &info : edgeInfos) {
+    infoMap[info.visualIndex] = info;
+  }
+
+  struct Point3D { double x, y, z; };
+  struct LineCell { std::vector<int> ptIndices; };
+
+  std::vector<Point3D> points;
+  std::vector<LineCell> lines;
+  std::vector<int> cellEntityIdx;
+  std::vector<int> cellMatchStatus;
+  std::vector<int> cellGeomType;
+  std::vector<int> cellSourceCount;
+  std::vector<int> cellComparable;
+
+  for (int i = 1; i <= normalizedEdges.Extent(); ++i) {
+    const TopoDS_Edge edge = TopoDS::Edge(normalizedEdges(i));
+    if (edge.IsNull()) continue;
+
+    BRepAdaptor_Curve curve(edge);
+    GCPnts_QuasiUniformDeflection sampler(curve, 0.01);
+    if (!sampler.IsDone() || sampler.NbPoints() < 2) continue;
+
+    int startPtIdx = static_cast<int>(points.size());
+    LineCell line;
+    for (int p = 1; p <= sampler.NbPoints(); ++p) {
+      gp_Pnt pt = sampler.Value(p);
+      points.push_back({pt.X(), pt.Y(), pt.Z()});
+      line.ptIndices.push_back(startPtIdx + p - 1);
+    }
+    lines.push_back(line);
+
+    int matchStatus = matchStatusMap.count(i) ? matchStatusMap[i] : 1;
+    int geomTypeCode = infoMap.count(i) ? CurveTypeCode(infoMap[i].curveType) : 4;
+    int sourceCount = infoMap.count(i) ? infoMap[i].sourceCount : 1;
+    int comparable = infoMap.count(i) ? (infoMap[i].comparable ? 1 : 0) : 1;
+
+    cellEntityIdx.push_back(i);
+    cellMatchStatus.push_back(matchStatus);
+    cellGeomType.push_back(geomTypeCode);
+    cellSourceCount.push_back(sourceCount);
+    cellComparable.push_back(comparable);
+  }
+
+  if (points.empty() || lines.empty()) return false;
+
+  std::ofstream out(outputPath);
+  if (!out.is_open()) return false;
+
+  out << "<?xml version=\"1.0\"?>\n";
+  out << "<VTKFile type=\"PolyData\" version=\"0.1\" byte_order=\"LittleEndian\">\n";
+  out << "  <PolyData>\n";
+  out << "    <Piece NumberOfPoints=\"" << points.size() << "\" NumberOfVerts=\"0\" NumberOfLines=\"" << lines.size() << "\" NumberOfStrips=\"0\" NumberOfPolys=\"0\">\n";
+  out << "      <Points>\n";
+  out << "        <DataArray type=\"Float64\" Name=\"Points\" NumberOfComponents=\"3\" format=\"ascii\">\n";
+  for (const auto &p : points) {
+    out << p.x << " " << p.y << " " << p.z << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "      </Points>\n";
+
+  out << "      <Lines>\n";
+  out << "        <DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\n";
+  for (const auto &l : lines) {
+    for (int idx : l.ptIndices) {
+      out << idx << " ";
+    }
+    out << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "        <DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n";
+  size_t offset = 0;
+  for (const auto &l : lines) {
+    offset += l.ptIndices.size();
+    out << offset << "\n";
+  }
+  out << "        </DataArray>\n";
+  out << "      </Lines>\n";
+
+  out << "      <CellData>\n";
+  out << "        <DataArray type=\"Int32\" Name=\"entity_index\" format=\"ascii\">\n";
+  for (int v : cellEntityIdx) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"match_status_code\" format=\"ascii\">\n";
+  for (int v : cellMatchStatus) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"geometry_type_code\" format=\"ascii\">\n";
+  for (int v : cellGeomType) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"source_count\" format=\"ascii\">\n";
+  for (int v : cellSourceCount) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "        <DataArray type=\"Int32\" Name=\"comparable\" format=\"ascii\">\n";
+  for (int v : cellComparable) out << v << "\n";
+  out << "        </DataArray>\n";
+
+  out << "      </CellData>\n";
+  out << "    </Piece>\n";
+  out << "  </PolyData>\n";
+  out << "</VTKFile>\n";
+
+  return true;
+}
+
+void RemoveOldArtifacts(const std::filesystem::path &outputDirectory) {
+  std::error_code ec;
+  std::filesystem::remove(outputDirectory / "reference_base.stl", ec);
+  std::filesystem::remove(outputDirectory / "candidate_base.stl", ec);
+  std::filesystem::remove(outputDirectory / "missing_material.stl", ec);
+  std::filesystem::remove(outputDirectory / "added_material.stl", ec);
+  std::filesystem::remove(outputDirectory / "reference_original.brep", ec);
+  std::filesystem::remove(outputDirectory / "candidate_original.brep", ec);
+  std::filesystem::remove(outputDirectory / "reference_normalized.brep", ec);
+  std::filesystem::remove(outputDirectory / "candidate_normalized.brep", ec);
+  std::filesystem::remove_all(outputDirectory / "visualization", ec);
+}
 #include <limits>
 #include <map>
 #include <sstream>
 #include <system_error>
 #include <tuple>
-
-namespace cadstep {
 
 using json = nlohmann::ordered_json;
 
@@ -389,7 +710,9 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
   return result;
 }
 
-std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, EntitySide side);
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape,
+                                                   const TopTools_IndexedMapOfShape &normalizedEdges,
+                                                   EntitySide side);
 
 NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
                                              const OriginalTopologyIndex &originalIndex,
@@ -413,6 +736,8 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     result.audit.edgeCountAfter = result.audit.edgeCountBefore;
     result.audit.comparableEdgeCountAfter = result.audit.edgeCountBefore;
     result.audit.volumeAfterMm3 = result.audit.volumeBeforeMm3;
+    result.audit.faceMappingComplete = true;
+    result.audit.edgeMappingComplete = true;
     result.audit.mappingComplete = true;
 
     TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
@@ -475,11 +800,12 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   result.audit.usedNormalizedShape = result.audit.succeeded;
   result.audit.faceCountAfter = CountUniqueSubShapes(result.solid, TopAbs_FACE);
   result.audit.edgeCountAfter = CountUniqueSubShapes(result.solid, TopAbs_EDGE);
-  result.audit.comparableEdgeCountBefore = static_cast<int>(CollectEdgeDescriptors(input, side).size());
-  result.audit.comparableEdgeCountAfter = static_cast<int>(CollectEdgeDescriptors(result.solid, side).size());
 
   TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
   TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
+
+  result.audit.comparableEdgeCountBefore = static_cast<int>(CollectEdgeDescriptors(input, result.normalizedEdges, side).size());
+  result.audit.comparableEdgeCountAfter = static_cast<int>(CollectEdgeDescriptors(result.solid, result.normalizedEdges, side).size());
 
   // Build faces detail list
   std::map<int, NormalizedFaceInfo> normFaceMap;
@@ -534,66 +860,148 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     normEdgeMap[i] = info;
   }
 
-  // Map original topology to normalized topology
-  bool allMapped = true;
+  // Map original topology to normalized topology using history
+  bool faceMappingComplete = true;
   for (int i = 1; i <= originalIndex.faces.Extent(); ++i) {
     const TopoDS_Face origF = TopoDS::Face(originalIndex.faces(i));
     const std::string origId = originalIndex.faceIds[i - 1];
 
-    bool foundMapping = false;
-    for (int j = 1; j <= result.normalizedFaces.Extent(); ++j) {
-      const TopoDS_Face normF = TopoDS::Face(result.normalizedFaces(j));
-      if (origF.IsSame(normF)) {
-        normFaceMap[j].sourceFaceIds.push_back(origId);
-        foundMapping = true;
-        break;
+    bool mapped = false;
+    if (!history.IsNull()) {
+      const TopTools_ListOfShape &modified = history->Modified(origF);
+      for (const TopoDS_Shape &s : modified) {
+        int idx = FindShapeIndex(result.normalizedFaces, s);
+        if (idx > 0) {
+          normFaceMap[idx].sourceFaceIds.push_back(origId);
+          mapped = true;
+        }
+      }
+      const TopTools_ListOfShape &generated = history->Generated(origF);
+      for (const TopoDS_Shape &s : generated) {
+        int idx = FindShapeIndex(result.normalizedFaces, s);
+        if (idx > 0) {
+          normFaceMap[idx].sourceFaceIds.push_back(origId);
+          mapped = true;
+        }
       }
     }
-    if (!foundMapping) {
-      allMapped = false;
+
+    if (!mapped) {
+      int sameIdx = FindShapeIndex(result.normalizedFaces, origF);
+      if (sameIdx > 0) {
+        normFaceMap[sameIdx].sourceFaceIds.push_back(origId);
+        mapped = true;
+      }
+    }
+
+    if (!mapped) {
+      faceMappingComplete = false;
     }
   }
 
   for (int j = 1; j <= result.normalizedFaces.Extent(); ++j) {
     auto &info = normFaceMap[j];
+    std::sort(info.sourceFaceIds.begin(), info.sourceFaceIds.end());
+    info.sourceFaceIds.erase(std::unique(info.sourceFaceIds.begin(), info.sourceFaceIds.end()), info.sourceFaceIds.end());
     info.sourceCount = static_cast<int>(info.sourceFaceIds.size());
     info.merged = info.sourceCount > 1;
     result.audit.faces.push_back(info);
   }
 
+  TopTools_IndexedDataMapOfShapeListOfShape edgeFacesMap;
+  TopExp::MapShapesAndAncestors(input, TopAbs_EDGE, TopAbs_FACE, edgeFacesMap);
+
+  bool edgeMappingComplete = true;
   for (int i = 1; i <= originalIndex.edges.Extent(); ++i) {
     const TopoDS_Edge origE = TopoDS::Edge(originalIndex.edges(i));
     const std::string origId = originalIndex.edgeIds[i - 1];
 
-    bool foundMapping = false;
-    for (int j = 1; j <= result.normalizedEdges.Extent(); ++j) {
-      const TopoDS_Edge normE = TopoDS::Edge(result.normalizedEdges(j));
-      if (origE.IsSame(normE)) {
-        normEdgeMap[j].sourceEdgeIds.push_back(origId);
-        foundMapping = true;
-        break;
+    bool mapped = false;
+    if (!history.IsNull()) {
+      const TopTools_ListOfShape &modified = history->Modified(origE);
+      for (const TopoDS_Shape &s : modified) {
+        int idx = FindShapeIndex(result.normalizedEdges, s);
+        if (idx > 0) {
+          normEdgeMap[idx].sourceEdgeIds.push_back(origId);
+          mapped = true;
+        }
+      }
+      const TopTools_ListOfShape &generated = history->Generated(origE);
+      for (const TopoDS_Shape &s : generated) {
+        int idx = FindShapeIndex(result.normalizedEdges, s);
+        if (idx > 0) {
+          normEdgeMap[idx].sourceEdgeIds.push_back(origId);
+          mapped = true;
+        }
       }
     }
-    if (!foundMapping) {
-      RemovedEdgeInfo removed;
-      removed.sourceEdgeId = origId;
-      if (BRep_Tool::Degenerated(origE)) {
-        removed.reason = "DEGENERATED";
-      } else {
-        removed.reason = "REMOVED_BY_NORMALIZATION";
+
+    if (!mapped) {
+      int sameIdx = FindShapeIndex(result.normalizedEdges, origE);
+      if (sameIdx > 0) {
+        normEdgeMap[sameIdx].sourceEdgeIds.push_back(origId);
+        mapped = true;
       }
-      result.audit.removedEdges.push_back(removed);
+    }
+
+    if (!mapped) {
+      if (!history.IsNull() && history->IsRemoved(origE)) {
+        RemovedEdgeInfo removed;
+        removed.sourceEdgeId = origId;
+        if (BRep_Tool::Degenerated(origE)) {
+          removed.reason = "DEGENERATED";
+        } else if (edgeFacesMap.Contains(origE)) {
+          const auto &faces = edgeFacesMap.FindFromKey(origE);
+          if (faces.Extent() == 1 && BRepTools::IsReallyClosed(origE, TopoDS::Face(faces.First()))) {
+            removed.reason = "PERIODIC_SEAM";
+          } else if (faces.Extent() >= 2) {
+            removed.reason = "SAME_DOMAIN_INTERNAL_EDGE";
+          } else {
+            removed.reason = "REMOVED_BY_NORMALIZATION";
+          }
+        } else {
+          removed.reason = "REMOVED_BY_NORMALIZATION";
+        }
+        result.audit.removedEdges.push_back(removed);
+        mapped = true;
+      }
+    }
+
+    if (!mapped) {
+      edgeMappingComplete = false;
     }
   }
 
+  int compIdx = 1;
   for (int j = 1; j <= result.normalizedEdges.Extent(); ++j) {
     auto &info = normEdgeMap[j];
+    std::sort(info.sourceEdgeIds.begin(), info.sourceEdgeIds.end());
+    info.sourceEdgeIds.erase(std::unique(info.sourceEdgeIds.begin(), info.sourceEdgeIds.end()), info.sourceEdgeIds.end());
     info.sourceCount = static_cast<int>(info.sourceEdgeIds.size());
     info.merged = info.sourceCount > 1;
+
+    const TopoDS_Edge edge = TopoDS::Edge(result.normalizedEdges(j));
+    bool isDeg = BRep_Tool::Degenerated(edge);
+    bool isSeam = false;
+    if (edgeFacesMap.Contains(edge)) {
+      const auto &faces = edgeFacesMap.FindFromKey(edge);
+      for (const TopoDS_Shape &s : faces) {
+        if (BRepTools::IsReallyClosed(edge, TopoDS::Face(s))) {
+          isSeam = true;
+          break;
+        }
+      }
+    }
+    info.comparable = !isDeg && !isSeam;
+    if (info.comparable) {
+      info.comparableIndex = compIdx++;
+    }
     result.audit.edges.push_back(info);
   }
 
-  result.audit.mappingComplete = allMapped;
+  result.audit.faceMappingComplete = faceMappingComplete;
+  result.audit.edgeMappingComplete = edgeMappingComplete;
+  result.audit.mappingComplete = faceMappingComplete && edgeMappingComplete;
 
   // Type Statistics
   std::map<std::string, std::pair<int, double>> faceTypeStats;
@@ -645,12 +1053,13 @@ std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape, En
   return descriptors;
 }
 
-std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, EntitySide side) {
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape,
+                                                   const TopTools_IndexedMapOfShape &normalizedEdges,
+                                                   EntitySide side) {
   std::vector<EdgeDescriptor> descriptors;
   TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
   TopExp::MapShapesAndUniqueAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
-  int visualIndex = 1;
   for (int i = 1; i <= edgeFaces.Extent(); ++i) {
     const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(i));
     if (BRep_Tool::Degenerated(edge)) {
@@ -659,8 +1068,8 @@ std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, En
 
     bool seam = false;
     const TopTools_ListOfShape &faces = edgeFaces.FindFromIndex(i);
-    for (TopTools_ListIteratorOfListOfShape it(faces); it.More(); it.Next()) {
-      const TopoDS_Face face = TopoDS::Face(it.Value());
+    for (const TopoDS_Shape &s : faces) {
+      const TopoDS_Face face = TopoDS::Face(s);
       if (BRepTools::IsReallyClosed(edge, face)) {
         seam = true;
         break;
@@ -670,9 +1079,14 @@ std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, En
       continue;
     }
 
+    int visualIndex = FindShapeIndex(normalizedEdges, edge);
+    if (visualIndex == 0) {
+      visualIndex = i;
+    }
+
     EdgeDescriptor descriptor;
     descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedEdge, visualIndex);
-    descriptor.visualIndex = visualIndex++;
+    descriptor.visualIndex = visualIndex;
     descriptor.edge = edge;
 
     BRepAdaptor_Curve curve(edge);
@@ -1184,8 +1598,8 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     const auto descStart = std::chrono::high_resolution_clock::now();
     const std::vector<FaceDescriptor> refFaceDescs = CollectFaceDescriptors(compareSolidRef, EntitySide::Reference);
     const std::vector<FaceDescriptor> candFaceDescs = CollectFaceDescriptors(compareSolidCand, EntitySide::Candidate);
-    const std::vector<EdgeDescriptor> refEdgeDescs = CollectEdgeDescriptors(compareSolidRef, EntitySide::Reference);
-    const std::vector<EdgeDescriptor> candEdgeDescs = CollectEdgeDescriptors(compareSolidCand, EntitySide::Candidate);
+    const std::vector<EdgeDescriptor> refEdgeDescs = CollectEdgeDescriptors(compareSolidRef, normRef.normalizedEdges, EntitySide::Reference);
+    const std::vector<EdgeDescriptor> candEdgeDescs = CollectEdgeDescriptors(compareSolidCand, normCand.normalizedEdges, EntitySide::Candidate);
     result.timings.descriptorBuildMs = ElapsedMs(descStart);
 
     const auto faceMatchStart = std::chrono::high_resolution_clock::now();
@@ -1205,12 +1619,24 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
         result.normalizedTopology.faces.typeHistogramEqual && result.normalizedTopology.edges.typeHistogramEqual;
     result.normalizedTopology.elapsedMs = result.timings.descriptorBuildMs + result.timings.faceMatchMs + result.timings.edgeMatchMs;
 
+    result.normalizedTopology.fastPath.enabled = config.enableNormalizedFastPath;
+    result.normalizedTopology.fastPath.eligible = result.normalizedTopology.normalizedTopologyMatch;
+    if (!result.normalizedTopology.faces.allMatched) {
+      result.normalizedTopology.fastPath.blockReasons.push_back(
+          "FACE_DESCRIPTOR_UNMATCHED:" + std::to_string(result.normalizedTopology.faces.referenceCount - result.normalizedTopology.faces.matchedCount));
+    }
+    if (!result.normalizedTopology.edges.allMatched) {
+      result.normalizedTopology.fastPath.blockReasons.push_back(
+          "EDGE_DESCRIPTOR_UNMATCHED:" + std::to_string(result.normalizedTopology.edges.referenceCount - result.normalizedTopology.edges.matchedCount));
+    }
+
     if (config.enableNormalizedFastPath && result.normalizedTopology.normalizedTopologyMatch &&
         (result.status != CompareStatus::Different)) {
       result.status = CompareStatus::Equal;
       result.reason = "closed solids pass configured thresholds via normalized fast path";
       result.decisionPath = "normalized_topology_fast_path";
       result.booleanExecuted = false;
+      result.normalizedTopology.fastPath.used = true;
     }
   } else {
     result.normalizedTopology.attempted = false;
@@ -1218,15 +1644,17 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
   }
 
   // Boolean difference if not skipped by fast path
+  BooleanDifferenceResult missingRes;
+  BooleanDifferenceResult addedRes;
   if (result.decisionPath != "normalized_topology_fast_path") {
     result.booleanExecuted = true;
     const auto boolAbStart = std::chrono::high_resolution_clock::now();
-    const BooleanDifferenceResult missingRes = CutSolids(compareSolidRef, compareSolidCand, config.booleanFuzzyToleranceMm);
+    missingRes = CutSolids(compareSolidRef, compareSolidCand, config.booleanFuzzyToleranceMm);
     result.timings.booleanAbMs = ElapsedMs(boolAbStart);
     result.missingMaterial = missingRes.audit;
 
     const auto boolBaStart = std::chrono::high_resolution_clock::now();
-    const BooleanDifferenceResult addedRes = CutSolids(compareSolidCand, compareSolidRef, config.booleanFuzzyToleranceMm);
+    addedRes = CutSolids(compareSolidCand, compareSolidRef, config.booleanFuzzyToleranceMm);
     result.timings.booleanBaMs = ElapsedMs(boolBaStart);
     result.addedMaterial = addedRes.audit;
 
@@ -1248,47 +1676,64 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
         result.reason = "geometry thresholds failed: input_volume centroid symmetric_difference";
       }
     }
+  }
 
-    // Artifact Export
-    if (!outputDirectory.empty()) {
-      const auto exportStart = std::chrono::high_resolution_clock::now();
-      std::error_code ec;
-      std::filesystem::create_directories(outputDirectory, ec);
+  // Artifact Export (always executed if outputDirectory is specified)
+  if (!outputDirectory.empty()) {
+    const auto exportStart = std::chrono::high_resolution_clock::now();
+    std::error_code ec;
+    std::filesystem::create_directories(outputDirectory, ec);
+    RemoveOldArtifacts(outputDirectory);
 
-      if (config.exportStl) {
-        const auto refStl = outputDirectory / "reference_base.stl";
-        if (ExportShapeStl(compareSolidRef, refStl)) {
-          result.artifacts.items.push_back({"reference_base", "reference_base.stl", "STL", true, ""});
-        }
-        const auto candStl = outputDirectory / "candidate_base.stl";
-        if (ExportShapeStl(compareSolidCand, candStl)) {
-          result.artifacts.items.push_back({"candidate_base", "candidate_base.stl", "STL", true, ""});
-        }
-        if (result.missingMaterial.volumeMm3 > 0.0) {
-          const auto missStl = outputDirectory / "missing_material.stl";
-          if (ExportShapeStl(missingRes.shape, missStl)) {
-            result.artifacts.items.push_back({"missing_material", "missing_material.stl", "STL", true, ""});
-          }
-        }
-        if (result.addedMaterial.volumeMm3 > 0.0) {
-          const auto addStl = outputDirectory / "added_material.stl";
-          if (ExportShapeStl(addedRes.shape, addStl)) {
-            result.artifacts.items.push_back({"added_material", "added_material.stl", "STL", true, ""});
-          }
+    if (config.exportStl) {
+      const auto refStl = outputDirectory / "reference_base.stl";
+      if (ExportShapeStl(compareSolidRef, refStl)) {
+        result.artifacts.items.push_back({"reference_base", "reference_base.stl", "STL", true, ""});
+      }
+      const auto candStl = outputDirectory / "candidate_base.stl";
+      if (ExportShapeStl(compareSolidCand, candStl)) {
+        result.artifacts.items.push_back({"candidate_base", "candidate_base.stl", "STL", true, ""});
+      }
+      if (result.booleanExecuted && result.missingMaterial.volumeMm3 > 0.0) {
+        const auto missStl = outputDirectory / "missing_material.stl";
+        if (ExportShapeStl(missingRes.shape, missStl)) {
+          result.artifacts.items.push_back({"missing_material", "missing_material.stl", "STL", true, ""});
         }
       }
-
-      if (config.exportBrep) {
-        ExportShapeBrep(loadedRef.solid, outputDirectory / "reference_original.brep");
-        ExportShapeBrep(loadedCand.solid, outputDirectory / "candidate_original.brep");
-        if (normalizationPairUsable) {
-          ExportShapeBrep(normRef.solid, outputDirectory / "reference_normalized.brep");
-          ExportShapeBrep(normCand.solid, outputDirectory / "candidate_normalized.brep");
+      if (result.booleanExecuted && result.addedMaterial.volumeMm3 > 0.0) {
+        const auto addStl = outputDirectory / "added_material.stl";
+        if (ExportShapeStl(addedRes.shape, addStl)) {
+          result.artifacts.items.push_back({"added_material", "added_material.stl", "STL", true, ""});
         }
       }
-
-      result.timings.artifactExportMs = ElapsedMs(exportStart);
     }
+
+    if (config.exportBrep) {
+      ExportShapeBrep(loadedRef.solid, outputDirectory / "reference_original.brep");
+      ExportShapeBrep(loadedCand.solid, outputDirectory / "candidate_original.brep");
+      if (normalizationPairUsable) {
+        ExportShapeBrep(normRef.solid, outputDirectory / "reference_normalized.brep");
+        ExportShapeBrep(normCand.solid, outputDirectory / "candidate_normalized.brep");
+      }
+    }
+
+    const auto visDir = outputDirectory / "visualization";
+    std::filesystem::create_directories(visDir, ec);
+
+    if (ExportFacesVtp(normRef.solid, normRef.normalizedFaces, normRef.audit.faces, result.normalizedTopology.faces, EntitySide::Reference, visDir / "reference_faces.vtp")) {
+      result.artifacts.items.push_back({"reference_faces", "visualization/reference_faces.vtp", "VTP", true, "entity_index"});
+    }
+    if (ExportFacesVtp(normCand.solid, normCand.normalizedFaces, normCand.audit.faces, result.normalizedTopology.faces, EntitySide::Candidate, visDir / "candidate_faces.vtp")) {
+      result.artifacts.items.push_back({"candidate_faces", "visualization/candidate_faces.vtp", "VTP", true, "entity_index"});
+    }
+    if (ExportEdgesVtp(normRef.solid, normRef.normalizedEdges, normRef.audit.edges, result.normalizedTopology.edges, EntitySide::Reference, visDir / "reference_edges.vtp")) {
+      result.artifacts.items.push_back({"reference_edges", "visualization/reference_edges.vtp", "VTP", true, "entity_index"});
+    }
+    if (ExportEdgesVtp(normCand.solid, normCand.normalizedEdges, normCand.audit.edges, result.normalizedTopology.edges, EntitySide::Candidate, visDir / "candidate_edges.vtp")) {
+      result.artifacts.items.push_back({"candidate_edges", "visualization/candidate_edges.vtp", "VTP", true, "entity_index"});
+    }
+
+    result.timings.artifactExportMs = ElapsedMs(exportStart);
   }
 
   result.timings.totalMs = ElapsedMs(totalStart);
@@ -1371,6 +1816,8 @@ std::string ToJson(const CompareResult &result) {
     node["volume_before_mm3"] = audit.volumeBeforeMm3;
     node["volume_after_mm3"] = audit.volumeAfterMm3;
     node["relative_volume_drift"] = audit.relativeVolumeDrift;
+    node["face_mapping_complete"] = audit.faceMappingComplete;
+    node["edge_mapping_complete"] = audit.edgeMappingComplete;
     node["mapping_complete"] = audit.mappingComplete;
 
     json faceStats = json::array();
@@ -1420,6 +1867,8 @@ std::string ToJson(const CompareResult &result) {
           {"source_count", e.sourceCount},
           {"merged", e.merged},
           {"closed", e.closed},
+          {"comparable", e.comparable},
+          {"comparable_index", e.comparableIndex},
       });
     }
     node["edges"] = edgesArr;
@@ -1485,6 +1934,11 @@ std::string ToJson(const CompareResult &result) {
   json matchesJson = json::object();
   matchesJson["faces"] = MakeMatchCollectionNode(result.normalizedTopology.faces);
   matchesJson["edges"] = MakeMatchCollectionNode(result.normalizedTopology.edges);
+  matchesJson["fast_path"] = {
+      {"enabled", result.normalizedTopology.fastPath.enabled},
+      {"eligible", result.normalizedTopology.fastPath.eligible},
+      {"used", result.normalizedTopology.fastPath.used},
+      {"block_reasons", result.normalizedTopology.fastPath.blockReasons}};
   root["matches"] = matchesJson;
 
   // 6. differences

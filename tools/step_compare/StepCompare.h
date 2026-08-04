@@ -114,6 +114,8 @@ struct NormalizedEdgeInfo {
   int sourceCount = 0;
   bool merged = false;
   bool closed = false;
+  bool comparable = false;
+  int comparableIndex = 0;
 };
 
 struct RemovedEdgeInfo {
@@ -182,6 +184,8 @@ struct NormalizationAudit {
   double volumeAfterMm3 = 0.0;
   double relativeVolumeDrift = 0.0;
 
+  bool faceMappingComplete = false;
+  bool edgeMappingComplete = false;
   bool mappingComplete = false;
 
   double elapsedMs = 0.0;
@@ -195,12 +199,21 @@ struct NormalizationAudit {
   std::vector<RemovedEdgeInfo> removedEdges;
 };
 
+struct FastPathAudit {
+  bool enabled = false;
+  bool eligible = false;
+  bool used = false;
+  std::vector<std::string> blockReasons;
+};
+
 struct TopologyMatchAudit {
   bool attempted = false;
   std::string skipReason;
 
   MatchCollection faces;
   MatchCollection edges;
+
+  FastPathAudit fastPath;
 
   bool normalizedTopologyMatch = false;
   double elapsedMs = 0.0;
