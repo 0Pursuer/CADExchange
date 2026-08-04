@@ -85,6 +85,25 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
           ParseNumber(requireValue(), "--normalize-angular-tol-rad");
     } else if (argument == L"--normalized-fast-path") {
       options.config.enableNormalizedFastPath = true;
+    } else if (argument == L"--export-stl") {
+      options.config.exportStl = true;
+    } else if (argument == L"--no-export-stl") {
+      options.config.exportStl = false;
+    } else if (argument == L"--export-brep") {
+      options.config.exportBrep = true;
+    } else if (argument == L"--no-export-brep") {
+      options.config.exportBrep = false;
+    } else if (argument == L"--export-entity-vtp") {
+      options.config.exportEntityVtp = true;
+    } else if (argument == L"--no-export-entity-vtp") {
+      options.config.exportEntityVtp = false;
+    } else if (argument == L"--write-entity-details") {
+      options.config.writeEntityDetails = true;
+    } else if (argument == L"--no-write-entity-details") {
+      options.config.writeEntityDetails = false;
+    } else if (argument == L"--ambiguous-match-margin") {
+      options.config.ambiguousMatchMargin =
+          ParseNumber(requireValue(), "--ambiguous-match-margin");
     } else if (argument == L"--quiet") {
       options.config.printHumanSummary = false;
     } else if (argument == L"--json-stdout") {

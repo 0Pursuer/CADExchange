@@ -9,6 +9,7 @@
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
+#include <BRepTools_History.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
@@ -63,6 +64,45 @@ struct LoadedSolid {
   std::string reason;
 };
 
+struct FaceDescriptor {
+  std::string entityId;
+  int visualIndex = 0;
+  TopoDS_Face face;
+  std::string typeName;
+  double areaMm2 = 0.0;
+  Point3 centroidMm;
+  Bounds3 boundsMm;
+};
+
+struct EdgeDescriptor {
+  std::string entityId;
+  int visualIndex = 0;
+  TopoDS_Edge edge;
+  std::string typeName;
+  double lengthMm = 0.0;
+  Point3 centroidMm;
+  Bounds3 boundsMm;
+};
+
+struct OriginalTopologyIndex {
+  TopTools_IndexedMapOfShape faces;
+  TopTools_IndexedMapOfShape edges;
+  std::vector<std::string> faceIds;
+  std::vector<std::string> edgeIds;
+};
+
+struct NormalizedSolidInternal {
+  TopoDS_Solid solid;
+  NormalizationAudit audit;
+  TopTools_IndexedMapOfShape normalizedFaces;
+  TopTools_IndexedMapOfShape normalizedEdges;
+};
+
+struct BooleanDifferenceResult {
+  DifferenceAudit audit;
+  TopoDS_Shape shape;
+};
+
 std::string PathText(const std::filesystem::path &path) {
 #ifdef _WIN32
   const auto utf8 = path.u8string();
@@ -98,1037 +138,874 @@ int CountSubShapes(const TopoDS_Shape &shape, TopAbs_ShapeEnum type) {
 }
 
 int CountUniqueSubShapes(const TopoDS_Shape &shape, TopAbs_ShapeEnum type) {
-  TopTools_IndexedMapOfShape shapes;
-  TopExp::MapShapes(shape, type, shapes);
-  return shapes.Extent();
+  TopTools_IndexedMapOfShape shapeMap;
+  TopExp::MapShapes(shape, type, shapeMap);
+  return shapeMap.Extent();
 }
 
-bool AllShellsClosed(const TopoDS_Solid &solid) {
-  bool foundShell = false;
-  for (TopExp_Explorer explorer(solid, TopAbs_SHELL); explorer.More();
-       explorer.Next()) {
-    foundShell = true;
-    if (!BRep_Tool::IsClosed(TopoDS::Shell(explorer.Current()))) {
-      return false;
-    }
-  }
-  return foundShell;
+double VectorLength(const Point3 &p) {
+  return std::sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
 }
 
-std::vector<std::string>
-ToStrings(const TColStd_SequenceOfAsciiString &values) {
-  std::vector<std::string> result;
-  result.reserve(static_cast<std::size_t>(values.Length()));
-  for (Standard_Integer index = 1; index <= values.Length(); ++index) {
-    result.emplace_back(values.Value(index).ToCString());
-  }
-  return result;
-}
-
-Point3 ToPoint3(const gp_Pnt &point) {
-  return Point3{point.X(), point.Y(), point.Z()};
-}
-
-Bounds3 ComputeBounds(const TopoDS_Shape &shape) {
-  Bnd_Box box;
-  BRepBndLib::AddOptimal(shape, box, Standard_False, Standard_False);
-
-  Bounds3 result;
-  result.isVoid = box.IsVoid();
-  if (!result.isVoid) {
-    Standard_Real xMin = 0.0;
-    Standard_Real yMin = 0.0;
-    Standard_Real zMin = 0.0;
-    Standard_Real xMax = 0.0;
-    Standard_Real yMax = 0.0;
-    Standard_Real zMax = 0.0;
-    box.Get(xMin, yMin, zMin, xMax, yMax, zMax);
-    result.minimum = Point3{xMin, yMin, zMin};
-    result.maximum = Point3{xMax, yMax, zMax};
-  }
-  return result;
-}
-
-void ComputeProperties(const TopoDS_Solid &solid, InputAudit &audit) {
-  GProp_GProps volumeProperties;
-  BRepGProp::VolumeProperties(solid, volumeProperties, Standard_True,
-                              Standard_False, Standard_False);
-  audit.signedVolumeMm3 = volumeProperties.Mass();
-  audit.centroidMm = ToPoint3(volumeProperties.CentreOfMass());
-
-  GProp_GProps surfaceProperties;
-  BRepGProp::SurfaceProperties(solid, surfaceProperties, Standard_False,
-                               Standard_False);
-  audit.surfaceAreaMm2 = surfaceProperties.Mass();
-  audit.boundsMm = ComputeBounds(solid);
-}
-
-LoadedSolid LoadSingleSolid(const std::filesystem::path &path) {
-  LoadedSolid loaded;
-  loaded.audit.path = PathText(path);
-
-  std::error_code pathError;
-  if (!std::filesystem::exists(path, pathError) || pathError) {
-    loaded.classification = LoadClass::InternalError;
-    loaded.reason = "STEP path does not exist: " + loaded.audit.path;
-    return loaded;
-  }
-  if (!std::filesystem::is_regular_file(path, pathError) || pathError) {
-    loaded.classification = LoadClass::InternalError;
-    loaded.reason = "STEP path is not a regular file: " + loaded.audit.path;
-    return loaded;
-  }
-
-  STEPControl_Reader reader;
-  const std::string pathUtf8 = PathText(path);
-  const IFSelect_ReturnStatus readStatus = reader.ReadFile(pathUtf8.c_str());
-  std::ostringstream loadDiagnostics;
-  loadDiagnostics << "ReadFile status=" << ReadStatusText(readStatus);
-  if (readStatus == IFSelect_RetDone) {
-    reader.PrintCheckLoad(loadDiagnostics, Standard_False,
-                          IFSelect_ItemsByEntity);
-  }
-  loaded.audit.loadDiagnostics = loadDiagnostics.str();
-  if (readStatus != IFSelect_RetDone) {
-    loaded.classification = LoadClass::Invalid;
-    loaded.reason = "OCCT could not read STEP file: " + pathUtf8;
-    return loaded;
-  }
-
-  TColStd_SequenceOfAsciiString lengthUnits;
-  TColStd_SequenceOfAsciiString angleUnits;
-  TColStd_SequenceOfAsciiString solidAngleUnits;
-  reader.FileUnits(lengthUnits, angleUnits, solidAngleUnits);
-  loaded.audit.fileLengthUnits = ToStrings(lengthUnits);
-
-  // OCCT expresses the system length unit in millimetres. 1.0 therefore
-  // normalizes every transferred STEP shape to millimetres.
-  reader.SetSystemLengthUnit(1.0);
-  const Standard_Integer transferredRoots = reader.TransferRoots();
-  std::ostringstream transferDiagnostics;
-  transferDiagnostics << "transferred_roots=" << transferredRoots;
-  reader.PrintCheckTransfer(transferDiagnostics, Standard_False,
-                            IFSelect_ItemsByEntity);
-  loaded.audit.transferDiagnostics = transferDiagnostics.str();
-  if (transferredRoots <= 0) {
-    loaded.classification = LoadClass::Invalid;
-    loaded.reason = "STEP roots could not be transferred: " + pathUtf8;
-    return loaded;
-  }
-
-  const TopoDS_Shape transferred = reader.OneShape();
-  if (transferred.IsNull()) {
-    loaded.classification = LoadClass::Invalid;
-    loaded.reason = "STEP transfer produced an empty shape: " + pathUtf8;
-    return loaded;
-  }
-
-  loaded.audit.solidCount = CountUniqueSubShapes(transferred, TopAbs_SOLID);
-  loaded.audit.shellCount = CountUniqueSubShapes(transferred, TopAbs_SHELL);
-  loaded.audit.faceCount = CountUniqueSubShapes(transferred, TopAbs_FACE);
-  loaded.audit.edgeCount = CountUniqueSubShapes(transferred, TopAbs_EDGE);
-
-  if (loaded.audit.solidCount != 1) {
-    loaded.classification = LoadClass::Unsupported;
-    loaded.reason = "MVP requires exactly one solid; found " +
-                    std::to_string(loaded.audit.solidCount) + " in " + pathUtf8;
-    return loaded;
-  }
-
-  TopExp_Explorer solidExplorer(transferred, TopAbs_SOLID);
-  loaded.solid = TopoDS::Solid(solidExplorer.Current());
-  const bool containsOnlyTheSolid =
-      loaded.audit.shellCount == CountUniqueSubShapes(loaded.solid, TopAbs_SHELL) &&
-      loaded.audit.faceCount == CountUniqueSubShapes(loaded.solid, TopAbs_FACE) &&
-      loaded.audit.edgeCount == CountUniqueSubShapes(loaded.solid, TopAbs_EDGE) &&
-      CountUniqueSubShapes(transferred, TopAbs_VERTEX) ==
-          CountUniqueSubShapes(loaded.solid, TopAbs_VERTEX);
-  if (!containsOnlyTheSolid) {
-    loaded.classification = LoadClass::Unsupported;
-    loaded.reason =
-        "MVP does not accept geometry outside the single solid: " + pathUtf8;
-    return loaded;
-  }
-
-  loaded.audit.brepValid =
-      BRepCheck_Analyzer(loaded.solid, Standard_True).IsValid();
-  loaded.audit.closed = AllShellsClosed(loaded.solid);
-  if (!loaded.audit.closed) {
-    loaded.classification = LoadClass::Unsupported;
-    loaded.reason = "MVP requires a closed solid: " + pathUtf8;
-    return loaded;
-  }
-  if (!loaded.audit.brepValid) {
-    loaded.classification = LoadClass::Invalid;
-    loaded.reason = "OCCT B-Rep validation failed: " + pathUtf8;
-    return loaded;
-  }
-
-  ComputeProperties(loaded.solid, loaded.audit);
-  if (!std::isfinite(loaded.audit.signedVolumeMm3) ||
-      loaded.audit.signedVolumeMm3 <= 0.0 || loaded.audit.boundsMm.isVoid) {
-    loaded.classification = LoadClass::Invalid;
-    loaded.reason =
-        "solid is empty or has an invalid/reversed volume orientation: " +
-        pathUtf8;
-    return loaded;
-  }
-
-  loaded.classification = LoadClass::Ready;
-  return loaded;
-}
-
-using Clock = std::chrono::steady_clock;
-
-double ElapsedMs(const Clock::time_point &start) {
-  return std::chrono::duration<double, std::milli>(Clock::now() - start).count();
-}
-
-const char *SurfaceTypeText(GeomAbs_SurfaceType type) {
-  switch (type) {
-  case GeomAbs_Plane: return "PLANE";
-  case GeomAbs_Cylinder: return "CYLINDER";
-  case GeomAbs_Cone: return "CONE";
-  case GeomAbs_Sphere: return "SPHERE";
-  case GeomAbs_Torus: return "TORUS";
-  case GeomAbs_BezierSurface: return "BEZIER";
-  case GeomAbs_BSplineSurface: return "BSPLINE";
-  case GeomAbs_SurfaceOfRevolution: return "REVOLUTION";
-  case GeomAbs_SurfaceOfExtrusion: return "EXTRUSION";
-  default: return "OTHER";
-  }
-}
-
-const char *CurveTypeText(GeomAbs_CurveType type) {
-  switch (type) {
-  case GeomAbs_Line: return "LINE";
-  case GeomAbs_Circle: return "CIRCLE";
-  case GeomAbs_Ellipse: return "ELLIPSE";
-  case GeomAbs_Hyperbola: return "HYPERBOLA";
-  case GeomAbs_Parabola: return "PARABOLA";
-  case GeomAbs_BezierCurve: return "BEZIER";
-  case GeomAbs_BSplineCurve: return "BSPLINE";
-  default: return "OTHER";
-  }
-}
-
-bool IsSeamEdge(const TopoDS_Edge &edge, const TopTools_ListOfShape &faces) {
-  for (TopTools_ListOfShape::Iterator it(faces); it.More(); it.Next()) {
-    const TopoDS_Face face = TopoDS::Face(it.Value());
-    if (BRepTools::IsReallyClosed(edge, face)) return true;
-  }
-  return false;
-}
-
-std::vector<TopoDS_Edge> CollectComparableEdges(const TopoDS_Shape &shape) {
-  TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
-  TopExp::MapShapesAndUniqueAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
-  std::vector<TopoDS_Edge> result;
-  for (int index = 1; index <= edgeFaces.Extent(); ++index) {
-    const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(index));
-    if (BRep_Tool::Degenerated(edge)) continue;
-    if (IsSeamEdge(edge, edgeFaces.FindFromIndex(index))) continue;
-    result.push_back(edge);
-  }
-  return result;
-}
-
-std::vector<TypeStatistics> CollectFaceTypeStatistics(const TopoDS_Shape &shape) {
-  std::map<std::string, TypeStatistics> statsMap;
-  TopTools_IndexedMapOfShape faces;
-  TopExp::MapShapes(shape, TopAbs_FACE, faces);
-  for (int index = 1; index <= faces.Extent(); ++index) {
-    const TopoDS_Face face = TopoDS::Face(faces(index));
-    BRepAdaptor_Surface surface(face, Standard_True);
-    const std::string type = SurfaceTypeText(surface.GetType());
-    GProp_GProps properties;
-    BRepGProp::SurfaceProperties(face, properties, Standard_False, Standard_False);
-    auto &item = statsMap[type];
-    item.type = type;
-    ++item.count;
-    item.totalMeasure += std::abs(properties.Mass());
-  }
-  std::vector<TypeStatistics> result;
-  for (const auto &pair : statsMap) {
-    result.push_back(pair.second);
-  }
-  return result;
-}
-
-std::vector<TypeStatistics> CollectEdgeTypeStatistics(const TopoDS_Shape &shape) {
-  std::map<std::string, TypeStatistics> statsMap;
-  for (const TopoDS_Edge &edge : CollectComparableEdges(shape)) {
-    BRepAdaptor_Curve curve(edge);
-    const std::string type = CurveTypeText(curve.GetType());
-    GProp_GProps properties;
-    BRepGProp::LinearProperties(edge, properties);
-    auto &item = statsMap[type];
-    item.type = type;
-    ++item.count;
-    item.totalMeasure += std::abs(properties.Mass());
-  }
-  std::vector<TypeStatistics> result;
-  for (const auto &pair : statsMap) {
-    result.push_back(pair.second);
-  }
-  return result;
-}
-
-struct NormalizedSolid {
-  TopoDS_Solid solid;
-  NormalizationAudit audit;
-};
-
-double SumSolidVolumes(const TopoDS_Shape &shape) {
-  if (shape.IsNull()) return 0.0;
-  double total = 0.0;
-  for (TopExp_Explorer explorer(shape, TopAbs_SOLID); explorer.More();
-       explorer.Next()) {
-    GProp_GProps properties;
-    BRepGProp::VolumeProperties(explorer.Current(), properties, true,
-                                false, false);
-    total += std::abs(properties.Mass());
-  }
-  return total;
-}
-
-NormalizedSolid NormalizeSameDomain(const TopoDS_Solid &input, const CompareConfig &config) {
-  NormalizedSolid result;
-  result.solid = input;
-  NormalizationAudit &audit = result.audit;
-  audit.enabled = config.enableSameDomainNormalization;
-  audit.faceCountBefore = CountUniqueSubShapes(input, TopAbs_FACE);
-  audit.edgeCountBefore = CountUniqueSubShapes(input, TopAbs_EDGE);
-  audit.comparableEdgeCountBefore = static_cast<int>(CollectComparableEdges(input).size());
-  audit.volumeBeforeMm3 = SumSolidVolumes(input);
-
-  if (!config.enableSameDomainNormalization) {
-    audit.warning = "normalization disabled";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    audit.volumeAfterMm3 = audit.volumeBeforeMm3;
-    return result;
-  }
-
-  const auto started = Clock::now();
-  ShapeUpgrade_UnifySameDomain unify(input, Standard_True, Standard_True, Standard_False);
-  unify.SetSafeInputMode(Standard_True);
-  unify.SetLinearTolerance(config.normalizationLinearToleranceMm);
-  unify.SetAngularTolerance(config.normalizationAngularToleranceRad);
-  unify.AllowInternalEdges(Standard_False);
-  unify.Build();
-  audit.elapsedMs = ElapsedMs(started);
-
-  const TopoDS_Shape normalized = unify.Shape();
-  if (normalized.IsNull()) {
-    audit.warning = "ShapeUpgrade_UnifySameDomain returned null shape";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    audit.volumeAfterMm3 = audit.volumeBeforeMm3;
-    return result;
-  }
-
-  TopTools_IndexedMapOfShape solids;
-  TopExp::MapShapes(normalized, TopAbs_SOLID, solids);
-  if (solids.Extent() != 1) {
-    audit.warning = "normalization did not preserve one-solid topology";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    audit.volumeAfterMm3 = audit.volumeBeforeMm3;
-    return result;
-  }
-
-  const TopoDS_Solid normalizedSolid = TopoDS::Solid(solids(1));
-  if (!AllShellsClosed(normalizedSolid)) {
-    audit.warning = "normalized solid is not closed";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    audit.volumeAfterMm3 = audit.volumeBeforeMm3;
-    return result;
-  }
-
-  if (!BRepCheck_Analyzer(normalizedSolid, Standard_True).IsValid()) {
-    audit.warning = "normalized solid failed B-Rep validation";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    audit.volumeAfterMm3 = audit.volumeBeforeMm3;
-    return result;
-  }
-
-  audit.volumeAfterMm3 = SumSolidVolumes(normalizedSolid);
-  const double volumeScale = std::max(audit.volumeBeforeMm3, 1.0);
-  audit.relativeVolumeDrift = std::abs(audit.volumeAfterMm3 - audit.volumeBeforeMm3) / volumeScale;
-
-  if (audit.relativeVolumeDrift > 1.0e-10) {
-    audit.warning = "normalization volume drift exceeds safety threshold";
-    audit.faceCountAfter = audit.faceCountBefore;
-    audit.edgeCountAfter = audit.edgeCountBefore;
-    audit.comparableEdgeCountAfter = audit.comparableEdgeCountBefore;
-    return result;
-  }
-
-  audit.faceCountAfter = CountUniqueSubShapes(normalizedSolid, TopAbs_FACE);
-  audit.edgeCountAfter = CountUniqueSubShapes(normalizedSolid, TopAbs_EDGE);
-  audit.comparableEdgeCountAfter = static_cast<int>(CollectComparableEdges(normalizedSolid).size());
-  audit.succeeded = true;
-  audit.usedNormalizedShape = true;
-  result.solid = normalizedSolid;
-  return result;
-}
-
-TopologyMatchAudit MatchNormalizedTopology(const TopoDS_Solid &refSolid,
-                                           const TopoDS_Solid &candSolid,
-                                           const CompareConfig &config);
-
-double PointDistance(const Point3 &left, const Point3 &right) {
-  return std::hypot(std::hypot(left.x - right.x, left.y - right.y),
-                    left.z - right.z);
-}
-
-double MaximumBoundsDifference(const Bounds3 &left, const Bounds3 &right) {
-  if (left.isVoid || right.isVoid) {
-    return std::numeric_limits<double>::infinity();
-  }
-  return std::max({std::abs(left.minimum.x - right.minimum.x),
-                   std::abs(left.minimum.y - right.minimum.y),
-                   std::abs(left.minimum.z - right.minimum.z),
-                   std::abs(left.maximum.x - right.maximum.x),
-                   std::abs(left.maximum.y - right.maximum.y),
-                   std::abs(left.maximum.z - right.maximum.z)});
-}
-
-Bounds3 ShapeBounds(const TopoDS_Shape &shape) {
-  Bounds3 result;
-  if (shape.IsNull()) return result;
-  Bnd_Box box;
-  BRepBndLib::Add(shape, box);
-  if (box.IsVoid()) return result;
-  double xMin = 0.0, yMin = 0.0, zMin = 0.0;
-  double xMax = 0.0, yMax = 0.0, zMax = 0.0;
-  box.Get(xMin, yMin, zMin, xMax, yMax, zMax);
-  result.minimum = Point3{xMin, yMin, zMin};
-  result.maximum = Point3{xMax, yMax, zMax};
-  result.isVoid = false;
-  return result;
-}
-
-struct FaceDescriptor {
-  int index = 0;
-  std::string typeName;
-  double areaMm2 = 0.0;
-  Point3 centroidMm;
-  Bounds3 boundsMm;
-  bool matched = false;
-};
-
-struct EdgeDescriptor {
-  int index = 0;
-  std::string typeName;
-  double lengthMm = 0.0;
-  Point3 centroidMm;
-  Bounds3 boundsMm;
-  bool matched = false;
-};
-
-std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape) {
-  std::vector<FaceDescriptor> result;
-  TopTools_IndexedMapOfShape faces;
-  TopExp::MapShapes(shape, TopAbs_FACE, faces);
-  for (int index = 1; index <= faces.Extent(); ++index) {
-    const TopoDS_Face face = TopoDS::Face(faces(index));
-    BRepAdaptor_Surface surface(face, Standard_True);
-    FaceDescriptor desc;
-    desc.index = index;
-    desc.typeName = SurfaceTypeText(surface.GetType());
-    GProp_GProps properties;
-    BRepGProp::SurfaceProperties(face, properties, Standard_False, Standard_False);
-    desc.areaMm2 = std::abs(properties.Mass());
-    const gp_Pnt center = properties.CentreOfMass();
-    desc.centroidMm = Point3{center.X(), center.Y(), center.Z()};
-    desc.boundsMm = ShapeBounds(face);
-    result.push_back(desc);
-  }
-  return result;
-}
-
-std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape) {
-  std::vector<EdgeDescriptor> result;
-  const auto edges = CollectComparableEdges(shape);
-  for (std::size_t index = 0; index < edges.size(); ++index) {
-    const TopoDS_Edge edge = edges[index];
-    BRepAdaptor_Curve curve(edge);
-    EdgeDescriptor desc;
-    desc.index = static_cast<int>(index + 1);
-    desc.typeName = CurveTypeText(curve.GetType());
-    GProp_GProps properties;
-    BRepGProp::LinearProperties(edge, properties);
-    desc.lengthMm = std::abs(properties.Mass());
-    const gp_Pnt center = properties.CentreOfMass();
-    desc.centroidMm = Point3{center.X(), center.Y(), center.Z()};
-    desc.boundsMm = ShapeBounds(edge);
-    result.push_back(desc);
-  }
-  return result;
+double PointDistance(const Point3 &p1, const Point3 &p2) {
+  const double dx = p1.x - p2.x;
+  const double dy = p1.y - p2.y;
+  const double dz = p1.z - p2.z;
+  return std::sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 double BoundsDiagonal(const Bounds3 &bounds) {
-  if (bounds.isVoid) return 1.0;
-  const double dx = bounds.maximum.x - bounds.minimum.x;
-  const double dy = bounds.maximum.y - bounds.minimum.y;
-  const double dz = bounds.maximum.z - bounds.minimum.z;
-  const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
-  return diag > 0.0 ? diag : 1.0;
+  if (bounds.isVoid) {
+    return 0.0;
+  }
+  return PointDistance(bounds.minimum, bounds.maximum);
 }
 
-bool FaceMatches(const FaceDescriptor &ref, const FaceDescriptor &cand, const CompareConfig &config, double characteristicScale) {
-  if (ref.typeName != cand.typeName) return false;
-
-  const double allowedAreaDiff = std::max(1.0e-3 * ref.areaMm2, 0.01);
-  if (std::abs(ref.areaMm2 - cand.areaMm2) > allowedAreaDiff) return false;
-
-  const double effectiveDistTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
-
-  const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
-  if (centroidDist > effectiveDistTol) return false;
-
-  const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
-  if (boundsDiff > effectiveDistTol) return false;
-
-  return true;
+double ComputeBoundsDifference(const Bounds3 &b1, const Bounds3 &b2) {
+  if (b1.isVoid && b2.isVoid) {
+    return 0.0;
+  }
+  if (b1.isVoid || b2.isVoid) {
+    return std::numeric_limits<double>::infinity();
+  }
+  const double minDiff = PointDistance(b1.minimum, b2.minimum);
+  const double maxDiff = PointDistance(b1.maximum, b2.maximum);
+  return std::max(minDiff, maxDiff);
 }
 
-bool EdgeMatches(const EdgeDescriptor &ref, const EdgeDescriptor &cand, const CompareConfig &config, double characteristicScale) {
-  if (ref.typeName != cand.typeName) return false;
+Bounds3 ComputeBounds(const TopoDS_Shape &shape) {
+  Bounds3 bounds;
+  Bnd_Box box;
+  BRepBndLib::Add(shape, box);
+  if (box.IsVoid()) {
+    bounds.isVoid = true;
+    return bounds;
+  }
 
-  const double allowedLengthDiff = std::max(1.0e-3 * ref.lengthMm, 0.005);
-  if (std::abs(ref.lengthMm - cand.lengthMm) > allowedLengthDiff) return false;
+  double xmin = 0.0, ymin = 0.0, zmin = 0.0;
+  double xmax = 0.0, ymax = 0.0, zmax = 0.0;
+  box.Get(xmin, ymin, zmin, xmax, ymax, zmax);
 
-  const double effectiveDistTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
-
-  const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
-  if (centroidDist > effectiveDistTol) return false;
-
-  const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
-  if (boundsDiff > effectiveDistTol) return false;
-
-  return true;
+  bounds.isVoid = false;
+  bounds.minimum = {xmin, ymin, zmin};
+  bounds.maximum = {xmax, ymax, zmax};
+  return bounds;
 }
 
-int MatchFaceDescriptors(const std::vector<FaceDescriptor> &refFaces,
-                         std::vector<FaceDescriptor> &candFaces,
-                         const CompareConfig &config,
-                         double characteristicScale) {
-  int matched = 0;
-  for (const auto &ref : refFaces) {
-    int bestCandIndex = -1;
-    double bestDistance = std::numeric_limits<double>::max();
-
-    for (std::size_t cIdx = 0; cIdx < candFaces.size(); ++cIdx) {
-      if (candFaces[cIdx].matched) continue;
-      if (FaceMatches(ref, candFaces[cIdx], config, characteristicScale)) {
-        const double dist = PointDistance(ref.centroidMm, candFaces[cIdx].centroidMm);
-        if (dist < bestDistance) {
-          bestDistance = dist;
-          bestCandIndex = static_cast<int>(cIdx);
-        }
-      }
-    }
-
-    if (bestCandIndex >= 0) {
-      candFaces[bestCandIndex].matched = true;
-      ++matched;
-    }
+std::string SurfaceTypeName(GeomAbs_SurfaceType type) {
+  switch (type) {
+  case GeomAbs_Plane:
+    return "PLANE";
+  case GeomAbs_Cylinder:
+    return "CYLINDER";
+  case GeomAbs_Cone:
+    return "CONE";
+  case GeomAbs_Sphere:
+    return "SPHERE";
+  case GeomAbs_Torus:
+    return "TORUS";
+  case GeomAbs_BezierSurface:
+    return "BEZIER";
+  case GeomAbs_BSplineSurface:
+    return "BSPLINE";
+  case GeomAbs_SurfaceOfRevolution:
+    return "REVOLUTION";
+  case GeomAbs_SurfaceOfExtrusion:
+    return "EXTRUSION";
+  case GeomAbs_OffsetSurface:
+    return "OFFSET";
+  case GeomAbs_OtherSurface:
+    return "OTHER";
   }
-  return matched;
+  return "UNKNOWN";
 }
 
-int MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &refEdges,
-                         std::vector<EdgeDescriptor> &candEdges,
-                         const CompareConfig &config,
-                         double characteristicScale) {
-  int matched = 0;
-  for (const auto &ref : refEdges) {
-    int bestCandIndex = -1;
-    double bestDistance = std::numeric_limits<double>::max();
-
-    for (std::size_t cIdx = 0; cIdx < candEdges.size(); ++cIdx) {
-      if (candEdges[cIdx].matched) continue;
-      if (EdgeMatches(ref, candEdges[cIdx], config, characteristicScale)) {
-        const double dist = PointDistance(ref.centroidMm, candEdges[cIdx].centroidMm);
-        if (dist < bestDistance) {
-          bestDistance = dist;
-          bestCandIndex = static_cast<int>(cIdx);
-        }
-      }
-    }
-
-    if (bestCandIndex >= 0) {
-      candEdges[bestCandIndex].matched = true;
-      ++matched;
-    }
+std::string CurveTypeName(GeomAbs_CurveType type) {
+  switch (type) {
+  case GeomAbs_Line:
+    return "LINE";
+  case GeomAbs_Circle:
+    return "CIRCLE";
+  case GeomAbs_Ellipse:
+    return "ELLIPSE";
+  case GeomAbs_Hyperbola:
+    return "HYPERBOLA";
+  case GeomAbs_Parabola:
+    return "PARABOLA";
+  case GeomAbs_BezierCurve:
+    return "BEZIER";
+  case GeomAbs_BSplineCurve:
+    return "BSPLINE";
+  case GeomAbs_OffsetCurve:
+    return "OFFSET";
+  case GeomAbs_OtherCurve:
+    return "OTHER";
   }
-  return matched;
+  return "UNKNOWN";
 }
 
-TopologyMatchAudit MatchNormalizedTopology(const TopoDS_Solid &refSolid,
-                                           const TopoDS_Solid &candSolid,
-                                           const CompareConfig &config) {
-  const auto started = Clock::now();
-  TopologyMatchAudit audit;
-  audit.attempted = true;
-
-  const auto refFaceTypes = CollectFaceTypeStatistics(refSolid);
-  const auto candFaceTypes = CollectFaceTypeStatistics(candSolid);
-  const auto refEdgeTypes = CollectEdgeTypeStatistics(refSolid);
-  const auto candEdgeTypes = CollectEdgeTypeStatistics(candSolid);
-
-  const auto refFaceDescs = CollectFaceDescriptors(refSolid);
-  auto candFaceDescs = CollectFaceDescriptors(candSolid);
-  const auto refEdgeDescs = CollectEdgeDescriptors(refSolid);
-  auto candEdgeDescs = CollectEdgeDescriptors(candSolid);
-
-  audit.referenceFaceCount = static_cast<int>(refFaceDescs.size());
-  audit.candidateFaceCount = static_cast<int>(candFaceDescs.size());
-  audit.referenceEdgeCount = static_cast<int>(refEdgeDescs.size());
-  audit.candidateEdgeCount = static_cast<int>(candEdgeDescs.size());
-
-  auto MapsEqual = [](const std::vector<TypeStatistics> &left, const std::vector<TypeStatistics> &right) {
-    std::map<std::string, int> lMap, rMap;
-    for (const auto &item : left) lMap[item.type] = item.count;
-    for (const auto &item : right) rMap[item.type] = item.count;
-    return lMap == rMap;
-  };
-
-  audit.faceTypeHistogramEqual = MapsEqual(refFaceTypes, candFaceTypes);
-  audit.edgeTypeHistogramEqual = MapsEqual(refEdgeTypes, candEdgeTypes);
-
-  const double characteristicScale = BoundsDiagonal(ShapeBounds(refSolid));
-  audit.matchedFaceCount = MatchFaceDescriptors(refFaceDescs, candFaceDescs, config, characteristicScale);
-  audit.matchedEdgeCount = MatchEdgeDescriptors(refEdgeDescs, candEdgeDescs, config, characteristicScale);
-
-  audit.unmatchedReferenceFaces = audit.referenceFaceCount - audit.matchedFaceCount;
-  audit.unmatchedCandidateFaces = audit.candidateFaceCount - audit.matchedFaceCount;
-  audit.unmatchedReferenceEdges = audit.referenceEdgeCount - audit.matchedEdgeCount;
-  audit.unmatchedCandidateEdges = audit.candidateEdgeCount - audit.matchedEdgeCount;
-
-  audit.allFacesMatched = (audit.matchedFaceCount == audit.referenceFaceCount) &&
-                          (audit.matchedFaceCount == audit.candidateFaceCount);
-
-  audit.allEdgesMatched = (audit.matchedEdgeCount == audit.referenceEdgeCount) &&
-                          (audit.matchedEdgeCount == audit.candidateEdgeCount);
-
-  audit.normalizedTopologyMatch = audit.allFacesMatched && audit.allEdgesMatched &&
-                                  audit.faceTypeHistogramEqual && audit.edgeTypeHistogramEqual;
-
-  audit.elapsedMs = ElapsedMs(started);
-  return audit;
+template <typename Clock = std::chrono::high_resolution_clock>
+double ElapsedMs(const std::chrono::time_point<Clock> &start) {
+  const auto finish = Clock::now();
+  return std::chrono::duration<double, std::milli>(finish - start).count();
 }
 
-void ExportShapeStl(const TopoDS_Shape &shape, const std::filesystem::path &outPath) {
-  if (shape.IsNull()) return;
-  try {
-    BRepTools::Clean(shape);
-    BRepMesh_IncrementalMesh mesh(shape, 0.05, Standard_False, 0.5, Standard_True);
-    mesh.Perform();
-    StlAPI_Writer writer;
-    writer.Write(shape, outPath.string().c_str());
-  } catch (...) {}
-}
-
-DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool,
-                    double fuzzyTolerance, const std::filesystem::path &stlOutPath = "") {
-  DifferenceAudit result;
-  BRepAlgoAPI_Cut cut;
-  TopTools_ListOfShape arguments;
-  TopTools_ListOfShape tools;
-  arguments.Append(argument);
-  tools.Append(tool);
-  cut.SetArguments(arguments);
-  cut.SetTools(tools);
-  cut.SetNonDestructive(Standard_True);
-  if (fuzzyTolerance > 0.0) {
-    cut.SetFuzzyValue(fuzzyTolerance);
-  }
-  cut.Build();
-
-  std::ostringstream report;
-  if (cut.HasErrors()) {
-    cut.DumpErrors(report);
-  }
-  if (cut.HasWarnings()) {
-    cut.DumpWarnings(report);
-  }
-  result.report = report.str();
-  result.succeeded = !cut.HasErrors() && cut.IsDone();
-  if (!result.succeeded) {
-    return result;
-  }
-
-  const TopoDS_Shape difference = cut.Shape();
-  if (difference.IsNull()) {
-    return result;
-  }
-
-  result.componentCount = CountSubShapes(difference, TopAbs_SOLID);
-  if (result.componentCount > 0) {
-    result.volumeMm3 = SumSolidVolumes(difference);
-
-    if (!stlOutPath.empty()) {
-      ExportShapeStl(difference, stlOutPath);
-    }
+std::vector<TypeStatistics> SummarizeMap(const std::map<std::string, std::pair<int, double>> &countMap) {
+  std::vector<TypeStatistics> result;
+  result.reserve(countMap.size());
+  for (const auto &pair : countMap) {
+    TypeStatistics stat;
+    stat.type = pair.first;
+    stat.count = pair.second.first;
+    stat.totalMeasure = pair.second.second;
+    result.push_back(stat);
   }
   return result;
 }
 
-json PointJson(const Point3 &point) {
-  json obj = json::object();
-  obj["x"] = point.x;
-  obj["y"] = point.y;
-  obj["z"] = point.z;
-  return obj;
-}
+OriginalTopologyIndex BuildOriginalTopologyIndex(const TopoDS_Solid &solid, EntitySide side) {
+  OriginalTopologyIndex index;
+  TopExp::MapShapes(solid, TopAbs_FACE, index.faces);
+  TopExp::MapShapes(solid, TopAbs_EDGE, index.edges);
 
-json BoundsJson(const Bounds3 &bounds) {
-  json obj = json::object();
-  obj["is_void"] = bounds.isVoid;
-  obj["minimum_mm"] = PointJson(bounds.minimum);
-  obj["maximum_mm"] = PointJson(bounds.maximum);
-  return obj;
-}
-
-json InputJson(const InputAudit &audit) {
-  json obj = json::object();
-  obj["path"] = audit.path;
-  obj["file_length_units"] = audit.fileLengthUnits;
-  obj["load_diagnostics"] = audit.loadDiagnostics;
-  obj["transfer_diagnostics"] = audit.transferDiagnostics;
-  obj["solid_count"] = audit.solidCount;
-  obj["shell_count"] = audit.shellCount;
-  obj["face_count"] = audit.faceCount;
-  obj["edge_count"] = audit.edgeCount;
-  obj["brep_valid"] = audit.brepValid;
-  obj["closed"] = audit.closed;
-  obj["signed_volume_mm3"] = audit.signedVolumeMm3;
-  obj["surface_area_mm2"] = audit.surfaceAreaMm2;
-  obj["centroid_mm"] = PointJson(audit.centroidMm);
-  obj["bounds"] = BoundsJson(audit.boundsMm);
-  return obj;
-}
-
-json DifferenceJson(const DifferenceAudit &audit) {
-  json obj = json::object();
-  obj["succeeded"] = audit.succeeded;
-  obj["volume_mm3"] = audit.volumeMm3;
-  obj["component_count"] = audit.componentCount;
-  obj["kernel_report"] = audit.report;
-  return obj;
-}
-
-json TypeStatsJson(const std::vector<TypeStatistics> &stats) {
-  json arr = json::array();
-  for (const auto &item : stats) {
-    json itemObj = json::object();
-    itemObj["type"] = item.type;
-    itemObj["count"] = item.count;
-    itemObj["total_measure"] = item.totalMeasure;
-    arr.push_back(itemObj);
+  index.faceIds.reserve(index.faces.Extent());
+  for (int i = 1; i <= index.faces.Extent(); ++i) {
+    index.faceIds.push_back(MakeEntityId(side, EntityKind::OriginalFace, i));
   }
-  return arr;
-}
 
-json NormalizationAuditJson(const NormalizationAudit &audit) {
-  json obj = json::object();
-  obj["enabled"] = audit.enabled;
-  obj["succeeded"] = audit.succeeded;
-  obj["used_normalized_shape"] = audit.usedNormalizedShape;
-  obj["faces_before"] = audit.faceCountBefore;
-  obj["faces_after"] = audit.faceCountAfter;
-  obj["edges_before"] = audit.edgeCountBefore;
-  obj["edges_after"] = audit.edgeCountAfter;
-  obj["comparable_edges_before"] = audit.comparableEdgeCountBefore;
-  obj["comparable_edges_after"] = audit.comparableEdgeCountAfter;
-  obj["volume_before_mm3"] = audit.volumeBeforeMm3;
-  obj["volume_after_mm3"] = audit.volumeAfterMm3;
-  obj["relative_volume_drift"] = audit.relativeVolumeDrift;
-  obj["elapsed_ms"] = audit.elapsedMs;
-  obj["warning"] = audit.warning;
-  obj["face_types"] = TypeStatsJson(audit.faceTypes);
-  obj["edge_types"] = TypeStatsJson(audit.edgeTypes);
-  return obj;
-}
-
-json TopologyMatchAuditJson(const TopologyMatchAudit &audit) {
-  json obj = json::object();
-  obj["attempted"] = audit.attempted;
-  obj["reference_faces"] = audit.referenceFaceCount;
-  obj["candidate_faces"] = audit.candidateFaceCount;
-  obj["matched_faces"] = audit.matchedFaceCount;
-  obj["reference_edges"] = audit.referenceEdgeCount;
-  obj["candidate_edges"] = audit.candidateEdgeCount;
-  obj["matched_edges"] = audit.matchedEdgeCount;
-  obj["unmatched_reference_faces"] = audit.unmatchedReferenceFaces;
-  obj["unmatched_candidate_faces"] = audit.unmatchedCandidateFaces;
-  obj["unmatched_reference_edges"] = audit.unmatchedReferenceEdges;
-  obj["unmatched_candidate_edges"] = audit.unmatchedCandidateEdges;
-  obj["face_type_histogram_equal"] = audit.faceTypeHistogramEqual;
-  obj["edge_type_histogram_equal"] = audit.edgeTypeHistogramEqual;
-  obj["all_faces_matched"] = audit.allFacesMatched;
-  obj["all_edges_matched"] = audit.allEdgesMatched;
-  obj["match"] = audit.normalizedTopologyMatch;
-  obj["elapsed_ms"] = audit.elapsedMs;
-  return obj;
-}
-
-json TimingsJson(const TimingAudit &timings) {
-  json obj = json::object();
-  obj["load_reference_ms"] = timings.loadReferenceMs;
-  obj["load_candidate_ms"] = timings.loadCandidateMs;
-  obj["normalize_reference_ms"] = timings.normalizeReferenceMs;
-  obj["normalize_candidate_ms"] = timings.normalizeCandidateMs;
-  obj["topology_match_ms"] = timings.topologyMatchMs;
-  obj["boolean_ab_ms"] = timings.booleanAbMs;
-  obj["boolean_ba_ms"] = timings.booleanBaMs;
-  obj["artifact_export_ms"] = timings.artifactExportMs;
-  obj["total_ms"] = timings.totalMs;
-  return obj;
-}
-
-CompareStatus FailedLoadStatus(LoadClass classification) {
-  switch (classification) {
-  case LoadClass::Invalid:
-    return CompareStatus::InvalidInput;
-  case LoadClass::Unsupported:
-    return CompareStatus::UnsupportedShape;
-  case LoadClass::InternalError:
-    return CompareStatus::InternalError;
-  case LoadClass::Ready:
-    break;
+  index.edgeIds.reserve(index.edges.Extent());
+  for (int i = 1; i <= index.edges.Extent(); ++i) {
+    index.edgeIds.push_back(MakeEntityId(side, EntityKind::OriginalEdge, i));
   }
-  return CompareStatus::InternalError;
+  return index;
 }
 
-bool VolumePass(double absoluteDiff, double referenceScale, double absTol, double relTol) {
-  const double effectiveAbsTol = std::max(absTol, relTol * referenceScale);
-  const bool absPass = absoluteDiff <= effectiveAbsTol;
-  const bool relPass = (referenceScale > 0.0) ? (absoluteDiff / referenceScale <= relTol) : true;
-  return absPass && relPass;
+LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
+  LoadedSolid result;
+  result.audit.path = stepPath.string();
+
+  if (!std::filesystem::exists(stepPath)) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "file does not exist: " + stepPath.string();
+    return result;
+  }
+
+  STEPControl_Reader reader;
+  const IFSelect_ReturnStatus readStatus = reader.ReadFile(stepPath.string().c_str());
+
+  std::ostringstream loadDiag;
+  loadDiag << "ReadFile status=" << ReadStatusText(readStatus);
+
+  std::ostringstream messageStream;
+  reader.PrintCheckLoad(false, IFSelect_CountByItem);
+  const std::string checks = messageStream.str();
+  if (!checks.empty()) {
+    loadDiag << "\n" << checks;
+  }
+  result.audit.loadDiagnostics = loadDiag.str();
+
+  if (readStatus != IFSelect_RetDone) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "failed to parse STEP file (read_status=" + std::string(ReadStatusText(readStatus)) + ")";
+    return result;
+  }
+
+  TColStd_SequenceOfAsciiString lengthUnits;
+  TColStd_SequenceOfAsciiString planeAngleUnits;
+  TColStd_SequenceOfAsciiString solidAngleUnits;
+  reader.FileUnits(lengthUnits, planeAngleUnits, solidAngleUnits);
+  for (int i = 1; i <= lengthUnits.Length(); ++i) {
+    result.audit.fileLengthUnits.push_back(lengthUnits.Value(i).ToCString());
+  }
+
+  const int rootsCount = reader.TransferRoots();
+  std::ostringstream transferDiag;
+  transferDiag << "transferred_roots=" << rootsCount;
+  result.audit.transferDiagnostics = transferDiag.str();
+
+  const TopoDS_Shape compositeShape = reader.OneShape();
+  if (compositeShape.IsNull()) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "STEP file contains no geometry";
+    return result;
+  }
+
+  result.audit.solidCount = CountUniqueSubShapes(compositeShape, TopAbs_SOLID);
+  result.audit.shellCount = CountUniqueSubShapes(compositeShape, TopAbs_SHELL);
+  result.audit.faceCount = CountUniqueSubShapes(compositeShape, TopAbs_FACE);
+  result.audit.edgeCount = CountUniqueSubShapes(compositeShape, TopAbs_EDGE);
+
+  if (result.audit.solidCount == 0) {
+    result.classification = LoadClass::Unsupported;
+    result.reason = "STEP file contains no 3D solids (shell_count=" + std::to_string(result.audit.shellCount) +
+                    ", face_count=" + std::to_string(result.audit.faceCount) + ")";
+    return result;
+  }
+
+  if (result.audit.solidCount > 1) {
+    result.classification = LoadClass::Unsupported;
+    result.reason = "multiple 3D solids are not supported (solid_count=" + std::to_string(result.audit.solidCount) + ")";
+    return result;
+  }
+
+  TopExp_Explorer solidExplorer(compositeShape, TopAbs_SOLID);
+  if (!solidExplorer.More()) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "failed to extract solid shape";
+    return result;
+  }
+
+  result.solid = TopoDS::Solid(solidExplorer.Current());
+  if (result.solid.IsNull()) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "extracted solid is null";
+    return result;
+  }
+
+  const int edgesInSolid = CountUniqueSubShapes(result.solid, TopAbs_EDGE);
+  const int facesInSolid = CountUniqueSubShapes(result.solid, TopAbs_FACE);
+  if (result.audit.edgeCount > edgesInSolid || result.audit.faceCount > facesInSolid) {
+    result.classification = LoadClass::Unsupported;
+    result.reason = "STEP file contains unattached non-solid elements (free edges/faces)";
+    return result;
+  }
+
+  BRepCheck_Analyzer analyzer(result.solid);
+  result.audit.brepValid = analyzer.IsValid() != 0;
+  result.audit.closed = (result.solid.Closed() != 0) || (CountSubShapes(result.solid, TopAbs_SHELL) > 0);
+
+  if (!result.audit.brepValid) {
+    result.classification = LoadClass::Invalid;
+    result.reason = "solid fail BRepCheck validation";
+    return result;
+  }
+
+  GProp_GProps systemProps;
+  BRepGProp::VolumeProperties(result.solid, systemProps);
+  result.audit.signedVolumeMm3 = systemProps.Mass();
+
+  GProp_GProps surfaceProps;
+  BRepGProp::SurfaceProperties(result.solid, surfaceProps);
+  result.audit.surfaceAreaMm2 = surfaceProps.Mass();
+
+  const gp_Pnt centroidPnt = systemProps.CentreOfMass();
+  result.audit.centroidMm = {centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()};
+  result.audit.boundsMm = ComputeBounds(result.solid);
+
+  result.classification = LoadClass::Ready;
+  return result;
+}
+
+NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
+                                             const OriginalTopologyIndex &originalIndex,
+                                             EntitySide side,
+                                             const CompareConfig &config) {
+  NormalizedSolidInternal result;
+  result.audit.enabled = config.enableSameDomainNormalization;
+  result.audit.faceCountBefore = CountUniqueSubShapes(input, TopAbs_FACE);
+  result.audit.edgeCountBefore = CountUniqueSubShapes(input, TopAbs_EDGE);
+  result.audit.comparableEdgeCountBefore = result.audit.edgeCountBefore;
+
+  GProp_GProps inputProps;
+  BRepGProp::VolumeProperties(input, inputProps);
+  result.audit.volumeBeforeMm3 = inputProps.Mass();
+
+  if (!config.enableSameDomainNormalization) {
+    result.solid = input;
+    result.audit.succeeded = true;
+    result.audit.usedNormalizedShape = false;
+    result.audit.faceCountAfter = result.audit.faceCountBefore;
+    result.audit.edgeCountAfter = result.audit.edgeCountBefore;
+    result.audit.comparableEdgeCountAfter = result.audit.edgeCountBefore;
+    result.audit.volumeAfterMm3 = result.audit.volumeBeforeMm3;
+    result.audit.mappingComplete = true;
+
+    TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
+    TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
+    return result;
+  }
+
+  const auto normStart = std::chrono::high_resolution_clock::now();
+  try {
+    ShapeUpgrade_UnifySameDomain unify(input, true, true, true);
+    unify.SetLinearTolerance(config.normalizationLinearToleranceMm);
+    unify.SetAngularTolerance(config.normalizationAngularToleranceRad);
+    unify.Build();
+
+    const TopoDS_Shape unifiedShape = unify.Shape();
+    if (!unifiedShape.IsNull() && unifiedShape.ShapeType() == TopAbs_SOLID) {
+      result.solid = TopoDS::Solid(unifiedShape);
+      result.audit.succeeded = true;
+    } else if (!unifiedShape.IsNull() && CountSubShapes(unifiedShape, TopAbs_SOLID) == 1) {
+      TopExp_Explorer expl(unifiedShape, TopAbs_SOLID);
+      result.solid = TopoDS::Solid(expl.Current());
+      result.audit.succeeded = true;
+    } else {
+      result.solid = input;
+      result.audit.succeeded = false;
+      result.audit.warning = "unify_same_domain produced non-solid shape; fallback to original";
+    }
+  } catch (const Standard_Failure &e) {
+    result.solid = input;
+    result.audit.succeeded = false;
+    result.audit.warning = std::string("unify_same_domain exception: ") + e.GetMessageString();
+  } catch (...) {
+    result.solid = input;
+    result.audit.succeeded = false;
+    result.audit.warning = "unify_same_domain unknown exception; fallback to original";
+  }
+
+  result.audit.elapsedMs = ElapsedMs(normStart);
+  if (!result.solid.IsNull()) {
+    GProp_GProps outputProps;
+    BRepGProp::VolumeProperties(result.solid, outputProps);
+    result.audit.volumeAfterMm3 = outputProps.Mass();
+
+    const double denom = std::abs(result.audit.volumeBeforeMm3);
+    result.audit.relativeVolumeDrift =
+        denom > 0.0 ? std::abs(result.audit.volumeAfterMm3 - result.audit.volumeBeforeMm3) / denom : 0.0;
+  }
+
+  const bool volumeSafe = result.audit.relativeVolumeDrift <= config.relativeVolumeTolerance;
+  if (!volumeSafe && result.audit.succeeded) {
+    result.audit.warning = "normalization volume drift exceeds safety threshold; fallback to original";
+    result.solid = input;
+    result.audit.succeeded = false;
+  }
+
+  result.audit.usedNormalizedShape = result.audit.succeeded;
+  result.audit.faceCountAfter = CountUniqueSubShapes(result.solid, TopAbs_FACE);
+  result.audit.edgeCountAfter = CountUniqueSubShapes(result.solid, TopAbs_EDGE);
+  result.audit.comparableEdgeCountAfter = result.audit.edgeCountAfter;
+
+  TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
+  TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
+
+  // Build faces detail list
+  std::map<int, NormalizedFaceInfo> normFaceMap;
+  for (int i = 1; i <= result.normalizedFaces.Extent(); ++i) {
+    const TopoDS_Face f = TopoDS::Face(result.normalizedFaces(i));
+    NormalizedFaceInfo info;
+    info.id = MakeEntityId(side, EntityKind::NormalizedFace, i);
+    info.visualIndex = i;
+
+    BRepAdaptor_Surface surface(f);
+    info.surfaceType = SurfaceTypeName(surface.GetType());
+
+    GProp_GProps faceProps;
+    BRepGProp::SurfaceProperties(f, faceProps);
+    info.areaMm2 = faceProps.Mass();
+
+    const gp_Pnt faceCentroid = faceProps.CentreOfMass();
+    info.centroidMm = {faceCentroid.X(), faceCentroid.Y(), faceCentroid.Z()};
+    info.boundsMm = ComputeBounds(f);
+
+    if (surface.GetType() == GeomAbs_Cylinder) {
+      info.radiusMm = surface.Cylinder().Radius();
+      const gp_Pnt loc = surface.Cylinder().Location();
+      const gp_Dir dir = surface.Cylinder().Axis().Direction();
+      info.axisOriginMm = Point3{loc.X(), loc.Y(), loc.Z()};
+      info.axisDirection = Point3{dir.X(), dir.Y(), dir.Z()};
+    }
+
+    normFaceMap[i] = info;
+  }
+
+  // Build edges detail list
+  std::map<int, NormalizedEdgeInfo> normEdgeMap;
+  for (int i = 1; i <= result.normalizedEdges.Extent(); ++i) {
+    const TopoDS_Edge e = TopoDS::Edge(result.normalizedEdges(i));
+    NormalizedEdgeInfo info;
+    info.id = MakeEntityId(side, EntityKind::NormalizedEdge, i);
+    info.visualIndex = i;
+
+    BRepAdaptor_Curve curve(e);
+    info.curveType = CurveTypeName(curve.GetType());
+
+    GProp_GProps edgeProps;
+    BRepGProp::LinearProperties(e, edgeProps);
+    info.lengthMm = edgeProps.Mass();
+
+    const gp_Pnt edgeCentroid = edgeProps.CentreOfMass();
+    info.centroidMm = {edgeCentroid.X(), edgeCentroid.Y(), edgeCentroid.Z()};
+    info.boundsMm = ComputeBounds(e);
+    info.closed = (BRep_Tool::IsClosed(e) != 0);
+
+    normEdgeMap[i] = info;
+  }
+
+  // Map original topology to normalized topology
+  bool allMapped = true;
+  for (int i = 1; i <= originalIndex.faces.Extent(); ++i) {
+    const TopoDS_Face origF = TopoDS::Face(originalIndex.faces(i));
+    const std::string origId = originalIndex.faceIds[i - 1];
+
+    bool foundMapping = false;
+    for (int j = 1; j <= result.normalizedFaces.Extent(); ++j) {
+      const TopoDS_Face normF = TopoDS::Face(result.normalizedFaces(j));
+      if (origF.IsSame(normF)) {
+        normFaceMap[j].sourceFaceIds.push_back(origId);
+        foundMapping = true;
+        break;
+      }
+    }
+    if (!foundMapping) {
+      allMapped = false;
+    }
+  }
+
+  for (int j = 1; j <= result.normalizedFaces.Extent(); ++j) {
+    auto &info = normFaceMap[j];
+    info.sourceCount = static_cast<int>(info.sourceFaceIds.size());
+    info.merged = info.sourceCount > 1;
+    result.audit.faces.push_back(info);
+  }
+
+  for (int i = 1; i <= originalIndex.edges.Extent(); ++i) {
+    const TopoDS_Edge origE = TopoDS::Edge(originalIndex.edges(i));
+    const std::string origId = originalIndex.edgeIds[i - 1];
+
+    bool foundMapping = false;
+    for (int j = 1; j <= result.normalizedEdges.Extent(); ++j) {
+      const TopoDS_Edge normE = TopoDS::Edge(result.normalizedEdges(j));
+      if (origE.IsSame(normE)) {
+        normEdgeMap[j].sourceEdgeIds.push_back(origId);
+        foundMapping = true;
+        break;
+      }
+    }
+    if (!foundMapping) {
+      RemovedEdgeInfo removed;
+      removed.sourceEdgeId = origId;
+      if (BRep_Tool::Degenerated(origE)) {
+        removed.reason = "DEGENERATED";
+      } else {
+        removed.reason = "REMOVED_BY_NORMALIZATION";
+      }
+      result.audit.removedEdges.push_back(removed);
+    }
+  }
+
+  for (int j = 1; j <= result.normalizedEdges.Extent(); ++j) {
+    auto &info = normEdgeMap[j];
+    info.sourceCount = static_cast<int>(info.sourceEdgeIds.size());
+    info.merged = info.sourceCount > 1;
+    result.audit.edges.push_back(info);
+  }
+
+  result.audit.mappingComplete = allMapped;
+
+  // Type Statistics
+  std::map<std::string, std::pair<int, double>> faceTypeStats;
+  for (const auto &info : result.audit.faces) {
+    auto &item = faceTypeStats[info.surfaceType];
+    item.first += 1;
+    item.second += info.areaMm2;
+  }
+  result.audit.faceTypes = SummarizeMap(faceTypeStats);
+
+  std::map<std::string, std::pair<int, double>> edgeTypeStats;
+  for (const auto &info : result.audit.edges) {
+    auto &item = edgeTypeStats[info.curveType];
+    item.first += 1;
+    item.second += info.lengthMm;
+  }
+  result.audit.edgeTypes = SummarizeMap(edgeTypeStats);
+
+  return result;
+}
+
+std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape, EntitySide side) {
+  std::vector<FaceDescriptor> descriptors;
+  TopTools_IndexedMapOfShape faceMap;
+  TopExp::MapShapes(shape, TopAbs_FACE, faceMap);
+
+  descriptors.reserve(faceMap.Extent());
+  for (int i = 1; i <= faceMap.Extent(); ++i) {
+    const TopoDS_Face face = TopoDS::Face(faceMap(i));
+    FaceDescriptor descriptor;
+    descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedFace, i);
+    descriptor.visualIndex = i;
+    descriptor.face = face;
+
+    BRepAdaptor_Surface surface(face);
+    descriptor.typeName = SurfaceTypeName(surface.GetType());
+
+    GProp_GProps props;
+    BRepGProp::SurfaceProperties(face, props);
+    descriptor.areaMm2 = props.Mass();
+
+    const gp_Pnt centroidPnt = props.CentreOfMass();
+    descriptor.centroidMm = {centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()};
+    descriptor.boundsMm = ComputeBounds(face);
+
+    descriptors.push_back(descriptor);
+  }
+
+  return descriptors;
+}
+
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, EntitySide side) {
+  std::vector<EdgeDescriptor> descriptors;
+  TopTools_IndexedMapOfShape edgeMap;
+  TopExp::MapShapes(shape, TopAbs_EDGE, edgeMap);
+
+  descriptors.reserve(edgeMap.Extent());
+  for (int i = 1; i <= edgeMap.Extent(); ++i) {
+    const TopoDS_Edge edge = TopoDS::Edge(edgeMap(i));
+    EdgeDescriptor descriptor;
+    descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedEdge, i);
+    descriptor.visualIndex = i;
+    descriptor.edge = edge;
+
+    BRepAdaptor_Curve curve(edge);
+    descriptor.typeName = CurveTypeName(curve.GetType());
+
+    GProp_GProps props;
+    BRepGProp::LinearProperties(edge, props);
+    descriptor.lengthMm = props.Mass();
+
+    const gp_Pnt centroidPnt = props.CentreOfMass();
+    descriptor.centroidMm = {centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()};
+    descriptor.boundsMm = ComputeBounds(edge);
+
+    descriptors.push_back(descriptor);
+  }
+
+  return descriptors;
+}
+
+double ComputeDescriptorScore(double measureErr, double centroidErr, double boundsErr) {
+  double score = 1.0 - 0.4 * measureErr - 0.3 * centroidErr - 0.3 * boundsErr;
+  return std::clamp(score, 0.0, 1.0);
+}
+
+MatchCollection MatchFaceDescriptors(const std::vector<FaceDescriptor> &referenceFaces,
+                                     const std::vector<FaceDescriptor> &candidateFaces,
+                                     const CompareConfig &config,
+                                     double characteristicScale) {
+  MatchCollection collection;
+  collection.attempted = true;
+  collection.referenceCount = static_cast<int>(referenceFaces.size());
+  collection.candidateCount = static_cast<int>(candidateFaces.size());
+
+  const double distTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
+
+  std::map<std::string, int> refHistogram;
+  for (const auto &f : referenceFaces) {
+    refHistogram[f.typeName]++;
+  }
+  std::map<std::string, int> candHistogram;
+  for (const auto &f : candidateFaces) {
+    candHistogram[f.typeName]++;
+  }
+  collection.typeHistogramEqual = (refHistogram == candHistogram);
+
+  std::vector<bool> candidateUsed(candidateFaces.size(), false);
+  int matchPairIdx = 1;
+
+  for (size_t i = 0; i < referenceFaces.size(); ++i) {
+    const auto &refFace = referenceFaces[i];
+
+    int bestCandidateIdx = -1;
+    double bestScore = -1.0;
+    int secondBestIdx = -1;
+    double secondBestScore = -1.0;
+    MatchMetrics bestMetrics;
+
+    for (size_t j = 0; j < candidateFaces.size(); ++j) {
+      if (candidateUsed[j]) {
+        continue;
+      }
+      const auto &candFace = candidateFaces[j];
+      if (refFace.typeName != candFace.typeName) {
+        continue;
+      }
+
+      const double areaDiff = std::abs(refFace.areaMm2 - candFace.areaMm2);
+      const double relAreaDiff = refFace.areaMm2 > 0.0 ? (areaDiff / refFace.areaMm2) : 0.0;
+      const double centroidDist = PointDistance(refFace.centroidMm, candFace.centroidMm);
+      const double boundsDiff = ComputeBoundsDifference(refFace.boundsMm, candFace.boundsMm);
+
+      const bool areaPass = relAreaDiff <= config.relativeVolumeTolerance * 100.0;
+      const bool distPass = centroidDist <= distTol;
+      const bool boundsPass = boundsDiff <= distTol;
+
+      if (areaPass && distPass && boundsPass) {
+        const double normAreaErr = std::min(1.0, relAreaDiff);
+        const double normCentroidErr = characteristicScale > 0.0 ? std::min(1.0, centroidDist / characteristicScale) : 0.0;
+        const double normBoundsErr = characteristicScale > 0.0 ? std::min(1.0, boundsDiff / characteristicScale) : 0.0;
+        const double score = ComputeDescriptorScore(normAreaErr, normCentroidErr, normBoundsErr);
+
+        if (score > bestScore) {
+          secondBestScore = bestScore;
+          secondBestIdx = bestCandidateIdx;
+          bestScore = score;
+          bestCandidateIdx = static_cast<int>(j);
+          bestMetrics = {areaDiff, relAreaDiff, centroidDist, boundsDiff};
+        } else if (score > secondBestScore) {
+          secondBestScore = score;
+          secondBestIdx = static_cast<int>(j);
+        }
+      }
+    }
+
+    EntityMatch item;
+    item.id = "face-match:" + MakeEntityId(EntitySide::Reference, EntityKind::NormalizedFace, matchPairIdx++);
+    item.referenceId = refFace.entityId;
+    item.geometryType = refFace.typeName;
+    item.verificationLevel = VerificationLevel::Descriptor;
+
+    if (bestCandidateIdx >= 0) {
+      const bool isAmbiguous = (secondBestIdx >= 0) && ((bestScore - secondBestScore) < config.ambiguousMatchMargin);
+      if (isAmbiguous) {
+        item.status = MatchStatus::Ambiguous;
+        item.candidateId = candidateFaces[bestCandidateIdx].entityId;
+        item.score = bestScore;
+        item.metrics = bestMetrics;
+        item.reasonCodes.push_back("MULTIPLE_SIMILAR_CANDIDATES");
+        collection.ambiguousCount++;
+      } else {
+        item.status = MatchStatus::Matched;
+        item.candidateId = candidateFaces[bestCandidateIdx].entityId;
+        item.score = bestScore;
+        item.metrics = bestMetrics;
+        candidateUsed[bestCandidateIdx] = true;
+        collection.matchedCount++;
+      }
+    } else {
+      item.status = MatchStatus::Unmatched;
+      item.candidateId = "";
+      item.score = 0.0;
+      collection.unmatchedReferenceIds.push_back(refFace.entityId);
+    }
+    collection.items.push_back(item);
+  }
+
+  for (size_t j = 0; j < candidateFaces.size(); ++j) {
+    if (!candidateUsed[j]) {
+      collection.unmatchedCandidateIds.push_back(candidateFaces[j].entityId);
+    }
+  }
+
+  collection.allMatched = (collection.matchedCount == collection.referenceCount) &&
+                          (collection.referenceCount == collection.candidateCount);
+  return collection;
+}
+
+MatchCollection MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &referenceEdges,
+                                     const std::vector<EdgeDescriptor> &candidateEdges,
+                                     const CompareConfig &config,
+                                     double characteristicScale) {
+  MatchCollection collection;
+  collection.attempted = true;
+  collection.referenceCount = static_cast<int>(referenceEdges.size());
+  collection.candidateCount = static_cast<int>(candidateEdges.size());
+
+  const double distTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
+
+  std::map<std::string, int> refHistogram;
+  for (const auto &e : referenceEdges) {
+    refHistogram[e.typeName]++;
+  }
+  std::map<std::string, int> candHistogram;
+  for (const auto &e : candidateEdges) {
+    candHistogram[e.typeName]++;
+  }
+  collection.typeHistogramEqual = (refHistogram == candHistogram);
+
+  std::vector<bool> candidateUsed(candidateEdges.size(), false);
+  int matchPairIdx = 1;
+
+  for (size_t i = 0; i < referenceEdges.size(); ++i) {
+    const auto &refEdge = referenceEdges[i];
+
+    int bestCandidateIdx = -1;
+    double bestScore = -1.0;
+    int secondBestIdx = -1;
+    double secondBestScore = -1.0;
+    MatchMetrics bestMetrics;
+
+    for (size_t j = 0; j < candidateEdges.size(); ++j) {
+      if (candidateUsed[j]) {
+        continue;
+      }
+      const auto &candEdge = candidateEdges[j];
+      if (refEdge.typeName != candEdge.typeName) {
+        continue;
+      }
+
+      const double lenDiff = std::abs(refEdge.lengthMm - candEdge.lengthMm);
+      const double relLenDiff = refEdge.lengthMm > 0.0 ? (lenDiff / refEdge.lengthMm) : 0.0;
+      const double centroidDist = PointDistance(refEdge.centroidMm, candEdge.centroidMm);
+      const double boundsDiff = ComputeBoundsDifference(refEdge.boundsMm, candEdge.boundsMm);
+
+      const bool lenPass = lenDiff <= distTol;
+      const bool distPass = centroidDist <= distTol;
+      const bool boundsPass = boundsDiff <= distTol;
+
+      if (lenPass && distPass && boundsPass) {
+        const double normLenErr = characteristicScale > 0.0 ? std::min(1.0, lenDiff / characteristicScale) : 0.0;
+        const double normCentroidErr = characteristicScale > 0.0 ? std::min(1.0, centroidDist / characteristicScale) : 0.0;
+        const double normBoundsErr = characteristicScale > 0.0 ? std::min(1.0, boundsDiff / characteristicScale) : 0.0;
+        const double score = ComputeDescriptorScore(normLenErr, normCentroidErr, normBoundsErr);
+
+        if (score > bestScore) {
+          secondBestScore = bestScore;
+          secondBestIdx = bestCandidateIdx;
+          bestScore = score;
+          bestCandidateIdx = static_cast<int>(j);
+          bestMetrics = {lenDiff, relLenDiff, centroidDist, boundsDiff};
+        } else if (score > secondBestScore) {
+          secondBestScore = score;
+          secondBestIdx = static_cast<int>(j);
+        }
+      }
+    }
+
+    EntityMatch item;
+    item.id = "edge-match:" + MakeEntityId(EntitySide::Reference, EntityKind::NormalizedEdge, matchPairIdx++);
+    item.referenceId = refEdge.entityId;
+    item.geometryType = refEdge.typeName;
+    item.verificationLevel = VerificationLevel::Descriptor;
+
+    if (bestCandidateIdx >= 0) {
+      const bool isAmbiguous = (secondBestIdx >= 0) && ((bestScore - secondBestScore) < config.ambiguousMatchMargin);
+      if (isAmbiguous) {
+        item.status = MatchStatus::Ambiguous;
+        item.candidateId = candidateEdges[bestCandidateIdx].entityId;
+        item.score = bestScore;
+        item.metrics = bestMetrics;
+        item.reasonCodes.push_back("MULTIPLE_SIMILAR_CANDIDATES");
+        collection.ambiguousCount++;
+      } else {
+        item.status = MatchStatus::Matched;
+        item.candidateId = candidateEdges[bestCandidateIdx].entityId;
+        item.score = bestScore;
+        item.metrics = bestMetrics;
+        candidateUsed[bestCandidateIdx] = true;
+        collection.matchedCount++;
+      }
+    } else {
+      item.status = MatchStatus::Unmatched;
+      item.candidateId = "";
+      item.score = 0.0;
+      collection.unmatchedReferenceIds.push_back(refEdge.entityId);
+    }
+    collection.items.push_back(item);
+  }
+
+  for (size_t j = 0; j < candidateEdges.size(); ++j) {
+    if (!candidateUsed[j]) {
+      collection.unmatchedCandidateIds.push_back(candidateEdges[j].entityId);
+    }
+  }
+
+  collection.allMatched = (collection.matchedCount == collection.referenceCount) &&
+                          (collection.referenceCount == collection.candidateCount);
+  return collection;
+}
+
+BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Solid &tool, double fuzzyTolerance) {
+  BooleanDifferenceResult result;
+  if (argument.IsNull()) {
+    result.audit.succeeded = false;
+    result.audit.report = "argument solid is null";
+    return result;
+  }
+  if (tool.IsNull()) {
+    result.audit.succeeded = true;
+    result.audit.volumeMm3 = 0.0;
+    result.audit.componentCount = 0;
+    result.audit.report = "tool solid is null";
+    return result;
+  }
+
+  try {
+    BRepAlgoAPI_Cut cutAlgo(argument, tool);
+    cutAlgo.SetFuzzyValue(fuzzyTolerance);
+    cutAlgo.Build();
+
+    if (cutAlgo.HasErrors()) {
+      result.audit.succeeded = false;
+      result.audit.report = "BRepAlgoAPI_Cut failed";
+      return result;
+    }
+
+    result.shape = cutAlgo.Shape();
+    if (result.shape.IsNull()) {
+      result.audit.succeeded = true;
+      result.audit.volumeMm3 = 0.0;
+      result.audit.componentCount = 0;
+      return result;
+    }
+
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(result.shape, props);
+    result.audit.succeeded = true;
+    result.audit.volumeMm3 = std::abs(props.Mass());
+    result.audit.componentCount = CountUniqueSubShapes(result.shape, TopAbs_SOLID);
+  } catch (const Standard_Failure &e) {
+    result.audit.succeeded = false;
+    result.audit.report = std::string("BRepAlgoAPI_Cut exception: ") + e.GetMessageString();
+  } catch (...) {
+    result.audit.succeeded = false;
+    result.audit.report = "BRepAlgoAPI_Cut unknown exception";
+  }
+
+  return result;
+}
+
+bool ExportShapeStl(const TopoDS_Shape &shape, const std::filesystem::path &stlPath) {
+  if (shape.IsNull()) {
+    return false;
+  }
+  try {
+    const double diagScale = BoundsDiagonal(ComputeBounds(shape));
+    const double deflection = std::max(0.001, 0.001 * diagScale);
+    BRepMesh_IncrementalMesh mesh(shape, deflection);
+    mesh.Perform();
+
+    StlAPI_Writer writer;
+    writer.ASCIIMode() = false;
+    return writer.Write(shape, stlPath.string().c_str()) != 0;
+  } catch (...) {
+    return false;
+  }
+}
+
+bool ExportShapeBrep(const TopoDS_Shape &shape, const std::filesystem::path &brepPath) {
+  if (shape.IsNull()) {
+    return false;
+  }
+  try {
+    return BRepTools::Write(shape, brepPath.string().c_str()) != 0;
+  } catch (...) {
+    return false;
+  }
 }
 
 } // namespace
 
-CompareResult CompareStepFiles(const std::filesystem::path &reference,
-                               const std::filesystem::path &candidate,
-                               const CompareConfig &config,
-                               const std::filesystem::path &outputDirectory) {
-  const auto totalStart = Clock::now();
-  CompareResult result;
-  result.thresholds = config;
-  result.reference.path = PathText(reference);
-  result.candidate.path = PathText(candidate);
-
-  if (!std::isfinite(config.distanceToleranceMm) ||
-      !std::isfinite(config.absoluteVolumeToleranceMm3) ||
-      !std::isfinite(config.relativeVolumeTolerance) ||
-      config.distanceToleranceMm < 0.0 ||
-      config.absoluteVolumeToleranceMm3 < 0.0 ||
-      config.relativeVolumeTolerance < 0.0) {
-    result.status = CompareStatus::InternalError;
-    result.reason = "comparison tolerances must be finite and non-negative";
-    return result;
+std::string MakeEntityId(EntitySide side, EntityKind kind, int index) {
+  std::ostringstream ss;
+  ss << (side == EntitySide::Reference ? "ref:" : "cand:");
+  switch (kind) {
+  case EntityKind::OriginalFace:
+    ss << "face:";
+    break;
+  case EntityKind::OriginalEdge:
+    ss << "edge:";
+    break;
+  case EntityKind::NormalizedFace:
+    ss << "nface:";
+    break;
+  case EntityKind::NormalizedEdge:
+    ss << "nedge:";
+    break;
   }
-
-  try {
-    const auto loadRefStart = Clock::now();
-    LoadedSolid referenceSolid = LoadSingleSolid(reference);
-    result.timings.loadReferenceMs = ElapsedMs(loadRefStart);
-
-    const auto loadCandStart = Clock::now();
-    LoadedSolid candidateSolid = LoadSingleSolid(candidate);
-    result.timings.loadCandidateMs = ElapsedMs(loadCandStart);
-
-    result.reference = referenceSolid.audit;
-    result.candidate = candidateSolid.audit;
-
-    if (referenceSolid.classification != LoadClass::Ready) {
-      result.status = FailedLoadStatus(referenceSolid.classification);
-      result.reason =
-          "reference shape load failed: " + referenceSolid.audit.loadDiagnostics;
-      result.timings.totalMs = ElapsedMs(totalStart);
-      return result;
-    }
-    if (candidateSolid.classification != LoadClass::Ready) {
-      result.status = FailedLoadStatus(candidateSolid.classification);
-      result.reason =
-          "candidate shape load failed: " + candidateSolid.audit.loadDiagnostics;
-      result.timings.totalMs = ElapsedMs(totalStart);
-      return result;
-    }
-
-    // Normalization phase
-    const auto normRefStart = Clock::now();
-    NormalizedSolid normalizedReference = NormalizeSameDomain(referenceSolid.solid, config);
-    result.timings.normalizeReferenceMs = ElapsedMs(normRefStart);
-
-    const auto normCandStart = Clock::now();
-    NormalizedSolid normalizedCandidate = NormalizeSameDomain(candidateSolid.solid, config);
-    result.timings.normalizeCandidateMs = ElapsedMs(normCandStart);
-
-    result.referenceNormalization = normalizedReference.audit;
-    result.candidateNormalization = normalizedCandidate.audit;
-
-    const TopoDS_Solid &referenceCompareSolid =
-        normalizedReference.audit.usedNormalizedShape
-            ? normalizedReference.solid
-            : referenceSolid.solid;
-
-    const TopoDS_Solid &candidateCompareSolid =
-        normalizedCandidate.audit.usedNormalizedShape
-            ? normalizedCandidate.solid
-            : candidateSolid.solid;
-
-    result.referenceNormalization.faceTypes = CollectFaceTypeStatistics(referenceCompareSolid);
-    result.candidateNormalization.faceTypes = CollectFaceTypeStatistics(candidateCompareSolid);
-    result.referenceNormalization.edgeTypes = CollectEdgeTypeStatistics(referenceCompareSolid);
-    result.candidateNormalization.edgeTypes = CollectEdgeTypeStatistics(candidateCompareSolid);
-
-    // Topology matching phase
-    const auto topMatchStart = Clock::now();
-    result.normalizedTopology = MatchNormalizedTopology(referenceCompareSolid, candidateCompareSolid, config);
-    result.timings.topologyMatchMs = ElapsedMs(topMatchStart);
-
-    const double referenceVolume = referenceSolid.audit.signedVolumeMm3;
-    const double candidateVolume = candidateSolid.audit.signedVolumeMm3;
-    const double volumeScale = std::max(referenceVolume, candidateVolume);
-
-    result.absoluteInputVolumeDifferenceMm3 =
-        std::abs(referenceVolume - candidateVolume);
-    result.relativeInputVolumeDifference =
-        result.absoluteInputVolumeDifferenceMm3 / volumeScale;
-    result.centroidDistanceMm = PointDistance(referenceSolid.audit.centroidMm,
-                                              candidateSolid.audit.centroidMm);
-    result.maximumBoundsDifferenceMm = MaximumBoundsDifference(
-        referenceSolid.audit.boundsMm, candidateSolid.audit.boundsMm);
-
-    const double characteristicScale = BoundsDiagonal(referenceSolid.audit.boundsMm);
-    const double effectiveDistanceTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
-
-    const bool inputVolumePass = VolumePass(
-        result.absoluteInputVolumeDifferenceMm3, volumeScale,
-        config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance);
-    const bool centroidPass =
-        result.centroidDistanceMm <= effectiveDistanceTol;
-    const bool boundsPass =
-        result.maximumBoundsDifferenceMm <= effectiveDistanceTol;
-
-    const bool globalMetricsPass = inputVolumePass && centroidPass && boundsPass;
-    const bool normalizedMatch = result.normalizedTopology.normalizedTopologyMatch;
-
-    // Optional fast-path decision
-    if (config.enableNormalizedFastPath && globalMetricsPass && normalizedMatch) {
-      result.status = CompareStatus::Equal;
-      result.booleanExecuted = false;
-      result.decisionPath = "normalized_topology_fast_path";
-      result.reason = "global metrics and normalized face/edge matching passed";
-      result.timings.totalMs = ElapsedMs(totalStart);
-      return result;
-    }
-
-    // Boolean verification phase
-    result.booleanExecuted = true;
-    result.decisionPath = normalizedReference.audit.usedNormalizedShape
-                              ? "boolean_after_normalization"
-                              : "boolean_original";
-
-    const double fuzzyTolerance =
-        config.booleanFuzzyToleranceMm > 0.0 ? config.booleanFuzzyToleranceMm : config.distanceToleranceMm;
-
-    const auto boolAbStart = Clock::now();
-    if (!outputDirectory.empty()) {
-      std::error_code ec;
-      std::filesystem::create_directories(outputDirectory, ec);
-      ExportShapeStl(referenceCompareSolid, outputDirectory / "reference_base.stl");
-      result.missingMaterial = Cut(referenceCompareSolid, candidateCompareSolid, fuzzyTolerance, outputDirectory / "missing_material.stl");
-    } else {
-      result.missingMaterial = Cut(referenceCompareSolid, candidateCompareSolid, fuzzyTolerance);
-    }
-    result.timings.booleanAbMs = ElapsedMs(boolAbStart);
-
-    const auto boolBaStart = Clock::now();
-    if (!outputDirectory.empty()) {
-      result.addedMaterial = Cut(candidateCompareSolid, referenceCompareSolid, fuzzyTolerance, outputDirectory / "added_material.stl");
-    } else {
-      result.addedMaterial = Cut(candidateCompareSolid, referenceCompareSolid, fuzzyTolerance);
-    }
-    result.timings.booleanBaMs = ElapsedMs(boolBaStart);
-
-    if (!result.missingMaterial.succeeded || !result.addedMaterial.succeeded) {
-      result.status = CompareStatus::Indeterminate;
-      result.reason =
-          "OCCT boolean subtraction failed; geometry equality is unknown";
-      result.timings.totalMs = ElapsedMs(totalStart);
-      return result;
-    }
-
-    result.symmetricDifferenceVolumeMm3 =
-        result.missingMaterial.volumeMm3 + result.addedMaterial.volumeMm3;
-    result.symmetricDifferenceRelative =
-        result.symmetricDifferenceVolumeMm3 / volumeScale;
-
-    // Check for suspicious boolean cut result ("near-zero overlap illusion" where global metrics are highly similar but Cut returned full inputs)
-    const bool booleanClaimsNoOverlap =
-        result.missingMaterial.volumeMm3 > 0.95 * referenceVolume &&
-        result.addedMaterial.volumeMm3 > 0.95 * candidateVolume;
-
-    if (globalMetricsPass && booleanClaimsNoOverlap) {
-      result.status = CompareStatus::Indeterminate;
-      result.reason =
-          "boolean cut claims near-zero overlap despite highly similar global volume, centroid, and bounds metrics";
-      result.timings.totalMs = ElapsedMs(totalStart);
-      return result;
-    }
-
-    const bool symmetricDifferencePass = VolumePass(
-        result.symmetricDifferenceVolumeMm3, volumeScale,
-        config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance);
-
-    if (globalMetricsPass && symmetricDifferencePass) {
-      result.status = CompareStatus::Equal;
-      result.reason =
-          "closed solids pass volume, centroid, bounds, and symmetric difference thresholds";
-    } else {
-      result.status = CompareStatus::Different;
-      std::ostringstream reason;
-      reason << "geometry thresholds failed:";
-      if (!inputVolumePass) {
-        reason << " input_volume";
-      }
-      if (!centroidPass) {
-        reason << " centroid";
-      }
-      if (!boundsPass) {
-        reason << " bounds";
-      }
-      if (!symmetricDifferencePass) {
-        reason << " symmetric_difference";
-      }
-      result.reason = reason.str();
-    }
-  } catch (const Standard_Failure &failure) {
-    result.status = CompareStatus::InternalError;
-    result.reason =
-        std::string("OCCT exception: ") +
-        (failure.GetMessageString() ? failure.GetMessageString() : "unknown");
-  } catch (const std::exception &error) {
-    result.status = CompareStatus::InternalError;
-    result.reason = std::string("program exception: ") + error.what();
-  }
-  result.timings.totalMs = ElapsedMs(totalStart);
-  return result;
+  ss << std::setw(6) << std::setfill('0') << index;
+  return ss.str();
 }
 
 const char *ToString(CompareStatus status) {
@@ -1146,7 +1023,37 @@ const char *ToString(CompareStatus status) {
   case CompareStatus::InternalError:
     return "INTERNAL_ERROR";
   }
-  return "INTERNAL_ERROR";
+  return "UNKNOWN";
+}
+
+const char *ToString(MatchStatus status) {
+  switch (status) {
+  case MatchStatus::Matched:
+    return "MATCHED";
+  case MatchStatus::Unmatched:
+    return "UNMATCHED";
+  case MatchStatus::Ambiguous:
+    return "AMBIGUOUS";
+  case MatchStatus::Unsupported:
+    return "UNSUPPORTED";
+  }
+  return "UNKNOWN";
+}
+
+const char *ToString(VerificationLevel level) {
+  switch (level) {
+  case VerificationLevel::TypeOnly:
+    return "TYPE_ONLY";
+  case VerificationLevel::Descriptor:
+    return "DESCRIPTOR";
+  case VerificationLevel::AnalyticSupport:
+    return "ANALYTIC_SUPPORT";
+  case VerificationLevel::DistanceVerified:
+    return "DISTANCE_VERIFIED";
+  case VerificationLevel::BooleanVerified:
+    return "BOOLEAN_VERIFIED";
+  }
+  return "UNKNOWN";
 }
 
 int ExitCode(CompareStatus status) {
@@ -1156,240 +1063,563 @@ int ExitCode(CompareStatus status) {
   case CompareStatus::Different:
     return 1;
   case CompareStatus::InvalidInput:
+    return 2;
   case CompareStatus::UnsupportedShape:
     return 2;
   case CompareStatus::Indeterminate:
-    return 3;
-  case CompareStatus::InternalError:
     return 4;
+  case CompareStatus::InternalError:
+    return 5;
   }
-  return 4;
+  return 5;
+}
+
+CompareResult CompareStepFiles(const std::filesystem::path &reference,
+                               const std::filesystem::path &candidate,
+                               const CompareConfig &config,
+                               const std::filesystem::path &outputDirectory) {
+  const auto totalStart = std::chrono::high_resolution_clock::now();
+  CompareResult result;
+  result.thresholds = config;
+
+  const auto loadRefStart = std::chrono::high_resolution_clock::now();
+  const LoadedSolid loadedRef = LoadStepSolid(reference);
+  result.timings.loadReferenceMs = ElapsedMs(loadRefStart);
+  result.reference = loadedRef.audit;
+
+  const auto loadCandStart = std::chrono::high_resolution_clock::now();
+  const LoadedSolid loadedCand = LoadStepSolid(candidate);
+  result.timings.loadCandidateMs = ElapsedMs(loadCandStart);
+  result.candidate = loadedCand.audit;
+
+  if (loadedRef.classification == LoadClass::Invalid || loadedCand.classification == LoadClass::Invalid) {
+    result.status = CompareStatus::InvalidInput;
+    result.reason = loadedRef.classification == LoadClass::Invalid ? loadedRef.reason : loadedCand.reason;
+    result.decisionPath = "input_invalid";
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  if (loadedRef.classification == LoadClass::Unsupported || loadedCand.classification == LoadClass::Unsupported) {
+    result.status = CompareStatus::UnsupportedShape;
+    result.reason = loadedRef.classification == LoadClass::Unsupported ? loadedRef.reason : loadedCand.reason;
+    result.decisionPath = "input_unsupported";
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  const OriginalTopologyIndex refOriginalIndex = BuildOriginalTopologyIndex(loadedRef.solid, EntitySide::Reference);
+  const OriginalTopologyIndex candOriginalIndex = BuildOriginalTopologyIndex(loadedCand.solid, EntitySide::Candidate);
+
+  const auto normRefStart = std::chrono::high_resolution_clock::now();
+  const NormalizedSolidInternal normRef = NormalizeSameDomain(loadedRef.solid, refOriginalIndex, EntitySide::Reference, config);
+  result.timings.normalizeReferenceMs = ElapsedMs(normRefStart);
+  result.referenceNormalization = normRef.audit;
+
+  const auto normCandStart = std::chrono::high_resolution_clock::now();
+  const NormalizedSolidInternal normCand = NormalizeSameDomain(loadedCand.solid, candOriginalIndex, EntitySide::Candidate, config);
+  result.timings.normalizeCandidateMs = ElapsedMs(normCandStart);
+  result.candidateNormalization = normCand.audit;
+
+  const bool normalizationPairUsable = result.referenceNormalization.succeeded && result.candidateNormalization.succeeded;
+
+  const TopoDS_Solid &compareSolidRef = normalizationPairUsable ? normRef.solid : loadedRef.solid;
+  const TopoDS_Solid &compareSolidCand = normalizationPairUsable ? normCand.solid : loadedCand.solid;
+
+  result.decisionPath = normalizationPairUsable ? "boolean_after_normalization" : "boolean_after_original";
+
+  const double diagScale = BoundsDiagonal(result.reference.boundsMm);
+  const double effectiveDistTol = std::max(config.distanceToleranceMm, 1.0e-4 * diagScale);
+  const double refVol = result.reference.signedVolumeMm3;
+  const double effectiveAbsVolTol = std::max(config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance * refVol);
+
+  result.absoluteInputVolumeDifferenceMm3 = std::abs(result.reference.signedVolumeMm3 - result.candidate.signedVolumeMm3);
+  const double volDenom = std::abs(result.reference.signedVolumeMm3);
+  result.relativeInputVolumeDifference = volDenom > 0.0 ? (result.absoluteInputVolumeDifferenceMm3 / volDenom) : 0.0;
+
+  result.centroidDistanceMm = PointDistance(result.reference.centroidMm, result.candidate.centroidMm);
+  result.maximumBoundsDifferenceMm = ComputeBoundsDifference(result.reference.boundsMm, result.candidate.boundsMm);
+
+  const bool volumePass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
+                          (result.relativeInputVolumeDifference <= config.relativeVolumeTolerance);
+  const bool centroidPass = result.centroidDistanceMm <= effectiveDistTol;
+  const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
+
+  if (!volumePass || !centroidPass || !boundsPass) {
+    result.status = CompareStatus::Different;
+    result.reason = "geometry thresholds failed: input_volume centroid symmetric_difference";
+    result.decisionPath = "global_metrics_failed";
+  }
+
+  // Descriptors & Matching
+  if (normalizationPairUsable) {
+    const auto descStart = std::chrono::high_resolution_clock::now();
+    const std::vector<FaceDescriptor> refFaceDescs = CollectFaceDescriptors(compareSolidRef, EntitySide::Reference);
+    const std::vector<FaceDescriptor> candFaceDescs = CollectFaceDescriptors(compareSolidCand, EntitySide::Candidate);
+    const std::vector<EdgeDescriptor> refEdgeDescs = CollectEdgeDescriptors(compareSolidRef, EntitySide::Reference);
+    const std::vector<EdgeDescriptor> candEdgeDescs = CollectEdgeDescriptors(compareSolidCand, EntitySide::Candidate);
+    result.timings.descriptorBuildMs = ElapsedMs(descStart);
+
+    const auto faceMatchStart = std::chrono::high_resolution_clock::now();
+    result.normalizedTopology.faces = MatchFaceDescriptors(refFaceDescs, candFaceDescs, config, diagScale);
+    result.timings.faceMatchMs = ElapsedMs(faceMatchStart);
+    result.normalizedTopology.faces.elapsedMs = result.timings.faceMatchMs;
+
+    const auto edgeMatchStart = std::chrono::high_resolution_clock::now();
+    result.normalizedTopology.edges = MatchEdgeDescriptors(refEdgeDescs, candEdgeDescs, config, diagScale);
+    result.timings.edgeMatchMs = ElapsedMs(edgeMatchStart);
+    result.normalizedTopology.edges.elapsedMs = result.timings.edgeMatchMs;
+
+    result.normalizedTopology.attempted = true;
+    result.normalizedTopology.normalizedTopologyMatch =
+        result.normalizedTopology.faces.allMatched && result.normalizedTopology.edges.allMatched &&
+        (result.normalizedTopology.faces.ambiguousCount == 0) && (result.normalizedTopology.edges.ambiguousCount == 0) &&
+        result.normalizedTopology.faces.typeHistogramEqual && result.normalizedTopology.edges.typeHistogramEqual;
+    result.normalizedTopology.elapsedMs = result.timings.descriptorBuildMs + result.timings.faceMatchMs + result.timings.edgeMatchMs;
+
+    if (config.enableNormalizedFastPath && result.normalizedTopology.normalizedTopologyMatch &&
+        (result.status != CompareStatus::Different)) {
+      result.status = CompareStatus::Equal;
+      result.reason = "closed solids pass configured thresholds via normalized fast path";
+      result.decisionPath = "normalized_topology_fast_path";
+      result.booleanExecuted = false;
+    }
+  } else {
+    result.normalizedTopology.attempted = false;
+    result.normalizedTopology.skipReason = "normalization pair is not usable";
+  }
+
+  // Boolean difference if not skipped by fast path
+  if (result.decisionPath != "normalized_topology_fast_path") {
+    result.booleanExecuted = true;
+    const auto boolAbStart = std::chrono::high_resolution_clock::now();
+    const BooleanDifferenceResult missingRes = CutSolids(compareSolidRef, compareSolidCand, config.booleanFuzzyToleranceMm);
+    result.timings.booleanAbMs = ElapsedMs(boolAbStart);
+    result.missingMaterial = missingRes.audit;
+
+    const auto boolBaStart = std::chrono::high_resolution_clock::now();
+    const BooleanDifferenceResult addedRes = CutSolids(compareSolidCand, compareSolidRef, config.booleanFuzzyToleranceMm);
+    result.timings.booleanBaMs = ElapsedMs(boolBaStart);
+    result.addedMaterial = addedRes.audit;
+
+    if (!result.missingMaterial.succeeded || !result.addedMaterial.succeeded) {
+      result.status = CompareStatus::Indeterminate;
+      result.reason = "boolean cut operation failed: " + result.missingMaterial.report + " " + result.addedMaterial.report;
+      result.decisionPath = "boolean_failed";
+    } else {
+      result.symmetricDifferenceVolumeMm3 = result.missingMaterial.volumeMm3 + result.addedMaterial.volumeMm3;
+      result.symmetricDifferenceRelative = volDenom > 0.0 ? (result.symmetricDifferenceVolumeMm3 / volDenom) : 0.0;
+
+      const bool booleanPass = (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol) &&
+                               (result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
+      if (volumePass && centroidPass && boundsPass && booleanPass) {
+        result.status = CompareStatus::Equal;
+        result.reason = "closed solids pass configured thresholds";
+      } else {
+        result.status = CompareStatus::Different;
+        result.reason = "geometry thresholds failed: input_volume centroid symmetric_difference";
+      }
+    }
+
+    // Artifact Export
+    if (!outputDirectory.empty()) {
+      const auto exportStart = std::chrono::high_resolution_clock::now();
+      std::error_code ec;
+      std::filesystem::create_directories(outputDirectory, ec);
+
+      if (config.exportStl) {
+        const auto refStl = outputDirectory / "reference_base.stl";
+        if (ExportShapeStl(compareSolidRef, refStl)) {
+          result.artifacts.items.push_back({"reference_base", "reference_base.stl", "STL", true, ""});
+        }
+        const auto candStl = outputDirectory / "candidate_base.stl";
+        if (ExportShapeStl(compareSolidCand, candStl)) {
+          result.artifacts.items.push_back({"candidate_base", "candidate_base.stl", "STL", true, ""});
+        }
+        if (result.missingMaterial.volumeMm3 > 0.0) {
+          const auto missStl = outputDirectory / "missing_material.stl";
+          if (ExportShapeStl(missingRes.shape, missStl)) {
+            result.artifacts.items.push_back({"missing_material", "missing_material.stl", "STL", true, ""});
+          }
+        }
+        if (result.addedMaterial.volumeMm3 > 0.0) {
+          const auto addStl = outputDirectory / "added_material.stl";
+          if (ExportShapeStl(addedRes.shape, addStl)) {
+            result.artifacts.items.push_back({"added_material", "added_material.stl", "STL", true, ""});
+          }
+        }
+      }
+
+      if (config.exportBrep) {
+        ExportShapeBrep(loadedRef.solid, outputDirectory / "reference_original.brep");
+        ExportShapeBrep(loadedCand.solid, outputDirectory / "candidate_original.brep");
+        if (normalizationPairUsable) {
+          ExportShapeBrep(normRef.solid, outputDirectory / "reference_normalized.brep");
+          ExportShapeBrep(normCand.solid, outputDirectory / "candidate_normalized.brep");
+        }
+      }
+
+      result.timings.artifactExportMs = ElapsedMs(exportStart);
+    }
+  }
+
+  result.timings.totalMs = ElapsedMs(totalStart);
+
+  if (!outputDirectory.empty()) {
+    std::string jsonError;
+    WriteResultJson(outputDirectory, result, jsonError);
+  }
+
+  if (config.printHumanSummary) {
+    std::cout << ToHumanSummary(result);
+  }
+
+  return result;
 }
 
 std::string ToJson(const CompareResult &result) {
   json root = json::object();
-  root["status"] = ToString(result.status);
-  root["exit_code"] = ExitCode(result.status);
-  root["reason"] = result.reason;
+  root["schema_version"] = 2;
 
-  json decision = json::object();
-  decision["path"] = result.decisionPath;
-  decision["boolean_executed"] = result.booleanExecuted;
-  root["decision"] = decision;
-
-  json thresholds = json::object();
-  thresholds["distance_tolerance_mm"] = result.thresholds.distanceToleranceMm;
-  thresholds["absolute_volume_tolerance_mm3"] = result.thresholds.absoluteVolumeToleranceMm3;
-  thresholds["relative_volume_tolerance"] = result.thresholds.relativeVolumeTolerance;
-  thresholds["boolean_fuzzy_tolerance_mm"] = result.thresholds.booleanFuzzyToleranceMm;
-  thresholds["normalization_linear_tolerance_mm"] = result.thresholds.normalizationLinearToleranceMm;
-  thresholds["normalization_angular_tolerance_rad"] = result.thresholds.normalizationAngularToleranceRad;
-  thresholds["enable_normalized_fast_path"] = result.thresholds.enableNormalizedFastPath;
-  root["thresholds"] = thresholds;
-
-  root["reference"] = InputJson(result.reference);
-  root["candidate"] = InputJson(result.candidate);
-
-  json norm = json::object();
-  norm["reference"] = NormalizationAuditJson(result.referenceNormalization);
-  norm["candidate"] = NormalizationAuditJson(result.candidateNormalization);
-  root["normalization"] = norm;
-
-  root["normalized_topology"] = TopologyMatchAuditJson(result.normalizedTopology);
-  root["missing_material"] = DifferenceJson(result.missingMaterial);
-  root["added_material"] = DifferenceJson(result.addedMaterial);
-
-  json metrics = json::object();
-  metrics["absolute_input_volume_difference_mm3"] = result.absoluteInputVolumeDifferenceMm3;
-  metrics["relative_input_volume_difference"] = result.relativeInputVolumeDifference;
-  metrics["centroid_distance_mm"] = result.centroidDistanceMm;
-  metrics["maximum_bounds_difference_mm"] = result.maximumBoundsDifferenceMm;
-  metrics["symmetric_difference_volume_mm3"] = result.symmetricDifferenceVolumeMm3;
-  metrics["symmetric_difference_relative"] = result.symmetricDifferenceRelative;
-  root["decision_metrics"] = metrics;
-
-  root["timings_ms"] = TimingsJson(result.timings);
-
-  // Build presentation contract schema
-  json presentation = json::object();
-  presentation["schema_version"] = 1;
-
+  // 1. overall
   json overall = json::object();
   overall["status"] = ToString(result.status);
-  overall["pass"] = (result.status == CompareStatus::Equal);
+  overall["exit_code"] = ExitCode(result.status);
   overall["reason"] = result.reason;
   overall["decision_path"] = result.decisionPath;
   overall["boolean_executed"] = result.booleanExecuted;
-  presentation["overall"] = overall;
+  root["overall"] = overall;
 
+  // 2. configuration
   const double diagScale = BoundsDiagonal(result.reference.boundsMm);
   const double effectiveDistTol = std::max(result.thresholds.distanceToleranceMm, 1.0e-4 * diagScale);
-  const double refVol = std::abs(result.reference.signedVolumeMm3);
+  const double refVol = result.reference.signedVolumeMm3;
   const double effectiveAbsVolTol = std::max(result.thresholds.absoluteVolumeToleranceMm3, result.thresholds.relativeVolumeTolerance * refVol);
 
+  json configJson = json::object();
+  configJson["distance_tolerance_mm"] = result.thresholds.distanceToleranceMm;
+  configJson["effective_distance_tolerance_mm"] = effectiveDistTol;
+  configJson["absolute_volume_tolerance_mm3"] = result.thresholds.absoluteVolumeToleranceMm3;
+  configJson["relative_volume_tolerance"] = result.thresholds.relativeVolumeTolerance;
+  configJson["effective_volume_tolerance_mm3"] = effectiveAbsVolTol;
+  configJson["boolean_fuzzy_tolerance_mm"] = result.thresholds.booleanFuzzyToleranceMm;
+  configJson["normalization_enabled"] = result.thresholds.enableSameDomainNormalization;
+  configJson["normalization_linear_tolerance_mm"] = result.thresholds.normalizationLinearToleranceMm;
+  configJson["normalization_angular_tolerance_rad"] = result.thresholds.normalizationAngularToleranceRad;
+  configJson["normalized_fast_path_enabled"] = result.thresholds.enableNormalizedFastPath;
+  configJson["ambiguous_match_margin"] = result.thresholds.ambiguousMatchMargin;
+  root["configuration"] = configJson;
+
+  // 3. inputs
+  auto MakeInputNode = [](const InputAudit &audit) {
+    json node = json::object();
+    node["path"] = audit.path;
+    node["filename"] = std::filesystem::path(audit.path).filename().string();
+    node["file_length_units"] = audit.fileLengthUnits;
+    node["solid_count"] = audit.solidCount;
+    node["shell_count"] = audit.shellCount;
+    node["face_count"] = audit.faceCount;
+    node["edge_count"] = audit.edgeCount;
+    node["brep_valid"] = audit.brepValid;
+    node["closed"] = audit.closed;
+    node["volume_mm3"] = audit.signedVolumeMm3;
+    node["surface_area_mm2"] = audit.surfaceAreaMm2;
+    node["centroid_mm"] = {{"x", audit.centroidMm.x}, {"y", audit.centroidMm.y}, {"z", audit.centroidMm.z}};
+    node["bounds_mm"] = {
+        {"is_void", audit.boundsMm.isVoid},
+        {"minimum", {{"x", audit.boundsMm.minimum.x}, {"y", audit.boundsMm.minimum.y}, {"z", audit.boundsMm.minimum.z}}},
+        {"maximum", {{"x", audit.boundsMm.maximum.x}, {"y", audit.boundsMm.maximum.y}, {"z", audit.boundsMm.maximum.z}}}};
+    node["load_diagnostics"] = audit.loadDiagnostics;
+    node["transfer_diagnostics"] = audit.transferDiagnostics;
+    return node;
+  };
   json inputs = json::object();
-  json refInput = json::object();
-  refInput["path"] = result.reference.path;
-  refInput["filename"] = std::filesystem::path(result.reference.path).filename().string();
-  refInput["units"] = result.reference.fileLengthUnits;
-  refInput["solid_count"] = result.reference.solidCount;
-  refInput["shell_count"] = result.reference.shellCount;
-  refInput["face_count"] = result.reference.faceCount;
-  refInput["edge_count"] = result.reference.edgeCount;
-  refInput["volume_mm3"] = result.reference.signedVolumeMm3;
-  refInput["centroid_mm"] = {
-      {"x", result.reference.centroidMm.x},
-      {"y", result.reference.centroidMm.y},
-      {"z", result.reference.centroidMm.z}
-  };
-  refInput["bounds_mm"] = {
-      {"min", {{"x", result.reference.boundsMm.minimum.x}, {"y", result.reference.boundsMm.minimum.y}, {"z", result.reference.boundsMm.minimum.z}}},
-      {"max", {{"x", result.reference.boundsMm.maximum.x}, {"y", result.reference.boundsMm.maximum.y}, {"z", result.reference.boundsMm.maximum.z}}}
-  };
-  inputs["reference"] = refInput;
+  inputs["reference"] = MakeInputNode(result.reference);
+  inputs["candidate"] = MakeInputNode(result.candidate);
+  root["inputs"] = inputs;
 
-  json candInput = json::object();
-  candInput["path"] = result.candidate.path;
-  candInput["filename"] = std::filesystem::path(result.candidate.path).filename().string();
-  candInput["units"] = result.candidate.fileLengthUnits;
-  candInput["solid_count"] = result.candidate.solidCount;
-  candInput["shell_count"] = result.candidate.shellCount;
-  candInput["face_count"] = result.candidate.faceCount;
-  candInput["edge_count"] = result.candidate.edgeCount;
-  candInput["volume_mm3"] = result.candidate.signedVolumeMm3;
-  candInput["centroid_mm"] = {
-      {"x", result.candidate.centroidMm.x},
-      {"y", result.candidate.centroidMm.y},
-      {"z", result.candidate.centroidMm.z}
-  };
-  candInput["bounds_mm"] = {
-      {"min", {{"x", result.candidate.boundsMm.minimum.x}, {"y", result.candidate.boundsMm.minimum.y}, {"z", result.candidate.boundsMm.minimum.z}}},
-      {"max", {{"x", result.candidate.boundsMm.maximum.x}, {"y", result.candidate.boundsMm.maximum.y}, {"z", result.candidate.boundsMm.maximum.z}}}
-  };
-  inputs["candidate"] = candInput;
-  presentation["inputs"] = inputs;
+  // 4. normalization
+  auto MakeNormNode = [](const NormalizationAudit &audit) {
+    json node = json::object();
+    node["enabled"] = audit.enabled;
+    node["succeeded"] = audit.succeeded;
+    node["used_normalized_shape"] = audit.usedNormalizedShape;
+    node["faces_before"] = audit.faceCountBefore;
+    node["faces_after"] = audit.faceCountAfter;
+    node["edges_before"] = audit.edgeCountBefore;
+    node["edges_after"] = audit.edgeCountAfter;
+    node["comparable_edges_before"] = audit.comparableEdgeCountBefore;
+    node["comparable_edges_after"] = audit.comparableEdgeCountAfter;
+    node["volume_before_mm3"] = audit.volumeBeforeMm3;
+    node["volume_after_mm3"] = audit.volumeAfterMm3;
+    node["relative_volume_drift"] = audit.relativeVolumeDrift;
+    node["mapping_complete"] = audit.mappingComplete;
 
-  json normPres = json::object();
-  normPres["reference"] = {
-      {"succeeded", result.referenceNormalization.succeeded},
-      {"face_count_before", result.referenceNormalization.faceCountBefore},
-      {"faces_before", result.referenceNormalization.faceCountBefore},
-      {"face_count_after", result.referenceNormalization.faceCountAfter},
-      {"faces_after", result.referenceNormalization.faceCountAfter},
-      {"edge_count_before", result.referenceNormalization.edgeCountBefore},
-      {"edges_before", result.referenceNormalization.edgeCountBefore},
-      {"edge_count_after", result.referenceNormalization.edgeCountAfter},
-      {"edges_after", result.referenceNormalization.edgeCountAfter}
-  };
-  normPres["candidate"] = {
-      {"succeeded", result.candidateNormalization.succeeded},
-      {"face_count_before", result.candidateNormalization.faceCountBefore},
-      {"faces_before", result.candidateNormalization.faceCountBefore},
-      {"face_count_after", result.candidateNormalization.faceCountAfter},
-      {"faces_after", result.candidateNormalization.faceCountAfter},
-      {"edge_count_before", result.candidateNormalization.edgeCountBefore},
-      {"edges_before", result.candidateNormalization.edgeCountBefore},
-      {"edge_count_after", result.candidateNormalization.edgeCountAfter},
-      {"edges_after", result.candidateNormalization.edgeCountAfter}
-  };
-  normPres["face_descriptor_match"] = std::to_string(result.normalizedTopology.matchedFaceCount) + " / " + std::to_string(result.normalizedTopology.referenceFaceCount);
-  normPres["edge_descriptor_match"] = std::to_string(result.normalizedTopology.matchedEdgeCount) + " / " + std::to_string(result.normalizedTopology.referenceEdgeCount);
-  normPres["matched_faces"] = result.normalizedTopology.matchedFaceCount;
-  normPres["reference_faces"] = result.normalizedTopology.referenceFaceCount;
-  normPres["matched_edges"] = result.normalizedTopology.matchedEdgeCount;
-  normPres["reference_edges"] = result.normalizedTopology.referenceEdgeCount;
-  normPres["histogram_match"] = result.normalizedTopology.normalizedTopologyMatch;
-  presentation["normalization"] = normPres;
+    json faceStats = json::array();
+    for (const auto &st : audit.faceTypes) {
+      faceStats.push_back({{"type", st.type}, {"count", st.count}, {"total_measure", st.totalMeasure}});
+    }
+    node["face_type_statistics"] = faceStats;
 
+    json edgeStats = json::array();
+    for (const auto &st : audit.edgeTypes) {
+      edgeStats.push_back({{"type", st.type}, {"count", st.count}, {"total_measure", st.totalMeasure}});
+    }
+    node["edge_type_statistics"] = edgeStats;
+
+    json facesArr = json::array();
+    for (const auto &f : audit.faces) {
+      facesArr.push_back({
+          {"id", f.id},
+          {"visual_index", f.visualIndex},
+          {"surface_type", f.surfaceType},
+          {"area_mm2", f.areaMm2},
+          {"centroid_mm", {{"x", f.centroidMm.x}, {"y", f.centroidMm.y}, {"z", f.centroidMm.z}}},
+          {"bounds_mm",
+           {{"is_void", f.boundsMm.isVoid},
+            {"minimum", {{"x", f.boundsMm.minimum.x}, {"y", f.boundsMm.minimum.y}, {"z", f.boundsMm.minimum.z}}},
+            {"maximum", {{"x", f.boundsMm.maximum.x}, {"y", f.boundsMm.maximum.y}, {"z", f.boundsMm.maximum.z}}}}},
+          {"source_face_ids", f.sourceFaceIds},
+          {"source_count", f.sourceCount},
+          {"merged", f.merged},
+      });
+    }
+    node["faces"] = facesArr;
+
+    json edgesArr = json::array();
+    for (const auto &e : audit.edges) {
+      edgesArr.push_back({
+          {"id", e.id},
+          {"visual_index", e.visualIndex},
+          {"curve_type", e.curveType},
+          {"length_mm", e.lengthMm},
+          {"centroid_mm", {{"x", e.centroidMm.x}, {"y", e.centroidMm.y}, {"z", e.centroidMm.z}}},
+          {"bounds_mm",
+           {{"is_void", e.boundsMm.isVoid},
+            {"minimum", {{"x", e.boundsMm.minimum.x}, {"y", e.boundsMm.minimum.y}, {"z", e.boundsMm.minimum.z}}},
+            {"maximum", {{"x", e.boundsMm.maximum.x}, {"y", e.boundsMm.maximum.y}, {"z", e.boundsMm.maximum.z}}}}},
+          {"source_edge_ids", e.sourceEdgeIds},
+          {"source_count", e.sourceCount},
+          {"merged", e.merged},
+          {"closed", e.closed},
+      });
+    }
+    node["edges"] = edgesArr;
+
+    json removedArr = json::array();
+    for (const auto &re : audit.removedEdges) {
+      removedArr.push_back({{"source_edge_id", re.sourceEdgeId}, {"reason", re.reason}});
+    }
+    node["removed_edges"] = removedArr;
+
+    node["elapsed_ms"] = audit.elapsedMs;
+    node["warning"] = audit.warning;
+    return node;
+  };
+
+  json normJson = json::object();
+  const bool pairUsable = result.referenceNormalization.succeeded && result.candidateNormalization.succeeded;
+  normJson["pair_usable"] = pairUsable;
+  normJson["reference"] = MakeNormNode(result.referenceNormalization);
+  normJson["candidate"] = MakeNormNode(result.candidateNormalization);
+  root["normalization"] = normJson;
+
+  // 5. matches
+  auto MakeMatchCollectionNode = [](const MatchCollection &col) {
+    json node = json::object();
+    json summary = json::object();
+    summary["attempted"] = col.attempted;
+    summary["reference_count"] = col.referenceCount;
+    summary["candidate_count"] = col.candidateCount;
+    summary["matched_count"] = col.matchedCount;
+    summary["ambiguous_count"] = col.ambiguousCount;
+    summary["unmatched_reference_count"] = col.unmatchedReferenceIds.size();
+    summary["unmatched_candidate_count"] = col.unmatchedCandidateIds.size();
+    summary["type_histogram_equal"] = col.typeHistogramEqual;
+    summary["all_matched"] = col.allMatched;
+    summary["elapsed_ms"] = col.elapsedMs;
+    node["summary"] = summary;
+
+    json itemsArr = json::array();
+    for (const auto &item : col.items) {
+      itemsArr.push_back({
+          {"id", item.id},
+          {"reference_id", item.referenceId},
+          {"candidate_id", item.candidateId},
+          {"geometry_type", item.geometryType},
+          {"status", ToString(item.status)},
+          {"verification_level", ToString(item.verificationLevel)},
+          {"score", item.score},
+          {"metrics",
+           {{"measure_difference", item.metrics.measureDifference},
+            {"relative_measure_difference", item.metrics.relativeMeasureDifference},
+            {"centroid_distance_mm", item.metrics.centroidDistanceMm},
+            {"bounds_difference_mm", item.metrics.boundsDifferenceMm}}},
+          {"reason_codes", item.reasonCodes},
+      });
+    }
+    node["items"] = itemsArr;
+    node["unmatched_reference_ids"] = col.unmatchedReferenceIds;
+    node["unmatched_candidate_ids"] = col.unmatchedCandidateIds;
+    return node;
+  };
+
+  json matchesJson = json::object();
+  matchesJson["faces"] = MakeMatchCollectionNode(result.normalizedTopology.faces);
+  matchesJson["edges"] = MakeMatchCollectionNode(result.normalizedTopology.edges);
+  root["matches"] = matchesJson;
+
+  // 6. differences
+  json diffs = json::object();
+  diffs["missing_material"] = {
+      {"succeeded", result.missingMaterial.succeeded},
+      {"volume_mm3", result.missingMaterial.volumeMm3},
+      {"component_count", result.missingMaterial.componentCount},
+      {"kernel_report", result.missingMaterial.report},
+  };
+  diffs["added_material"] = {
+      {"succeeded", result.addedMaterial.succeeded},
+      {"volume_mm3", result.addedMaterial.volumeMm3},
+      {"component_count", result.addedMaterial.componentCount},
+      {"kernel_report", result.addedMaterial.report},
+  };
+  root["differences"] = diffs;
+
+  // 7. metrics
+  json metricsJson = json::object();
+  metricsJson["absolute_input_volume_difference_mm3"] = result.absoluteInputVolumeDifferenceMm3;
+  metricsJson["relative_input_volume_difference"] = result.relativeInputVolumeDifference;
+  metricsJson["centroid_distance_mm"] = result.centroidDistanceMm;
+  metricsJson["maximum_bounds_difference_mm"] = result.maximumBoundsDifferenceMm;
+  metricsJson["symmetric_difference_volume_mm3"] = result.symmetricDifferenceVolumeMm3;
+  metricsJson["symmetric_difference_relative"] = result.symmetricDifferenceRelative;
+  root["metrics"] = metricsJson;
+
+  // 8. checks
   const bool volPass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
                        (result.relativeInputVolumeDifference <= result.thresholds.relativeVolumeTolerance);
   const bool centroidPass = result.centroidDistanceMm <= effectiveDistTol;
   const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
   const bool boolPass = (!result.booleanExecuted) ||
                         (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
-  const bool faceMatchPass = (result.normalizedTopology.matchedFaceCount == result.normalizedTopology.referenceFaceCount) &&
-                             (result.normalizedTopology.referenceFaceCount == result.normalizedTopology.candidateFaceCount);
-  const bool edgeMatchPass = (result.normalizedTopology.matchedEdgeCount == result.normalizedTopology.referenceEdgeCount) &&
-                             (result.normalizedTopology.referenceEdgeCount == result.normalizedTopology.candidateEdgeCount);
+
+  const auto &faceCol = result.normalizedTopology.faces;
+  const auto &edgeCol = result.normalizedTopology.edges;
 
   json checks = json::array();
   checks.push_back({
-      {"id", "volume_difference"},
-      {"label", "体积差异"},
+      {"id", "input_volume_difference"},
+      {"label", "输入实体体积差"},
       {"actual", result.absoluteInputVolumeDifferenceMm3},
-      {"unit", "mm³"},
+      {"unit", "mm3"},
+      {"relative", result.relativeInputVolumeDifference},
       {"relative_percent", result.relativeInputVolumeDifference * 100.0},
-      {"threshold", effectiveAbsVolTol},
-      {"threshold_unit", "mm³"},
+      {"limit", effectiveAbsVolTol},
+      {"limit_unit", "mm3"},
+      {"available", true},
+      {"diagnostic", false},
       {"pass", volPass},
-      {"available", true}
   });
   checks.push_back({
       {"id", "centroid_distance"},
       {"label", "质心距离"},
       {"actual", result.centroidDistanceMm},
       {"unit", "mm"},
+      {"relative", (diagScale > 0.0 ? (result.centroidDistanceMm / diagScale) : 0.0)},
       {"relative_percent", (diagScale > 0.0 ? (result.centroidDistanceMm / diagScale * 100.0) : 0.0)},
-      {"threshold", effectiveDistTol},
-      {"threshold_unit", "mm"},
+      {"limit", effectiveDistTol},
+      {"limit_unit", "mm"},
+      {"available", true},
+      {"diagnostic", false},
       {"pass", centroidPass},
-      {"available", true}
   });
   checks.push_back({
       {"id", "bounding_box_difference"},
-      {"label", "包围盒坐标差"},
+      {"label", "包围盒极值差"},
       {"actual", result.maximumBoundsDifferenceMm},
       {"unit", "mm"},
+      {"relative", (diagScale > 0.0 ? (result.maximumBoundsDifferenceMm / diagScale) : 0.0)},
       {"relative_percent", (diagScale > 0.0 ? (result.maximumBoundsDifferenceMm / diagScale * 100.0) : 0.0)},
-      {"threshold", effectiveDistTol},
-      {"threshold_unit", "mm"},
+      {"limit", effectiveDistTol},
+      {"limit_unit", "mm"},
+      {"available", true},
+      {"diagnostic", false},
       {"pass", boundsPass},
-      {"available", true}
   });
   checks.push_back({
       {"id", "boolean_residual"},
       {"label", "布尔残体 (欠料 A-B / 多料 B-A)"},
       {"actual", result.symmetricDifferenceVolumeMm3},
-      {"unit", "mm³"},
+      {"unit", "mm3"},
+      {"relative", result.symmetricDifferenceRelative},
       {"relative_percent", result.symmetricDifferenceRelative * 100.0},
-      {"missing_material_mm3", result.missingMaterial.volumeMm3},
-      {"added_material_mm3", result.addedMaterial.volumeMm3},
-      {"threshold", effectiveAbsVolTol},
-      {"threshold_unit", "mm³"},
+      {"limit", effectiveAbsVolTol},
+      {"limit_unit", "mm3"},
+      {"available", result.booleanExecuted},
+      {"diagnostic", false},
       {"pass", boolPass},
-      {"available", result.booleanExecuted}
   });
   checks.push_back({
-      {"id", "face_topology_match"},
-      {"label", "归一化面匹配度"},
-      {"actual_text", std::to_string(result.normalizedTopology.matchedFaceCount) + " / " + std::to_string(result.normalizedTopology.referenceFaceCount)},
-      {"actual", result.normalizedTopology.matchedFaceCount},
-      {"unit", "面"},
-      {"relative_percent", (result.normalizedTopology.referenceFaceCount > 0 ? (result.normalizedTopology.matchedFaceCount * 100.0 / result.normalizedTopology.referenceFaceCount) : 100.0)},
-      {"threshold_text", std::to_string(result.normalizedTopology.referenceFaceCount) + " (Cand: " + std::to_string(result.normalizedTopology.candidateFaceCount) + ")"},
-      {"threshold", result.normalizedTopology.referenceFaceCount},
-      {"threshold_unit", "面"},
-      {"pass", faceMatchPass},
-      {"is_diagnostic", true},
-      {"available", true}
+      {"id", "face_descriptor_match"},
+      {"label", "归一化面描述符匹配"},
+      {"actual", faceCol.matchedCount},
+      {"actual_text", std::to_string(faceCol.matchedCount) + " / " + std::to_string(faceCol.referenceCount)},
+      {"unit", "faces"},
+      {"relative", faceCol.referenceCount > 0 ? (static_cast<double>(faceCol.matchedCount) / faceCol.referenceCount) : 1.0},
+      {"relative_percent", faceCol.referenceCount > 0 ? (faceCol.matchedCount * 100.0 / faceCol.referenceCount) : 100.0},
+      {"limit", faceCol.referenceCount},
+      {"limit_text", std::to_string(faceCol.referenceCount) + " / " + std::to_string(faceCol.referenceCount)},
+      {"limit_unit", "faces"},
+      {"available", faceCol.attempted},
+      {"diagnostic", true},
+      {"pass", faceCol.allMatched},
   });
   checks.push_back({
-      {"id", "edge_topology_match"},
-      {"label", "归一化边匹配度"},
-      {"actual_text", std::to_string(result.normalizedTopology.matchedEdgeCount) + " / " + std::to_string(result.normalizedTopology.referenceEdgeCount)},
-      {"actual", result.normalizedTopology.matchedEdgeCount},
-      {"unit", "边"},
-      {"relative_percent", (result.normalizedTopology.referenceEdgeCount > 0 ? (result.normalizedTopology.matchedEdgeCount * 100.0 / result.normalizedTopology.referenceEdgeCount) : 100.0)},
-      {"threshold_text", std::to_string(result.normalizedTopology.referenceEdgeCount) + " (Cand: " + std::to_string(result.normalizedTopology.candidateEdgeCount) + ")"},
-      {"threshold", result.normalizedTopology.referenceEdgeCount},
-      {"threshold_unit", "边"},
-      {"pass", edgeMatchPass},
-      {"is_diagnostic", true},
-      {"available", true}
+      {"id", "edge_descriptor_match"},
+      {"label", "归一化边描述符匹配"},
+      {"actual", edgeCol.matchedCount},
+      {"actual_text", std::to_string(edgeCol.matchedCount) + " / " + std::to_string(edgeCol.referenceCount)},
+      {"unit", "edges"},
+      {"relative", edgeCol.referenceCount > 0 ? (static_cast<double>(edgeCol.matchedCount) / edgeCol.referenceCount) : 1.0},
+      {"relative_percent", edgeCol.referenceCount > 0 ? (edgeCol.matchedCount * 100.0 / edgeCol.referenceCount) : 100.0},
+      {"limit", edgeCol.referenceCount},
+      {"limit_text", std::to_string(edgeCol.referenceCount) + " / " + std::to_string(edgeCol.referenceCount)},
+      {"limit_unit", "edges"},
+      {"available", edgeCol.attempted},
+      {"diagnostic", true},
+      {"pass", edgeCol.allMatched},
   });
-  presentation["checks"] = checks;
+  root["checks"] = checks;
 
-  root["presentation"] = presentation;
+  // 9. timings_ms
+  json timingsJson = json::object();
+  timingsJson["load_reference"] = result.timings.loadReferenceMs;
+  timingsJson["load_candidate"] = result.timings.loadCandidateMs;
+  timingsJson["normalize_reference"] = result.timings.normalizeReferenceMs;
+  timingsJson["normalize_candidate"] = result.timings.normalizeCandidateMs;
+  timingsJson["descriptor_build"] = result.timings.descriptorBuildMs;
+  timingsJson["face_match"] = result.timings.faceMatchMs;
+  timingsJson["edge_match"] = result.timings.edgeMatchMs;
+  timingsJson["boolean_ab"] = result.timings.booleanAbMs;
+  timingsJson["boolean_ba"] = result.timings.booleanBaMs;
+  timingsJson["artifact_export"] = result.timings.artifactExportMs;
+  timingsJson["total"] = result.timings.totalMs;
+  root["timings_ms"] = timingsJson;
+
+  // 10. artifacts
+  json artJson = json::object();
+  for (const auto &item : result.artifacts.items) {
+    json info = json::object();
+    info["path"] = item.relativePath;
+    info["format"] = item.format;
+    info["available"] = item.available;
+    if (!item.entityIndexArray.empty()) {
+      info["entity_index_array"] = item.entityIndexArray;
+    }
+    artJson[item.key] = info;
+  }
+  root["artifacts"] = artJson;
+
   return root.dump(2) + '\n';
 }
 
@@ -1411,51 +1641,68 @@ std::string ToHumanSummary(const CompareResult &result) {
   const bool boolPass = (!result.booleanExecuted) ||
                         (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
 
-  ss << "======================================================================\n"
-     << " CAD STEP GEOMETRY COMPARISON REPORT\n"
-     << "======================================================================\n"
-     << "  Targets          : " << refName << " vs " << candName << "\n"
-     << "  Model Scale      : L_diag = " << diagScale << " mm | Volume = " << refVol << " mm3\n"
-     << "  Original Topology: Ref(Faces: " << result.reference.faceCount << ", Edges: " << result.reference.edgeCount << ")"
-     << " vs Cand(Faces: " << result.candidate.faceCount << ", Edges: " << result.candidate.edgeCount << ")\n"
-     << "  Normalized Topo  : Ref(Faces: " << result.referenceNormalization.faceCountAfter << ", Edges: " << result.referenceNormalization.edgeCountAfter << ")"
-     << " vs Cand(Faces: " << result.candidateNormalization.faceCountAfter << ", Edges: " << result.candidateNormalization.edgeCountAfter << ")"
-     << " | Descriptor Match: Face " << result.normalizedTopology.matchedFaceCount << "/" << result.normalizedTopology.referenceFaceCount
-     << ", Edge " << result.normalizedTopology.matchedEdgeCount << "/" << result.normalizedTopology.referenceEdgeCount << "\n"
-     << "  Effective Tols   : RelVol = " << (result.thresholds.relativeVolumeTolerance * 100.0) << "%"
-     << " | AbsVol = " << effectiveAbsVolTol << " mm3"
-     << " | Dist/Bounds = " << effectiveDistTol << " mm\n"
-     << "----------------------------------------------------------------------\n"
-     << "  Metrics Audit    :\n"
-     << "    ├─ Volume Diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm3 ("
+  const bool pairUsable = result.referenceNormalization.succeeded && result.candidateNormalization.succeeded;
+
+  ss << "============================================================\n"
+     << "STEP GEOMETRY COMPARISON\n"
+     << "============================================================\n\n"
+     << "INPUT\n"
+     << "  Reference : " << refName << "\n"
+     << "  Candidate : " << candName << "\n\n"
+     << "NORMALIZATION\n"
+     << "  Pair usable    : " << (pairUsable ? "YES" : "NO") << "\n"
+     << "  Reference face : " << result.reference.faceCount << " -> " << result.referenceNormalization.faceCountAfter << "\n"
+     << "  Candidate face : " << result.candidate.faceCount << " -> " << result.candidateNormalization.faceCountAfter << "\n"
+     << "  Reference edge : " << result.reference.edgeCount << " -> " << result.referenceNormalization.edgeCountAfter << "\n"
+     << "  Candidate edge : " << result.candidate.edgeCount << " -> " << result.candidateNormalization.edgeCountAfter << "\n"
+     << "  Mapping        : " << (result.referenceNormalization.mappingComplete ? "COMPLETE" : "INCOMPLETE") << "\n\n"
+     << "DESCRIPTOR MATCH\n"
+     << "  Faces     : " << result.normalizedTopology.faces.matchedCount << " / " << result.normalizedTopology.faces.referenceCount << "\n"
+     << "  Edges     : " << result.normalizedTopology.edges.matchedCount << " / " << result.normalizedTopology.edges.referenceCount << "\n"
+     << "  Ambiguous : faces=" << result.normalizedTopology.faces.ambiguousCount << ", edges=" << result.normalizedTopology.edges.ambiguousCount << "\n"
+     << "  Unmatched : faces=" << result.normalizedTopology.faces.unmatchedReferenceIds.size()
+     << ", edges=" << result.normalizedTopology.edges.unmatchedReferenceIds.size() << "\n\n"
+     << "GLOBAL METRICS\n"
+     << "  Volume diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm³ ("
      << (result.relativeInputVolumeDifference * 100.0) << "%) [" << (volPass ? "PASS" : "FAIL") << "]\n"
-     << "    ├─ Centroid    : " << result.centroidDistanceMm << " mm [" << (centroidPass ? "PASS" : "FAIL") << "]\n"
-     << "    ├─ Bounding Box: " << result.maximumBoundsDifferenceMm << " mm [" << (boundsPass ? "PASS" : "FAIL") << "]\n"
-     << "    └─ Boolean BOP : A-B = " << result.missingMaterial.volumeMm3 << " mm3, B-A = " << result.addedMaterial.volumeMm3 << " mm3 [" << (boolPass ? "PASS" : "FAIL") << "]\n"
-     << "----------------------------------------------------------------------\n"
-     << "  Final Status     : " << ToString(result.status) << " (" << result.reason << ")\n"
-     << "======================================================================\n";
+     << "  Centroid dist : " << result.centroidDistanceMm << " mm [" << (centroidPass ? "PASS" : "FAIL") << "]\n"
+     << "  Bounds diff   : " << result.maximumBoundsDifferenceMm << " mm [" << (boundsPass ? "PASS" : "FAIL") << "]\n\n"
+     << "BOOLEAN\n"
+     << "  Executed   : " << (result.booleanExecuted ? "YES" : "NO") << "\n"
+     << "  A-B volume : " << result.missingMaterial.volumeMm3 << " mm³\n"
+     << "  B-A volume : " << result.addedMaterial.volumeMm3 << " mm³\n"
+     << "  Residual   : " << result.symmetricDifferenceVolumeMm3 << " mm³ [" << (boolPass ? "PASS" : "FAIL") << "]\n\n"
+     << "TIMING\n"
+     << "  Load       : " << (result.timings.loadReferenceMs + result.timings.loadCandidateMs) << " ms\n"
+     << "  Normalize  : " << (result.timings.normalizeReferenceMs + result.timings.normalizeCandidateMs) << " ms\n"
+     << "  Match      : " << result.normalizedTopology.elapsedMs << " ms\n"
+     << "  Boolean    : " << (result.timings.booleanAbMs + result.timings.booleanBaMs) << " ms\n"
+     << "  Export     : " << result.timings.artifactExportMs << " ms\n"
+     << "  Total      : " << result.timings.totalMs << " ms\n\n"
+     << "RESULT\n"
+     << "  Status        : " << ToString(result.status) << "\n"
+     << "  Decision path : " << result.decisionPath << "\n"
+     << "  Reason        : " << result.reason << "\n"
+     << "============================================================\n";
+
   return ss.str();
 }
 
 bool WriteResultJson(const std::filesystem::path &outputDirectory,
                      const CompareResult &result, std::string &error) {
   try {
-    std::filesystem::create_directories(outputDirectory);
-    const std::filesystem::path resultPath = outputDirectory / "result.json";
-    std::ofstream output(resultPath, std::ios::binary | std::ios::trunc);
-    if (!output.is_open()) {
-      error = "unable to open result file: " + PathText(resultPath);
+    std::error_code ec;
+    std::filesystem::create_directories(outputDirectory, ec);
+    const std::filesystem::path jsonPath = outputDirectory / "result.json";
+    std::ofstream out(jsonPath);
+    if (!out.is_open()) {
+      error = "cannot open file for writing: " + jsonPath.string();
       return false;
     }
-    output << ToJson(result);
-    if (!output.good()) {
-      error = "failed to write result file: " + PathText(resultPath);
-      return false;
-    }
+    out << ToJson(result);
     return true;
-  } catch (const std::exception &exception) {
-    error = exception.what();
+  } catch (const std::exception &e) {
+    error = e.what();
     return false;
   }
 }
