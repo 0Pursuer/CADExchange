@@ -1219,98 +1219,35 @@ std::string ToHumanSummary(const CompareResult &result) {
   const double effectiveDistTol = std::max(result.thresholds.distanceToleranceMm, 1.0e-4 * diagScale);
   const double refVol = result.reference.signedVolumeMm3;
   const double effectiveAbsVolTol = std::max(result.thresholds.absoluteVolumeToleranceMm3, result.thresholds.relativeVolumeTolerance * refVol);
-  const double effectiveFuzzyTol = std::max(
-      result.thresholds.booleanFuzzyToleranceMm > 0.0 ? result.thresholds.booleanFuzzyToleranceMm : result.thresholds.distanceToleranceMm,
-      1.0e-4 * diagScale);
 
-  auto FormatUnits = [](const std::vector<std::string> &units) {
-    if (units.empty()) return std::string("UNKNOWN");
-    std::string text;
-    for (std::size_t i = 0; i < units.size(); ++i) {
-      if (i > 0) text += ", ";
-      text += units[i];
-    }
-    return text;
-  };
+  const std::string refName = std::filesystem::path(result.reference.path).filename().string();
+  const std::string candName = std::filesystem::path(result.candidate.path).filename().string();
 
-  ss << "================================================================================\n"
-     << " CAD STEP GEOMETRY COMPARISON\n"
-     << "================================================================================\n\n"
-     << "[1] COMPARISON TARGETS\n"
-     << "  Reference STEP : " << result.reference.path << "\n"
-     << "                   └─ Solids: " << result.reference.solidCount
-     << " | Shells: " << result.reference.shellCount
-     << " | Faces: " << result.reference.faceCount
-     << " | Edges: " << result.reference.edgeCount
-     << " | Units: " << FormatUnits(result.reference.fileLengthUnits) << "\n"
-     << "  Candidate STEP : " << result.candidate.path << "\n"
-     << "                   └─ Solids: " << result.candidate.solidCount
-     << " | Shells: " << result.candidate.shellCount
-     << " | Faces: " << result.candidate.faceCount
-     << " | Edges: " << result.candidate.edgeCount
-     << " | Units: " << FormatUnits(result.candidate.fileLengthUnits) << "\n\n"
-     << "[2] TOLERANCE CONFIGURATION & ADAPTIVE SCALING\n"
-     << "  Model Characteristic Scale (L_diag) : " << diagScale << " mm\n"
-     << "  Relative Volume Tolerance           : " << result.thresholds.relativeVolumeTolerance
-     << " (" << (result.thresholds.relativeVolumeTolerance * 100.0) << "%)\n"
-     << "  Absolute Volume Tolerance           : " << result.thresholds.absoluteVolumeToleranceMm3
-     << " mm3 [Effective: " << effectiveAbsVolTol << " mm3]\n"
-     << "  Centroid & Bounds Distance Tol      : " << result.thresholds.distanceToleranceMm
-     << " mm [Effective: " << effectiveDistTol << " mm]\n"
-     << "  Boolean Fuzzy Tolerance             : " << result.thresholds.booleanFuzzyToleranceMm
-     << " mm [Effective: " << effectiveFuzzyTol << " mm]\n"
-     << "  Normalization Linear / Angular Tol  : " << result.thresholds.normalizationLinearToleranceMm
-     << " mm / " << result.thresholds.normalizationAngularToleranceRad << " rad\n"
-     << "  Fast-Path Enabled                   : " << (result.thresholds.enableNormalizedFastPath ? "YES" : "NO") << "\n\n"
-     << "[3] SAME-DOMAIN NORMALIZATION & TOPOLOGY AUDIT\n"
-     << "  Reference Normalization : " << (result.referenceNormalization.succeeded ? "SUCCESS" : "SKIPPED/WARNING")
-     << " (Faces: " << result.referenceNormalization.faceCountBefore << " -> " << result.referenceNormalization.faceCountAfter
-     << ", Edges: " << result.referenceNormalization.edgeCountBefore << " -> " << result.referenceNormalization.edgeCountAfter
-     << ", Time: " << result.referenceNormalization.elapsedMs << " ms)\n";
-  if (!result.referenceNormalization.warning.empty()) {
-    ss << "                            └─ Warning: " << result.referenceNormalization.warning << "\n";
-  }
-  ss << "  Candidate Normalization : " << (result.candidateNormalization.succeeded ? "SUCCESS" : "SKIPPED/WARNING")
-     << " (Faces: " << result.candidateNormalization.faceCountBefore << " -> " << result.candidateNormalization.faceCountAfter
-     << ", Edges: " << result.candidateNormalization.edgeCountBefore << " -> " << result.candidateNormalization.edgeCountAfter
-     << ", Time: " << result.candidateNormalization.elapsedMs << " ms)\n";
-  if (!result.candidateNormalization.warning.empty()) {
-    ss << "                            └─ Warning: " << result.candidateNormalization.warning << "\n";
-  }
-  ss << "  Face Descriptor Match   : " << result.normalizedTopology.matchedFaceCount << " / " << result.normalizedTopology.referenceFaceCount
-     << " matched (Unmatched Ref: " << result.normalizedTopology.unmatchedReferenceFaces
-     << ", Cand: " << result.normalizedTopology.unmatchedCandidateFaces << ")\n"
-     << "  Edge Descriptor Match   : " << result.normalizedTopology.matchedEdgeCount << " / " << result.normalizedTopology.referenceEdgeCount
-     << " matched (Unmatched Ref: " << result.normalizedTopology.unmatchedReferenceEdges
-     << ", Cand: " << result.normalizedTopology.unmatchedCandidateEdges << ")\n"
-     << "  Topology Histogram Match: " << (result.normalizedTopology.normalizedTopologyMatch ? "YES" : "NO")
-     << " (Face Types: " << (result.normalizedTopology.faceTypeHistogramEqual ? "EQUAL" : "DIFF")
-     << ", Edge Types: " << (result.normalizedTopology.edgeTypeHistogramEqual ? "EQUAL" : "DIFF") << ")\n\n"
-     << "[4] GLOBAL GEOMETRY METRICS\n"
-     << "  Reference Signed Volume : " << result.reference.signedVolumeMm3 << " mm3\n"
-     << "  Candidate Signed Volume : " << result.candidate.signedVolumeMm3 << " mm3\n"
-     << "  Absolute Volume Diff    : " << result.absoluteInputVolumeDifferenceMm3 << " mm3 ("
-     << (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol ? "PASS" : "FAIL")
-     << " <= " << effectiveAbsVolTol << " mm3)\n"
-     << "  Relative Volume Diff    : " << result.relativeInputVolumeDifference << " ("
-     << (result.relativeInputVolumeDifference <= result.thresholds.relativeVolumeTolerance ? "PASS" : "FAIL")
-     << " <= " << result.thresholds.relativeVolumeTolerance << ")\n"
-     << "  Centroid Distance       : " << result.centroidDistanceMm << " mm ("
-     << (result.centroidDistanceMm <= effectiveDistTol ? "PASS" : "FAIL")
-     << " <= " << effectiveDistTol << " mm)\n"
-     << "  Maximum Bounds Diff     : " << result.maximumBoundsDifferenceMm << " mm ("
-     << (result.maximumBoundsDifferenceMm <= effectiveDistTol ? "PASS" : "FAIL")
-     << " <= " << effectiveDistTol << " mm)\n\n"
-     << "[5] BOOLEAN DIFFERENCE VERIFICATION\n"
-     << "  Executed Boolean BOP    : " << (result.booleanExecuted ? "YES" : "NO") << "\n"
-     << "  Decision Path           : " << result.decisionPath << "\n"
-     << "  A - B (Missing Material): " << result.missingMaterial.volumeMm3 << " mm3 (Components: " << result.missingMaterial.componentCount << ")\n"
-     << "  B - A (Added Material)  : " << result.addedMaterial.volumeMm3 << " mm3 (Components: " << result.addedMaterial.componentCount << ")\n"
-     << "  Execution Time          : A-B: " << result.timings.booleanAbMs << " ms | B-A: " << result.timings.booleanBaMs << " ms\n\n"
-     << "[6] FINAL RESULT\n"
-     << "  Status : " << ToString(result.status) << "\n"
-     << "  Reason : " << result.reason << "\n"
-     << "================================================================================\n";
+  const bool volPass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
+                       (result.relativeInputVolumeDifference <= result.thresholds.relativeVolumeTolerance);
+  const bool centroidPass = result.centroidDistanceMm <= effectiveDistTol;
+  const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
+  const bool boolPass = (!result.booleanExecuted) ||
+                        (result.missingMaterial.volumeMm3 <= 1.0e-6 && result.addedMaterial.volumeMm3 <= 1.0e-6);
+
+  ss << "======================================================================\n"
+     << " CAD STEP GEOMETRY COMPARISON REPORT\n"
+     << "======================================================================\n"
+     << "  Targets          : " << refName << " vs " << candName << "\n"
+     << "  Model Scale      : L_diag = " << diagScale << " mm | Volume = " << refVol << " mm3\n"
+     << "  Effective Tols   : RelVol = " << (result.thresholds.relativeVolumeTolerance * 100.0) << "%"
+     << " | AbsVol = " << effectiveAbsVolTol << " mm3"
+     << " | Dist/Bounds = " << effectiveDistTol << " mm\n"
+     << "----------------------------------------------------------------------\n"
+     << "  Metrics Audit    :\n"
+     << "    ├─ Volume Diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm3 ("
+     << (result.relativeInputVolumeDifference * 100.0) << "%) [" << (volPass ? "PASS" : "FAIL") << "]\n"
+     << "    ├─ Centroid    : " << result.centroidDistanceMm << " mm [" << (centroidPass ? "PASS" : "FAIL") << "]\n"
+     << "    ├─ Bounding Box: " << result.maximumBoundsDifferenceMm << " mm [" << (boundsPass ? "PASS" : "FAIL") << "]\n"
+     << "    └─ Boolean BOP : A-B = " << result.missingMaterial.volumeMm3 << " mm3, B-A = " << result.addedMaterial.volumeMm3 << " mm3 [" << (boolPass ? "PASS" : "FAIL") << "]\n"
+     << "----------------------------------------------------------------------\n"
+     << "  Final Status     : " << ToString(result.status) << " (" << result.reason << ")\n"
+     << "======================================================================\n";
   return ss.str();
 }
 
