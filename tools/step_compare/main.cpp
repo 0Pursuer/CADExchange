@@ -14,6 +14,7 @@ struct CliOptions {
   std::filesystem::path candidate;
   std::filesystem::path output;
   cadstep::CompareConfig config;
+  bool printJsonStdout = false;
   bool help = false;
 };
 
@@ -86,6 +87,8 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
       options.config.enableNormalizedFastPath = true;
     } else if (argument == L"--quiet") {
       options.config.printHumanSummary = false;
+    } else if (argument == L"--json-stdout") {
+      options.printJsonStdout = true;
     } else if (argument == L"--help" || argument == L"-h") {
       options.help = true;
     } else {
@@ -124,11 +127,11 @@ int Run(const std::vector<std::wstring> &arguments) {
     return cadstep::ExitCode(cadstep::CompareStatus::InternalError);
   }
 
-  if (options.config.printHumanSummary) {
-    std::cerr << cadstep::ToHumanSummary(result);
+  if (options.printJsonStdout) {
+    std::cout << cadstep::ToJson(result) << '\n';
+  } else if (options.config.printHumanSummary) {
+    std::cout << cadstep::ToHumanSummary(result);
   }
-
-  std::cout << cadstep::ToJson(result);
   return cadstep::ExitCode(result.status);
 }
 
