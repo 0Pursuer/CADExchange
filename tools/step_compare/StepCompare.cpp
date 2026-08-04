@@ -576,39 +576,53 @@ std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape) {
   return result;
 }
 
-bool FaceMatches(const FaceDescriptor &ref, const FaceDescriptor &cand, const CompareConfig &config) {
+double BoundsDiagonal(const Bounds3 &bounds) {
+  if (bounds.isVoid) return 1.0;
+  const double dx = bounds.maximum.x - bounds.minimum.x;
+  const double dy = bounds.maximum.y - bounds.minimum.y;
+  const double dz = bounds.maximum.z - bounds.minimum.z;
+  const double diag = std::sqrt(dx * dx + dy * dy + dz * dz);
+  return diag > 0.0 ? diag : 1.0;
+}
+
+bool FaceMatches(const FaceDescriptor &ref, const FaceDescriptor &cand, const CompareConfig &config, double characteristicScale) {
   if (ref.typeName != cand.typeName) return false;
 
   const double allowedAreaDiff = std::max(1.0e-3 * ref.areaMm2, 0.01);
   if (std::abs(ref.areaMm2 - cand.areaMm2) > allowedAreaDiff) return false;
 
+  const double effectiveDistTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
+
   const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
-  if (centroidDist > config.distanceToleranceMm) return false;
+  if (centroidDist > effectiveDistTol) return false;
 
   const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
-  if (boundsDiff > config.distanceToleranceMm) return false;
+  if (boundsDiff > effectiveDistTol) return false;
 
   return true;
 }
 
-bool EdgeMatches(const EdgeDescriptor &ref, const EdgeDescriptor &cand, const CompareConfig &config) {
+bool EdgeMatches(const EdgeDescriptor &ref, const EdgeDescriptor &cand, const CompareConfig &config, double characteristicScale) {
   if (ref.typeName != cand.typeName) return false;
 
   const double allowedLengthDiff = std::max(1.0e-3 * ref.lengthMm, 0.005);
   if (std::abs(ref.lengthMm - cand.lengthMm) > allowedLengthDiff) return false;
 
+  const double effectiveDistTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
+
   const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
-  if (centroidDist > config.distanceToleranceMm) return false;
+  if (centroidDist > effectiveDistTol) return false;
 
   const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
-  if (boundsDiff > config.distanceToleranceMm) return false;
+  if (boundsDiff > effectiveDistTol) return false;
 
   return true;
 }
 
 int MatchFaceDescriptors(const std::vector<FaceDescriptor> &refFaces,
                          std::vector<FaceDescriptor> &candFaces,
-                         const CompareConfig &config) {
+                         const CompareConfig &config,
+                         double characteristicScale) {
   int matched = 0;
   for (const auto &ref : refFaces) {
     int bestCandIndex = -1;
@@ -616,7 +630,7 @@ int MatchFaceDescriptors(const std::vector<FaceDescriptor> &refFaces,
 
     for (std::size_t cIdx = 0; cIdx < candFaces.size(); ++cIdx) {
       if (candFaces[cIdx].matched) continue;
-      if (FaceMatches(ref, candFaces[cIdx], config)) {
+      if (FaceMatches(ref, candFaces[cIdx], config, characteristicScale)) {
         const double dist = PointDistance(ref.centroidMm, candFaces[cIdx].centroidMm);
         if (dist < bestDistance) {
           bestDistance = dist;
@@ -635,7 +649,8 @@ int MatchFaceDescriptors(const std::vector<FaceDescriptor> &refFaces,
 
 int MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &refEdges,
                          std::vector<EdgeDescriptor> &candEdges,
-                         const CompareConfig &config) {
+                         const CompareConfig &config,
+                         double characteristicScale) {
   int matched = 0;
   for (const auto &ref : refEdges) {
     int bestCandIndex = -1;
@@ -643,7 +658,7 @@ int MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &refEdges,
 
     for (std::size_t cIdx = 0; cIdx < candEdges.size(); ++cIdx) {
       if (candEdges[cIdx].matched) continue;
-      if (EdgeMatches(ref, candEdges[cIdx], config)) {
+      if (EdgeMatches(ref, candEdges[cIdx], config, characteristicScale)) {
         const double dist = PointDistance(ref.centroidMm, candEdges[cIdx].centroidMm);
         if (dist < bestDistance) {
           bestDistance = dist;
@@ -692,8 +707,9 @@ TopologyMatchAudit MatchNormalizedTopology(const TopoDS_Solid &refSolid,
   audit.faceTypeHistogramEqual = MapsEqual(refFaceTypes, candFaceTypes);
   audit.edgeTypeHistogramEqual = MapsEqual(refEdgeTypes, candEdgeTypes);
 
-  audit.matchedFaceCount = MatchFaceDescriptors(refFaceDescs, candFaceDescs, config);
-  audit.matchedEdgeCount = MatchEdgeDescriptors(refEdgeDescs, candEdgeDescs, config);
+  const double characteristicScale = BoundsDiagonal(ShapeBounds(refSolid));
+  audit.matchedFaceCount = MatchFaceDescriptors(refFaceDescs, candFaceDescs, config, characteristicScale);
+  audit.matchedEdgeCount = MatchEdgeDescriptors(refEdgeDescs, candEdgeDescs, config, characteristicScale);
 
   audit.unmatchedReferenceFaces = audit.referenceFaceCount - audit.matchedFaceCount;
   audit.unmatchedCandidateFaces = audit.candidateFaceCount - audit.matchedFaceCount;
@@ -998,13 +1014,16 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     result.maximumBoundsDifferenceMm = MaximumBoundsDifference(
         referenceSolid.audit.boundsMm, candidateSolid.audit.boundsMm);
 
+    const double characteristicScale = BoundsDiagonal(referenceSolid.audit.boundsMm);
+    const double effectiveDistanceTol = std::max(config.distanceToleranceMm, 1.0e-4 * characteristicScale);
+
     const bool inputVolumePass = VolumePass(
         result.absoluteInputVolumeDifferenceMm3, volumeScale,
         config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance);
     const bool centroidPass =
-        result.centroidDistanceMm <= config.distanceToleranceMm;
+        result.centroidDistanceMm <= effectiveDistanceTol;
     const bool boundsPass =
-        result.maximumBoundsDifferenceMm <= config.distanceToleranceMm;
+        result.maximumBoundsDifferenceMm <= effectiveDistanceTol;
 
     const bool globalMetricsPass = inputVolumePass && centroidPass && boundsPass;
     const bool normalizedMatch = result.normalizedTopology.normalizedTopologyMatch;

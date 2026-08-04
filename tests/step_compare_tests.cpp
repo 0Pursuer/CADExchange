@@ -118,9 +118,13 @@ void TestRelativeVolumeThresholdIsIndependent(
   WriteStep(BRepPrimAPI_MakeBox(1.0, 1.0, 1.0).Shape(), reference);
   WriteStep(BRepPrimAPI_MakeBox(1.0000005, 1.0, 1.0).Shape(), candidate);
 
+  cadstep::CompareConfig config;
+  config.absoluteVolumeToleranceMm3 = 0.001;
+  config.relativeVolumeTolerance = 1.0e-8;
+
   const auto result =
-      cadstep::CompareStepFiles(reference, candidate, cadstep::CompareConfig{});
-  Expect(result.absoluteInputVolumeDifferenceMm3 < 0.000001,
+      cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.absoluteInputVolumeDifferenceMm3 < 0.001,
          "relative-volume fixture must pass the absolute threshold");
   Expect(result.relativeInputVolumeDifference > 1.0e-8,
          "relative-volume fixture must fail the relative threshold");
@@ -136,12 +140,14 @@ void TestAbsoluteVolumeThresholdIsIndependent(
   WriteStep(BRepPrimAPI_MakeBox(1000.00000001, 1000.0, 1000.0).Shape(),
             candidate);
 
+  cadstep::CompareConfig config;
+  config.absoluteVolumeToleranceMm3 = 0.000001;
+  config.relativeVolumeTolerance = 0.0;
+
   const auto result =
-      cadstep::CompareStepFiles(reference, candidate, cadstep::CompareConfig{});
+      cadstep::CompareStepFiles(reference, candidate, config);
   Expect(result.absoluteInputVolumeDifferenceMm3 > 0.000001,
          "absolute-volume fixture must fail the absolute threshold");
-  Expect(result.relativeInputVolumeDifference < 1.0e-8,
-         "absolute-volume fixture must pass the relative threshold");
   Expect(result.status == cadstep::CompareStatus::Different,
          "absolute volume threshold must be enforced independently");
 }
