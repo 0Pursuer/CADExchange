@@ -1273,19 +1273,31 @@ std::string ToJson(const CompareResult &result) {
   normPres["reference"] = {
       {"succeeded", result.referenceNormalization.succeeded},
       {"face_count_before", result.referenceNormalization.faceCountBefore},
+      {"faces_before", result.referenceNormalization.faceCountBefore},
       {"face_count_after", result.referenceNormalization.faceCountAfter},
+      {"faces_after", result.referenceNormalization.faceCountAfter},
       {"edge_count_before", result.referenceNormalization.edgeCountBefore},
-      {"edge_count_after", result.referenceNormalization.edgeCountAfter}
+      {"edges_before", result.referenceNormalization.edgeCountBefore},
+      {"edge_count_after", result.referenceNormalization.edgeCountAfter},
+      {"edges_after", result.referenceNormalization.edgeCountAfter}
   };
   normPres["candidate"] = {
       {"succeeded", result.candidateNormalization.succeeded},
       {"face_count_before", result.candidateNormalization.faceCountBefore},
+      {"faces_before", result.candidateNormalization.faceCountBefore},
       {"face_count_after", result.candidateNormalization.faceCountAfter},
+      {"faces_after", result.candidateNormalization.faceCountAfter},
       {"edge_count_before", result.candidateNormalization.edgeCountBefore},
-      {"edge_count_after", result.candidateNormalization.edgeCountAfter}
+      {"edges_before", result.candidateNormalization.edgeCountBefore},
+      {"edge_count_after", result.candidateNormalization.edgeCountAfter},
+      {"edges_after", result.candidateNormalization.edgeCountAfter}
   };
   normPres["face_descriptor_match"] = std::to_string(result.normalizedTopology.matchedFaceCount) + " / " + std::to_string(result.normalizedTopology.referenceFaceCount);
   normPres["edge_descriptor_match"] = std::to_string(result.normalizedTopology.matchedEdgeCount) + " / " + std::to_string(result.normalizedTopology.referenceEdgeCount);
+  normPres["matched_faces"] = result.normalizedTopology.matchedFaceCount;
+  normPres["reference_faces"] = result.normalizedTopology.referenceFaceCount;
+  normPres["matched_edges"] = result.normalizedTopology.matchedEdgeCount;
+  normPres["reference_edges"] = result.normalizedTopology.referenceEdgeCount;
   normPres["histogram_match"] = result.normalizedTopology.normalizedTopologyMatch;
   presentation["normalization"] = normPres;
 
@@ -1295,6 +1307,10 @@ std::string ToJson(const CompareResult &result) {
   const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
   const bool boolPass = (!result.booleanExecuted) ||
                         (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
+  const bool faceMatchPass = (result.normalizedTopology.matchedFaceCount == result.normalizedTopology.referenceFaceCount) &&
+                             (result.normalizedTopology.referenceFaceCount == result.normalizedTopology.candidateFaceCount);
+  const bool edgeMatchPass = (result.normalizedTopology.matchedEdgeCount == result.normalizedTopology.referenceEdgeCount) &&
+                             (result.normalizedTopology.referenceEdgeCount == result.normalizedTopology.candidateEdgeCount);
 
   json checks = json::array();
   checks.push_back({
@@ -1342,6 +1358,34 @@ std::string ToJson(const CompareResult &result) {
       {"threshold_unit", "mm³"},
       {"pass", boolPass},
       {"available", result.booleanExecuted}
+  });
+  checks.push_back({
+      {"id", "face_topology_match"},
+      {"label", "归一化面匹配度"},
+      {"actual_text", std::to_string(result.normalizedTopology.matchedFaceCount) + " / " + std::to_string(result.normalizedTopology.referenceFaceCount)},
+      {"actual", result.normalizedTopology.matchedFaceCount},
+      {"unit", "面"},
+      {"relative_percent", (result.normalizedTopology.referenceFaceCount > 0 ? (result.normalizedTopology.matchedFaceCount * 100.0 / result.normalizedTopology.referenceFaceCount) : 100.0)},
+      {"threshold_text", std::to_string(result.normalizedTopology.referenceFaceCount) + " (Cand: " + std::to_string(result.normalizedTopology.candidateFaceCount) + ")"},
+      {"threshold", result.normalizedTopology.referenceFaceCount},
+      {"threshold_unit", "面"},
+      {"pass", faceMatchPass},
+      {"is_diagnostic", true},
+      {"available", true}
+  });
+  checks.push_back({
+      {"id", "edge_topology_match"},
+      {"label", "归一化边匹配度"},
+      {"actual_text", std::to_string(result.normalizedTopology.matchedEdgeCount) + " / " + std::to_string(result.normalizedTopology.referenceEdgeCount)},
+      {"actual", result.normalizedTopology.matchedEdgeCount},
+      {"unit", "边"},
+      {"relative_percent", (result.normalizedTopology.referenceEdgeCount > 0 ? (result.normalizedTopology.matchedEdgeCount * 100.0 / result.normalizedTopology.referenceEdgeCount) : 100.0)},
+      {"threshold_text", std::to_string(result.normalizedTopology.referenceEdgeCount) + " (Cand: " + std::to_string(result.normalizedTopology.candidateEdgeCount) + ")"},
+      {"threshold", result.normalizedTopology.referenceEdgeCount},
+      {"threshold_unit", "边"},
+      {"pass", edgeMatchPass},
+      {"is_diagnostic", true},
+      {"available", true}
   });
   presentation["checks"] = checks;
 
