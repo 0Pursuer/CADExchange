@@ -346,10 +346,18 @@ void TestSameDomainNormalizationAndFastPath(const std::filesystem::path &root) {
          "reference normalization must succeed");
   Expect(result.candidateNormalization.succeeded,
          "candidate normalization must succeed");
-  Expect(result.referenceNormalization.faceCountAfter == 6,
-         "box after normalization must have 6 faces");
   Expect(result.candidateNormalization.faceCountAfter == 6,
          "split-box after normalization must have 6 faces");
+  Expect(result.normalizedTopology.matchedFaceCount == 6,
+         "all 6 normalized faces must match 1-to-1");
+  Expect(result.normalizedTopology.unmatchedReferenceFaces == 0,
+         "unmatched reference faces count must be 0");
+  Expect(result.normalizedTopology.unmatchedCandidateFaces == 0,
+         "unmatched candidate faces count must be 0");
+  Expect(result.normalizedTopology.allFacesMatched,
+         "allFacesMatched flag must be true");
+  Expect(result.normalizedTopology.allEdgesMatched,
+         "allEdgesMatched flag must be true");
   Expect(result.normalizedTopology.normalizedTopologyMatch,
          "normalized topology must match");
   Expect(result.decisionPath == "normalized_topology_fast_path",

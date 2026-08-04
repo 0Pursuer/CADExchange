@@ -483,48 +483,7 @@ NormalizedSolid NormalizeSameDomain(const TopoDS_Solid &input, const CompareConf
 
 TopologyMatchAudit MatchNormalizedTopology(const TopoDS_Solid &refSolid,
                                            const TopoDS_Solid &candSolid,
-                                           const CompareConfig &config) {
-  const auto started = Clock::now();
-  TopologyMatchAudit audit;
-  audit.attempted = true;
-
-  const auto refFaceTypes = CollectFaceTypeStatistics(refSolid);
-  const auto candFaceTypes = CollectFaceTypeStatistics(candSolid);
-  const auto refEdgeTypes = CollectEdgeTypeStatistics(refSolid);
-  const auto candEdgeTypes = CollectEdgeTypeStatistics(candSolid);
-
-  audit.referenceFaceCount = CountUniqueSubShapes(refSolid, TopAbs_FACE);
-  audit.candidateFaceCount = CountUniqueSubShapes(candSolid, TopAbs_FACE);
-  audit.referenceEdgeCount = static_cast<int>(CollectComparableEdges(refSolid).size());
-  audit.candidateEdgeCount = static_cast<int>(CollectComparableEdges(candSolid).size());
-
-  auto MapsEqual = [](const std::vector<TypeStatistics> &left, const std::vector<TypeStatistics> &right) {
-    std::map<std::string, int> lMap, rMap;
-    for (const auto &item : left) lMap[item.type] = item.count;
-    for (const auto &item : right) rMap[item.type] = item.count;
-    return lMap == rMap;
-  };
-
-  audit.faceTypeHistogramEqual = MapsEqual(refFaceTypes, candFaceTypes);
-  audit.edgeTypeHistogramEqual = MapsEqual(refEdgeTypes, candEdgeTypes);
-
-  if (audit.referenceFaceCount == audit.candidateFaceCount &&
-      audit.referenceEdgeCount == audit.candidateEdgeCount &&
-      audit.faceTypeHistogramEqual && audit.edgeTypeHistogramEqual) {
-    audit.matchedFaceCount = audit.referenceFaceCount;
-    audit.matchedEdgeCount = audit.referenceEdgeCount;
-    audit.allFacesMatched = true;
-    audit.allEdgesMatched = true;
-    audit.normalizedTopologyMatch = true;
-  }
-
-  audit.unmatchedReferenceFaces = audit.referenceFaceCount - audit.matchedFaceCount;
-  audit.unmatchedCandidateFaces = audit.candidateFaceCount - audit.matchedFaceCount;
-  audit.unmatchedReferenceEdges = audit.referenceEdgeCount - audit.matchedEdgeCount;
-  audit.unmatchedCandidateEdges = audit.candidateEdgeCount - audit.matchedEdgeCount;
-  audit.elapsedMs = ElapsedMs(started);
-  return audit;
-}
+                                           const CompareConfig &config);
 
 double PointDistance(const Point3 &left, const Point3 &right) {
   return std::hypot(std::hypot(left.x - right.x, left.y - right.y),
@@ -541,6 +500,217 @@ double MaximumBoundsDifference(const Bounds3 &left, const Bounds3 &right) {
                    std::abs(left.maximum.x - right.maximum.x),
                    std::abs(left.maximum.y - right.maximum.y),
                    std::abs(left.maximum.z - right.maximum.z)});
+}
+
+Bounds3 ShapeBounds(const TopoDS_Shape &shape) {
+  Bounds3 result;
+  if (shape.IsNull()) return result;
+  Bnd_Box box;
+  BRepBndLib::Add(shape, box);
+  if (box.IsVoid()) return result;
+  double xMin = 0.0, yMin = 0.0, zMin = 0.0;
+  double xMax = 0.0, yMax = 0.0, zMax = 0.0;
+  box.Get(xMin, yMin, zMin, xMax, yMax, zMax);
+  result.minimum = Point3{xMin, yMin, zMin};
+  result.maximum = Point3{xMax, yMax, zMax};
+  result.isVoid = false;
+  return result;
+}
+
+struct FaceDescriptor {
+  int index = 0;
+  std::string typeName;
+  double areaMm2 = 0.0;
+  Point3 centroidMm;
+  Bounds3 boundsMm;
+  bool matched = false;
+};
+
+struct EdgeDescriptor {
+  int index = 0;
+  std::string typeName;
+  double lengthMm = 0.0;
+  Point3 centroidMm;
+  Bounds3 boundsMm;
+  bool matched = false;
+};
+
+std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape) {
+  std::vector<FaceDescriptor> result;
+  TopTools_IndexedMapOfShape faces;
+  TopExp::MapShapes(shape, TopAbs_FACE, faces);
+  for (int index = 1; index <= faces.Extent(); ++index) {
+    const TopoDS_Face face = TopoDS::Face(faces(index));
+    BRepAdaptor_Surface surface(face, Standard_True);
+    FaceDescriptor desc;
+    desc.index = index;
+    desc.typeName = SurfaceTypeText(surface.GetType());
+    GProp_GProps properties;
+    BRepGProp::SurfaceProperties(face, properties, Standard_False, Standard_False);
+    desc.areaMm2 = std::abs(properties.Mass());
+    const gp_Pnt center = properties.CentreOfMass();
+    desc.centroidMm = Point3{center.X(), center.Y(), center.Z()};
+    desc.boundsMm = ShapeBounds(face);
+    result.push_back(desc);
+  }
+  return result;
+}
+
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape) {
+  std::vector<EdgeDescriptor> result;
+  const auto edges = CollectComparableEdges(shape);
+  for (std::size_t index = 0; index < edges.size(); ++index) {
+    const TopoDS_Edge edge = edges[index];
+    BRepAdaptor_Curve curve(edge);
+    EdgeDescriptor desc;
+    desc.index = static_cast<int>(index + 1);
+    desc.typeName = CurveTypeText(curve.GetType());
+    GProp_GProps properties;
+    BRepGProp::LinearProperties(edge, properties);
+    desc.lengthMm = std::abs(properties.Mass());
+    const gp_Pnt center = properties.CentreOfMass();
+    desc.centroidMm = Point3{center.X(), center.Y(), center.Z()};
+    desc.boundsMm = ShapeBounds(edge);
+    result.push_back(desc);
+  }
+  return result;
+}
+
+bool FaceMatches(const FaceDescriptor &ref, const FaceDescriptor &cand, const CompareConfig &config) {
+  if (ref.typeName != cand.typeName) return false;
+
+  const double allowedAreaDiff = std::max(1.0e-3 * ref.areaMm2, 0.01);
+  if (std::abs(ref.areaMm2 - cand.areaMm2) > allowedAreaDiff) return false;
+
+  const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
+  if (centroidDist > config.distanceToleranceMm) return false;
+
+  const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
+  if (boundsDiff > config.distanceToleranceMm) return false;
+
+  return true;
+}
+
+bool EdgeMatches(const EdgeDescriptor &ref, const EdgeDescriptor &cand, const CompareConfig &config) {
+  if (ref.typeName != cand.typeName) return false;
+
+  const double allowedLengthDiff = std::max(1.0e-3 * ref.lengthMm, 0.005);
+  if (std::abs(ref.lengthMm - cand.lengthMm) > allowedLengthDiff) return false;
+
+  const double centroidDist = PointDistance(ref.centroidMm, cand.centroidMm);
+  if (centroidDist > config.distanceToleranceMm) return false;
+
+  const double boundsDiff = MaximumBoundsDifference(ref.boundsMm, cand.boundsMm);
+  if (boundsDiff > config.distanceToleranceMm) return false;
+
+  return true;
+}
+
+int MatchFaceDescriptors(const std::vector<FaceDescriptor> &refFaces,
+                         std::vector<FaceDescriptor> &candFaces,
+                         const CompareConfig &config) {
+  int matched = 0;
+  for (const auto &ref : refFaces) {
+    int bestCandIndex = -1;
+    double bestDistance = std::numeric_limits<double>::max();
+
+    for (std::size_t cIdx = 0; cIdx < candFaces.size(); ++cIdx) {
+      if (candFaces[cIdx].matched) continue;
+      if (FaceMatches(ref, candFaces[cIdx], config)) {
+        const double dist = PointDistance(ref.centroidMm, candFaces[cIdx].centroidMm);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          bestCandIndex = static_cast<int>(cIdx);
+        }
+      }
+    }
+
+    if (bestCandIndex >= 0) {
+      candFaces[bestCandIndex].matched = true;
+      ++matched;
+    }
+  }
+  return matched;
+}
+
+int MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &refEdges,
+                         std::vector<EdgeDescriptor> &candEdges,
+                         const CompareConfig &config) {
+  int matched = 0;
+  for (const auto &ref : refEdges) {
+    int bestCandIndex = -1;
+    double bestDistance = std::numeric_limits<double>::max();
+
+    for (std::size_t cIdx = 0; cIdx < candEdges.size(); ++cIdx) {
+      if (candEdges[cIdx].matched) continue;
+      if (EdgeMatches(ref, candEdges[cIdx], config)) {
+        const double dist = PointDistance(ref.centroidMm, candEdges[cIdx].centroidMm);
+        if (dist < bestDistance) {
+          bestDistance = dist;
+          bestCandIndex = static_cast<int>(cIdx);
+        }
+      }
+    }
+
+    if (bestCandIndex >= 0) {
+      candEdges[bestCandIndex].matched = true;
+      ++matched;
+    }
+  }
+  return matched;
+}
+
+TopologyMatchAudit MatchNormalizedTopology(const TopoDS_Solid &refSolid,
+                                           const TopoDS_Solid &candSolid,
+                                           const CompareConfig &config) {
+  const auto started = Clock::now();
+  TopologyMatchAudit audit;
+  audit.attempted = true;
+
+  const auto refFaceTypes = CollectFaceTypeStatistics(refSolid);
+  const auto candFaceTypes = CollectFaceTypeStatistics(candSolid);
+  const auto refEdgeTypes = CollectEdgeTypeStatistics(refSolid);
+  const auto candEdgeTypes = CollectEdgeTypeStatistics(candSolid);
+
+  const auto refFaceDescs = CollectFaceDescriptors(refSolid);
+  auto candFaceDescs = CollectFaceDescriptors(candSolid);
+  const auto refEdgeDescs = CollectEdgeDescriptors(refSolid);
+  auto candEdgeDescs = CollectEdgeDescriptors(candSolid);
+
+  audit.referenceFaceCount = static_cast<int>(refFaceDescs.size());
+  audit.candidateFaceCount = static_cast<int>(candFaceDescs.size());
+  audit.referenceEdgeCount = static_cast<int>(refEdgeDescs.size());
+  audit.candidateEdgeCount = static_cast<int>(candEdgeDescs.size());
+
+  auto MapsEqual = [](const std::vector<TypeStatistics> &left, const std::vector<TypeStatistics> &right) {
+    std::map<std::string, int> lMap, rMap;
+    for (const auto &item : left) lMap[item.type] = item.count;
+    for (const auto &item : right) rMap[item.type] = item.count;
+    return lMap == rMap;
+  };
+
+  audit.faceTypeHistogramEqual = MapsEqual(refFaceTypes, candFaceTypes);
+  audit.edgeTypeHistogramEqual = MapsEqual(refEdgeTypes, candEdgeTypes);
+
+  audit.matchedFaceCount = MatchFaceDescriptors(refFaceDescs, candFaceDescs, config);
+  audit.matchedEdgeCount = MatchEdgeDescriptors(refEdgeDescs, candEdgeDescs, config);
+
+  audit.unmatchedReferenceFaces = audit.referenceFaceCount - audit.matchedFaceCount;
+  audit.unmatchedCandidateFaces = audit.candidateFaceCount - audit.matchedFaceCount;
+  audit.unmatchedReferenceEdges = audit.referenceEdgeCount - audit.matchedEdgeCount;
+  audit.unmatchedCandidateEdges = audit.candidateEdgeCount - audit.matchedEdgeCount;
+
+  audit.allFacesMatched = (audit.matchedFaceCount == audit.referenceFaceCount) &&
+                          (audit.matchedFaceCount == audit.candidateFaceCount);
+
+  audit.allEdgesMatched = (audit.matchedEdgeCount == audit.referenceEdgeCount) &&
+                          (audit.matchedEdgeCount == audit.candidateEdgeCount);
+
+  audit.normalizedTopologyMatch = audit.allFacesMatched && audit.allEdgesMatched &&
+                                  audit.faceTypeHistogramEqual && audit.edgeTypeHistogramEqual;
+
+  audit.elapsedMs = ElapsedMs(started);
+  return audit;
 }
 
 void ExportShapeStl(const TopoDS_Shape &shape, const std::filesystem::path &outPath) {
