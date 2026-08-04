@@ -1209,6 +1209,143 @@ std::string ToJson(const CompareResult &result) {
   root["decision_metrics"] = metrics;
 
   root["timings_ms"] = TimingsJson(result.timings);
+
+  // Build presentation contract schema
+  json presentation = json::object();
+  presentation["schema_version"] = 1;
+
+  json overall = json::object();
+  overall["status"] = ToString(result.status);
+  overall["pass"] = (result.status == CompareStatus::Equal);
+  overall["reason"] = result.reason;
+  overall["decision_path"] = result.decisionPath;
+  overall["boolean_executed"] = result.booleanExecuted;
+  presentation["overall"] = overall;
+
+  const double diagScale = BoundsDiagonal(result.reference.boundsMm);
+  const double effectiveDistTol = std::max(result.thresholds.distanceToleranceMm, 1.0e-4 * diagScale);
+  const double refVol = std::abs(result.reference.signedVolumeMm3);
+  const double effectiveAbsVolTol = std::max(result.thresholds.absoluteVolumeToleranceMm3, result.thresholds.relativeVolumeTolerance * refVol);
+
+  json inputs = json::object();
+  json refInput = json::object();
+  refInput["path"] = result.reference.path;
+  refInput["filename"] = std::filesystem::path(result.reference.path).filename().string();
+  refInput["units"] = result.reference.fileLengthUnits;
+  refInput["solid_count"] = result.reference.solidCount;
+  refInput["shell_count"] = result.reference.shellCount;
+  refInput["face_count"] = result.reference.faceCount;
+  refInput["edge_count"] = result.reference.edgeCount;
+  refInput["volume_mm3"] = result.reference.signedVolumeMm3;
+  refInput["centroid_mm"] = {
+      {"x", result.reference.centroidMm.x},
+      {"y", result.reference.centroidMm.y},
+      {"z", result.reference.centroidMm.z}
+  };
+  refInput["bounds_mm"] = {
+      {"min", {{"x", result.reference.boundsMm.minimum.x}, {"y", result.reference.boundsMm.minimum.y}, {"z", result.reference.boundsMm.minimum.z}}},
+      {"max", {{"x", result.reference.boundsMm.maximum.x}, {"y", result.reference.boundsMm.maximum.y}, {"z", result.reference.boundsMm.maximum.z}}}
+  };
+  inputs["reference"] = refInput;
+
+  json candInput = json::object();
+  candInput["path"] = result.candidate.path;
+  candInput["filename"] = std::filesystem::path(result.candidate.path).filename().string();
+  candInput["units"] = result.candidate.fileLengthUnits;
+  candInput["solid_count"] = result.candidate.solidCount;
+  candInput["shell_count"] = result.candidate.shellCount;
+  candInput["face_count"] = result.candidate.faceCount;
+  candInput["edge_count"] = result.candidate.edgeCount;
+  candInput["volume_mm3"] = result.candidate.signedVolumeMm3;
+  candInput["centroid_mm"] = {
+      {"x", result.candidate.centroidMm.x},
+      {"y", result.candidate.centroidMm.y},
+      {"z", result.candidate.centroidMm.z}
+  };
+  candInput["bounds_mm"] = {
+      {"min", {{"x", result.candidate.boundsMm.minimum.x}, {"y", result.candidate.boundsMm.minimum.y}, {"z", result.candidate.boundsMm.minimum.z}}},
+      {"max", {{"x", result.candidate.boundsMm.maximum.x}, {"y", result.candidate.boundsMm.maximum.y}, {"z", result.candidate.boundsMm.maximum.z}}}
+  };
+  inputs["candidate"] = candInput;
+  presentation["inputs"] = inputs;
+
+  json normPres = json::object();
+  normPres["reference"] = {
+      {"succeeded", result.referenceNormalization.succeeded},
+      {"face_count_before", result.referenceNormalization.faceCountBefore},
+      {"face_count_after", result.referenceNormalization.faceCountAfter},
+      {"edge_count_before", result.referenceNormalization.edgeCountBefore},
+      {"edge_count_after", result.referenceNormalization.edgeCountAfter}
+  };
+  normPres["candidate"] = {
+      {"succeeded", result.candidateNormalization.succeeded},
+      {"face_count_before", result.candidateNormalization.faceCountBefore},
+      {"face_count_after", result.candidateNormalization.faceCountAfter},
+      {"edge_count_before", result.candidateNormalization.edgeCountBefore},
+      {"edge_count_after", result.candidateNormalization.edgeCountAfter}
+  };
+  normPres["face_descriptor_match"] = std::to_string(result.normalizedTopology.matchedFaceCount) + " / " + std::to_string(result.normalizedTopology.referenceFaceCount);
+  normPres["edge_descriptor_match"] = std::to_string(result.normalizedTopology.matchedEdgeCount) + " / " + std::to_string(result.normalizedTopology.referenceEdgeCount);
+  normPres["histogram_match"] = result.normalizedTopology.normalizedTopologyMatch;
+  presentation["normalization"] = normPres;
+
+  const bool volPass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
+                       (result.relativeInputVolumeDifference <= result.thresholds.relativeVolumeTolerance);
+  const bool centroidPass = result.centroidDistanceMm <= effectiveDistTol;
+  const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
+  const bool boolPass = (!result.booleanExecuted) ||
+                        (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
+
+  json checks = json::array();
+  checks.push_back({
+      {"id", "volume_difference"},
+      {"label", "体积差异"},
+      {"actual", result.absoluteInputVolumeDifferenceMm3},
+      {"unit", "mm³"},
+      {"relative_percent", result.relativeInputVolumeDifference * 100.0},
+      {"threshold", effectiveAbsVolTol},
+      {"threshold_unit", "mm³"},
+      {"pass", volPass},
+      {"available", true}
+  });
+  checks.push_back({
+      {"id", "centroid_distance"},
+      {"label", "质心距离"},
+      {"actual", result.centroidDistanceMm},
+      {"unit", "mm"},
+      {"relative_percent", (diagScale > 0.0 ? (result.centroidDistanceMm / diagScale * 100.0) : 0.0)},
+      {"threshold", effectiveDistTol},
+      {"threshold_unit", "mm"},
+      {"pass", centroidPass},
+      {"available", true}
+  });
+  checks.push_back({
+      {"id", "bounding_box_difference"},
+      {"label", "包围盒坐标差"},
+      {"actual", result.maximumBoundsDifferenceMm},
+      {"unit", "mm"},
+      {"relative_percent", (diagScale > 0.0 ? (result.maximumBoundsDifferenceMm / diagScale * 100.0) : 0.0)},
+      {"threshold", effectiveDistTol},
+      {"threshold_unit", "mm"},
+      {"pass", boundsPass},
+      {"available", true}
+  });
+  checks.push_back({
+      {"id", "boolean_residual"},
+      {"label", "布尔残体 (欠料 A-B / 多料 B-A)"},
+      {"actual", result.symmetricDifferenceVolumeMm3},
+      {"unit", "mm³"},
+      {"relative_percent", result.symmetricDifferenceRelative * 100.0},
+      {"missing_material_mm3", result.missingMaterial.volumeMm3},
+      {"added_material_mm3", result.addedMaterial.volumeMm3},
+      {"threshold", effectiveAbsVolTol},
+      {"threshold_unit", "mm³"},
+      {"pass", boolPass},
+      {"available", result.booleanExecuted}
+  });
+  presentation["checks"] = checks;
+
+  root["presentation"] = presentation;
   return root.dump(2) + '\n';
 }
 
@@ -1228,13 +1365,19 @@ std::string ToHumanSummary(const CompareResult &result) {
   const bool centroidPass = result.centroidDistanceMm <= effectiveDistTol;
   const bool boundsPass = result.maximumBoundsDifferenceMm <= effectiveDistTol;
   const bool boolPass = (!result.booleanExecuted) ||
-                        (result.missingMaterial.volumeMm3 <= 1.0e-6 && result.addedMaterial.volumeMm3 <= 1.0e-6);
+                        (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
 
   ss << "======================================================================\n"
      << " CAD STEP GEOMETRY COMPARISON REPORT\n"
      << "======================================================================\n"
      << "  Targets          : " << refName << " vs " << candName << "\n"
      << "  Model Scale      : L_diag = " << diagScale << " mm | Volume = " << refVol << " mm3\n"
+     << "  Original Topology: Ref(Faces: " << result.reference.faceCount << ", Edges: " << result.reference.edgeCount << ")"
+     << " vs Cand(Faces: " << result.candidate.faceCount << ", Edges: " << result.candidate.edgeCount << ")\n"
+     << "  Normalized Topo  : Ref(Faces: " << result.referenceNormalization.faceCountAfter << ", Edges: " << result.referenceNormalization.edgeCountAfter << ")"
+     << " vs Cand(Faces: " << result.candidateNormalization.faceCountAfter << ", Edges: " << result.candidateNormalization.edgeCountAfter << ")"
+     << " | Descriptor Match: Face " << result.normalizedTopology.matchedFaceCount << "/" << result.normalizedTopology.referenceFaceCount
+     << ", Edge " << result.normalizedTopology.matchedEdgeCount << "/" << result.normalizedTopology.referenceEdgeCount << "\n"
      << "  Effective Tols   : RelVol = " << (result.thresholds.relativeVolumeTolerance * 100.0) << "%"
      << " | AbsVol = " << effectiveAbsVolTol << " mm3"
      << " | Dist/Bounds = " << effectiveDistTol << " mm\n"
