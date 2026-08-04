@@ -24,7 +24,14 @@ void PrintUsage() {
                " --output <directory>"
                " [--distance-tol-mm 0.01]"
                " [--abs-volume-tol-mm3 0.000001]"
-               " [--rel-volume-tol 1e-8]\n";
+               " [--rel-volume-tol 1e-8]"
+               " [--boolean-fuzzy-tol-mm 0.01]"
+               " [--normalize-same-domain]"
+               " [--no-normalize-same-domain]"
+               " [--normalize-linear-tol-mm 0.001]"
+               " [--normalize-angular-tol-rad 1e-6]"
+               " [--normalized-fast-path]"
+               " [--quiet]\n";
 }
 
 double ParseNumber(const std::wstring &text, const char *name) {
@@ -65,6 +72,20 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
     } else if (argument == L"--boolean-fuzzy-tol-mm") {
       options.config.booleanFuzzyToleranceMm =
           ParseNumber(requireValue(), "--boolean-fuzzy-tol-mm");
+    } else if (argument == L"--normalize-same-domain") {
+      options.config.enableSameDomainNormalization = true;
+    } else if (argument == L"--no-normalize-same-domain") {
+      options.config.enableSameDomainNormalization = false;
+    } else if (argument == L"--normalize-linear-tol-mm") {
+      options.config.normalizationLinearToleranceMm =
+          ParseNumber(requireValue(), "--normalize-linear-tol-mm");
+    } else if (argument == L"--normalize-angular-tol-rad") {
+      options.config.normalizationAngularToleranceRad =
+          ParseNumber(requireValue(), "--normalize-angular-tol-rad");
+    } else if (argument == L"--normalized-fast-path") {
+      options.config.enableNormalizedFastPath = true;
+    } else if (argument == L"--quiet") {
+      options.config.printHumanSummary = false;
     } else if (argument == L"--help" || argument == L"-h") {
       options.help = true;
     } else {
@@ -101,6 +122,10 @@ int Run(const std::vector<std::wstring> &arguments) {
   if (!cadstep::WriteResultJson(options.output, result, writeError)) {
     std::cerr << "INTERNAL_ERROR: " << writeError << '\n';
     return cadstep::ExitCode(cadstep::CompareStatus::InternalError);
+  }
+
+  if (options.config.printHumanSummary) {
+    std::cerr << cadstep::ToHumanSummary(result);
   }
 
   std::cout << cadstep::ToJson(result);

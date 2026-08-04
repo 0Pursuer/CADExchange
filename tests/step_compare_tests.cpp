@@ -321,6 +321,43 @@ void TestBooleanFuzzyToleranceOption(const std::filesystem::path &root) {
          "small translation within fuzzy tolerance must be EQUAL");
 }
 
+void TestSameDomainNormalizationAndFastPath(const std::filesystem::path &root) {
+  const TopoDS_Shape referenceBox =
+      BRepPrimAPI_MakeBox(20.0, 30.0, 40.0).Shape();
+  const TopoDS_Shape left = BRepPrimAPI_MakeBox(10.0, 30.0, 40.0).Shape();
+  const TopoDS_Shape right =
+      Translated(BRepPrimAPI_MakeBox(10.0, 30.0, 40.0).Shape(), 10.0);
+  BRepAlgoAPI_Fuse fuse(left, right);
+  Expect(fuse.IsDone(), "failed to construct split-face test solid");
+
+  const auto reference = root / "norm_reference.step";
+  const auto candidate = root / "norm_candidate.step";
+  WriteStep(referenceBox, reference);
+  WriteStep(fuse.Shape(), candidate);
+
+  cadstep::CompareConfig config;
+  config.enableSameDomainNormalization = true;
+  config.enableNormalizedFastPath = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Equal,
+         "normalization + fast path must yield EQUAL");
+  Expect(result.referenceNormalization.succeeded,
+         "reference normalization must succeed");
+  Expect(result.candidateNormalization.succeeded,
+         "candidate normalization must succeed");
+  Expect(result.referenceNormalization.faceCountAfter == 6,
+         "box after normalization must have 6 faces");
+  Expect(result.candidateNormalization.faceCountAfter == 6,
+         "split-box after normalization must have 6 faces");
+  Expect(result.normalizedTopology.normalizedTopologyMatch,
+         "normalized topology must match");
+  Expect(result.decisionPath == "normalized_topology_fast_path",
+         "fast-path decision path must be selected");
+  Expect(!result.booleanExecuted,
+         "boolean cut must be skipped on fast-path");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -345,6 +382,7 @@ int main(int argc, char **argv) {
     TestSolidWithFreeCurveIsUnsupported(root);
     TestSurfaceModelIsUnsupported(root);
     TestBooleanFuzzyToleranceOption(root);
+    TestSameDomainNormalizationAndFastPath(root);
     std::cout << "cad_step_compare_tests: PASS\n";
     return 0;
   } catch (const std::exception &error) {
