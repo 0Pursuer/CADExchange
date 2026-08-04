@@ -295,13 +295,6 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
 
   std::ostringstream loadDiag;
   loadDiag << "ReadFile status=" << ReadStatusText(readStatus);
-
-  std::ostringstream messageStream;
-  reader.PrintCheckLoad(false, IFSelect_CountByItem);
-  const std::string checks = messageStream.str();
-  if (!checks.empty()) {
-    loadDiag << "\n" << checks;
-  }
   result.audit.loadDiagnostics = loadDiag.str();
 
   if (readStatus != IFSelect_RetDone) {
@@ -396,6 +389,8 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
   return result;
 }
 
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, EntitySide side);
+
 NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
                                              const OriginalTopologyIndex &originalIndex,
                                              EntitySide side,
@@ -426,11 +421,15 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   }
 
   const auto normStart = std::chrono::high_resolution_clock::now();
+  Handle(BRepTools_History) history;
   try {
-    ShapeUpgrade_UnifySameDomain unify(input, true, true, true);
+    ShapeUpgrade_UnifySameDomain unify(input, Standard_True, Standard_True, Standard_False);
+    unify.SetSafeInputMode(Standard_True);
+    unify.AllowInternalEdges(Standard_False);
     unify.SetLinearTolerance(config.normalizationLinearToleranceMm);
     unify.SetAngularTolerance(config.normalizationAngularToleranceRad);
     unify.Build();
+    history = unify.History();
 
     const TopoDS_Shape unifiedShape = unify.Shape();
     if (!unifiedShape.IsNull() && unifiedShape.ShapeType() == TopAbs_SOLID) {
@@ -476,7 +475,8 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   result.audit.usedNormalizedShape = result.audit.succeeded;
   result.audit.faceCountAfter = CountUniqueSubShapes(result.solid, TopAbs_FACE);
   result.audit.edgeCountAfter = CountUniqueSubShapes(result.solid, TopAbs_EDGE);
-  result.audit.comparableEdgeCountAfter = result.audit.edgeCountAfter;
+  result.audit.comparableEdgeCountBefore = static_cast<int>(CollectEdgeDescriptors(input, side).size());
+  result.audit.comparableEdgeCountAfter = static_cast<int>(CollectEdgeDescriptors(result.solid, side).size());
 
   TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
   TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
@@ -647,15 +647,32 @@ std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape, En
 
 std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape, EntitySide side) {
   std::vector<EdgeDescriptor> descriptors;
-  TopTools_IndexedMapOfShape edgeMap;
-  TopExp::MapShapes(shape, TopAbs_EDGE, edgeMap);
+  TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
+  TopExp::MapShapesAndUniqueAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
-  descriptors.reserve(edgeMap.Extent());
-  for (int i = 1; i <= edgeMap.Extent(); ++i) {
-    const TopoDS_Edge edge = TopoDS::Edge(edgeMap(i));
+  int visualIndex = 1;
+  for (int i = 1; i <= edgeFaces.Extent(); ++i) {
+    const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(i));
+    if (BRep_Tool::Degenerated(edge)) {
+      continue;
+    }
+
+    bool seam = false;
+    const TopTools_ListOfShape &faces = edgeFaces.FindFromIndex(i);
+    for (TopTools_ListIteratorOfListOfShape it(faces); it.More(); it.Next()) {
+      const TopoDS_Face face = TopoDS::Face(it.Value());
+      if (BRepTools::IsReallyClosed(edge, face)) {
+        seam = true;
+        break;
+      }
+    }
+    if (seam) {
+      continue;
+    }
+
     EdgeDescriptor descriptor;
-    descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedEdge, i);
-    descriptor.visualIndex = i;
+    descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedEdge, visualIndex);
+    descriptor.visualIndex = visualIndex++;
     descriptor.edge = edge;
 
     BRepAdaptor_Curve curve(edge);
@@ -922,8 +939,19 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
   }
 
   try {
-    BRepAlgoAPI_Cut cutAlgo(argument, tool);
+    TopTools_ListOfShape argList;
+    argList.Append(argument);
+    TopTools_ListOfShape toolList;
+    toolList.Append(tool);
+
+    BRepAlgoAPI_Cut cutAlgo;
+    cutAlgo.SetArguments(argList);
+    cutAlgo.SetTools(toolList);
     cutAlgo.SetFuzzyValue(fuzzyTolerance);
+    cutAlgo.SetRunParallel(true);
+    cutAlgo.SetUseOBB(true);
+    cutAlgo.SetToFillHistory(false);
+    cutAlgo.SetNonDestructive(true);
     cutAlgo.Build();
 
     if (cutAlgo.HasErrors()) {
@@ -1264,16 +1292,6 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
   }
 
   result.timings.totalMs = ElapsedMs(totalStart);
-
-  if (!outputDirectory.empty()) {
-    std::string jsonError;
-    WriteResultJson(outputDirectory, result, jsonError);
-  }
-
-  if (config.printHumanSummary) {
-    std::cout << ToHumanSummary(result);
-  }
-
   return result;
 }
 
