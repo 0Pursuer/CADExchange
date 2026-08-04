@@ -304,6 +304,23 @@ void TestSurfaceModelIsUnsupported(const std::filesystem::path &root) {
          "surface-only STEP must be UNSUPPORTED_SHAPE");
 }
 
+void TestBooleanFuzzyToleranceOption(const std::filesystem::path &root) {
+  const TopoDS_Shape box1 = BRepPrimAPI_MakeBox(20.0, 30.0, 40.0).Shape();
+  const TopoDS_Shape box2 = Translated(box1, 0.005);
+  const auto reference = root / "fuzzy_reference.step";
+  const auto candidate = root / "fuzzy_candidate.step";
+  WriteStep(box1, reference);
+  WriteStep(box2, candidate);
+
+  cadstep::CompareConfig config;
+  config.distanceToleranceMm = 0.01;
+  config.booleanFuzzyToleranceMm = 0.02;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Equal,
+         "small translation within fuzzy tolerance must be EQUAL");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -327,6 +344,7 @@ int main(int argc, char **argv) {
     TestMultipleSolidsAreUnsupported(root);
     TestSolidWithFreeCurveIsUnsupported(root);
     TestSurfaceModelIsUnsupported(root);
+    TestBooleanFuzzyToleranceOption(root);
     std::cout << "cad_step_compare_tests: PASS\n";
     return 0;
   } catch (const std::exception &error) {

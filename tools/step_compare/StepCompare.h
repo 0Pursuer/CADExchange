@@ -19,6 +19,7 @@ struct CompareConfig {
   double distanceToleranceMm = 0.01;
   double absoluteVolumeToleranceMm3 = 0.000001;
   double relativeVolumeTolerance = 1.0e-8;
+  double booleanFuzzyToleranceMm = 0.01;
 };
 
 struct Point3 {

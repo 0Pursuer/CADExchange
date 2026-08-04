@@ -62,6 +62,9 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
     } else if (argument == L"--rel-volume-tol") {
       options.config.relativeVolumeTolerance =
           ParseNumber(requireValue(), "--rel-volume-tol");
+    } else if (argument == L"--boolean-fuzzy-tol-mm") {
+      options.config.booleanFuzzyToleranceMm =
+          ParseNumber(requireValue(), "--boolean-fuzzy-tol-mm");
     } else if (argument == L"--help" || argument == L"-h") {
       options.help = true;
     } else {

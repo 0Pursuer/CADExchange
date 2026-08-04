@@ -1,10 +1,12 @@
 #include "StepCompare.h"
 
+#include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
+#include <BRepTools.hxx>
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
@@ -275,17 +277,32 @@ double MaximumBoundsDifference(const Bounds3 &left, const Bounds3 &right) {
                    std::abs(left.maximum.z - right.maximum.z)});
 }
 
+double SumSolidVolumes(const TopoDS_Shape &shape) {
+  if (shape.IsNull()) return 0.0;
+  double total = 0.0;
+  for (TopExp_Explorer explorer(shape, TopAbs_SOLID); explorer.More();
+       explorer.Next()) {
+    GProp_GProps properties;
+    BRepGProp::VolumeProperties(explorer.Current(), properties, Standard_True,
+                                Standard_False, Standard_False);
+    total += std::abs(properties.Mass());
+  }
+  return total;
+}
+
 void ExportShapeStl(const TopoDS_Shape &shape, const std::filesystem::path &outPath) {
   if (shape.IsNull()) return;
   try {
-    BRepMesh_IncrementalMesh mesh(shape, 0.1);
+    BRepTools::Clean(shape);
+    BRepMesh_IncrementalMesh mesh(shape, 0.05, Standard_False, 0.5, Standard_True);
     mesh.Perform();
     StlAPI_Writer writer;
     writer.Write(shape, outPath.string().c_str());
   } catch (...) {}
 }
 
-DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool, const std::filesystem::path &stlOutPath = "") {
+DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool,
+                    double fuzzyTolerance, const std::filesystem::path &stlOutPath = "") {
   DifferenceAudit result;
   BRepAlgoAPI_Cut cut;
   TopTools_ListOfShape arguments;
@@ -294,6 +311,10 @@ DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool, cons
   tools.Append(tool);
   cut.SetArguments(arguments);
   cut.SetTools(tools);
+  cut.SetNonDestructive(Standard_True);
+  if (fuzzyTolerance > 0.0) {
+    cut.SetFuzzyValue(fuzzyTolerance);
+  }
   cut.Build();
 
   std::ostringstream report;
@@ -316,10 +337,7 @@ DifferenceAudit Cut(const TopoDS_Solid &argument, const TopoDS_Solid &tool, cons
 
   result.componentCount = CountSubShapes(difference, TopAbs_SOLID);
   if (result.componentCount > 0) {
-    GProp_GProps properties;
-    BRepGProp::VolumeProperties(difference, properties, Standard_True,
-                                Standard_False, Standard_False);
-    result.volumeMm3 = std::abs(properties.Mass());
+    result.volumeMm3 = SumSolidVolumes(difference);
 
     if (!stlOutPath.empty()) {
       ExportShapeStl(difference, stlOutPath);
@@ -376,6 +394,11 @@ CompareStatus FailedLoadStatus(LoadClass classification) {
   return CompareStatus::InternalError;
 }
 
+bool VolumePass(double absoluteDiff, double referenceScale, double absTol, double relTol) {
+  const double allowed = absTol + relTol * referenceScale;
+  return absoluteDiff <= allowed;
+}
+
 } // namespace
 
 CompareResult CompareStepFiles(const std::filesystem::path &reference,
@@ -430,15 +453,18 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     result.maximumBoundsDifferenceMm = MaximumBoundsDifference(
         referenceSolid.audit.boundsMm, candidateSolid.audit.boundsMm);
 
+    const double fuzzyTolerance =
+        config.booleanFuzzyToleranceMm > 0.0 ? config.booleanFuzzyToleranceMm : config.distanceToleranceMm;
+
     if (!outputDirectory.empty()) {
       std::error_code ec;
       std::filesystem::create_directories(outputDirectory, ec);
       ExportShapeStl(referenceSolid.solid, outputDirectory / "reference_base.stl");
-      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid, outputDirectory / "missing_material.stl");
-      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid, outputDirectory / "added_material.stl");
+      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid, fuzzyTolerance, outputDirectory / "missing_material.stl");
+      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid, fuzzyTolerance, outputDirectory / "added_material.stl");
     } else {
-      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid);
-      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid);
+      result.missingMaterial = Cut(referenceSolid.solid, candidateSolid.solid, fuzzyTolerance);
+      result.addedMaterial = Cut(candidateSolid.solid, referenceSolid.solid, fuzzyTolerance);
     }
     if (!result.missingMaterial.succeeded || !result.addedMaterial.succeeded) {
       result.status = CompareStatus::Indeterminate;
@@ -452,37 +478,41 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     result.symmetricDifferenceRelative =
         result.symmetricDifferenceVolumeMm3 / volumeScale;
 
-    const bool inputVolumeAbsolutePass =
-        result.absoluteInputVolumeDifferenceMm3 <=
-        config.absoluteVolumeToleranceMm3;
-    const bool inputVolumeRelativePass =
-        result.relativeInputVolumeDifference <= config.relativeVolumeTolerance;
+    const bool inputVolumePass = VolumePass(
+        result.absoluteInputVolumeDifferenceMm3, volumeScale,
+        config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance);
     const bool centroidPass =
         result.centroidDistanceMm <= config.distanceToleranceMm;
     const bool boundsPass =
         result.maximumBoundsDifferenceMm <= config.distanceToleranceMm;
-    const bool symmetricDifferenceAbsolutePass =
-        result.symmetricDifferenceVolumeMm3 <=
-        config.absoluteVolumeToleranceMm3;
-    const bool symmetricDifferenceRelativePass =
-        result.symmetricDifferenceRelative <= config.relativeVolumeTolerance;
 
-    if (inputVolumeAbsolutePass && inputVolumeRelativePass && centroidPass &&
-        boundsPass && symmetricDifferenceAbsolutePass &&
-        symmetricDifferenceRelativePass) {
+    // Check for suspicious boolean cut result ("near-zero overlap illusion" where global metrics are highly similar but Cut returned full inputs)
+    const bool looksGloballySimilar = inputVolumePass && centroidPass && boundsPass;
+    const bool booleanClaimsNoOverlap =
+        result.missingMaterial.volumeMm3 > 0.95 * referenceVolume &&
+        result.addedMaterial.volumeMm3 > 0.95 * candidateVolume;
+
+    if (looksGloballySimilar && booleanClaimsNoOverlap) {
+      result.status = CompareStatus::Indeterminate;
+      result.reason =
+          "boolean cut claims near-zero overlap despite highly similar global volume, centroid, and bounds metrics";
+      return result;
+    }
+
+    const bool symmetricDifferencePass = VolumePass(
+        result.symmetricDifferenceVolumeMm3, volumeScale,
+        config.absoluteVolumeToleranceMm3, config.relativeVolumeTolerance);
+
+    if (inputVolumePass && centroidPass && boundsPass && symmetricDifferencePass) {
       result.status = CompareStatus::Equal;
       result.reason =
-          "closed solids pass absolute and relative volume, centroid, bounds, "
-          "and symmetric difference thresholds";
+          "closed solids pass volume, centroid, bounds, and symmetric difference thresholds";
     } else {
       result.status = CompareStatus::Different;
       std::ostringstream reason;
       reason << "geometry thresholds failed:";
-      if (!inputVolumeAbsolutePass) {
-        reason << " input_volume_absolute";
-      }
-      if (!inputVolumeRelativePass) {
-        reason << " input_volume_relative";
+      if (!inputVolumePass) {
+        reason << " input_volume";
       }
       if (!centroidPass) {
         reason << " centroid";
@@ -490,11 +520,8 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
       if (!boundsPass) {
         reason << " bounds";
       }
-      if (!symmetricDifferenceAbsolutePass) {
-        reason << " symmetric_difference_absolute";
-      }
-      if (!symmetricDifferenceRelativePass) {
-        reason << " symmetric_difference_relative";
+      if (!symmetricDifferencePass) {
+        reason << " symmetric_difference";
       }
       result.reason = reason.str();
     }
