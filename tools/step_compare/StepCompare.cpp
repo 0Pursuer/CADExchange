@@ -2156,32 +2156,56 @@ std::string ToJson(const CompareResult &result) {
   const auto &faceCol = result.normalizedTopology.faces;
   const auto &edgeCol = result.normalizedTopology.edges;
 
+  auto FormatDouble = [](double val, int precision = 4) -> std::string {
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(precision) << val;
+    return ss.str();
+  };
+
   json checks = json::array();
   checks.push_back({
       {"id", "input_volume_difference"},
       {"label", "输入实体体积差"},
       {"actual", result.absoluteInputVolumeDifferenceMm3},
+      {"actual_text", FormatDouble(result.absoluteInputVolumeDifferenceMm3, 4) + " mm³"},
       {"unit", "mm3"},
       {"relative", result.relativeInputVolumeDifference},
-      {"tolerance", effectiveAbsVolTol},
+      {"relative_percent", result.relativeInputVolumeDifference * 100.0},
+      {"limit", effectiveAbsVolTol},
+      {"limit_text", FormatDouble(effectiveAbsVolTol, 4) + " mm³"},
+      {"limit_unit", "mm3"},
+      {"available", true},
+      {"diagnostic", false},
       {"passed", volPass},
   });
   checks.push_back({
       {"id", "centroid_distance"},
       {"label", "质心距离"},
       {"actual", result.centroidDistanceMm},
+      {"actual_text", FormatDouble(result.centroidDistanceMm, 4) + " mm"},
       {"unit", "mm"},
       {"relative", nullptr},
-      {"tolerance", effectiveDistTol},
+      {"relative_percent", nullptr},
+      {"limit", effectiveDistTol},
+      {"limit_text", FormatDouble(effectiveDistTol, 4) + " mm"},
+      {"limit_unit", "mm"},
+      {"available", true},
+      {"diagnostic", false},
       {"passed", centroidPass},
   });
   checks.push_back({
       {"id", "bounds_difference"},
       {"label", "包围盒尺寸差异"},
       {"actual", result.maximumBoundsDifferenceMm},
+      {"actual_text", FormatDouble(result.maximumBoundsDifferenceMm, 4) + " mm"},
       {"unit", "mm"},
       {"relative", nullptr},
-      {"tolerance", effectiveDistTol},
+      {"relative_percent", nullptr},
+      {"limit", effectiveDistTol},
+      {"limit_text", FormatDouble(effectiveDistTol, 4) + " mm"},
+      {"limit_unit", "mm"},
+      {"available", true},
+      {"diagnostic", false},
       {"passed", boundsPass},
   });
   checks.push_back({
@@ -2197,7 +2221,7 @@ std::string ToJson(const CompareResult &result) {
       {"limit_unit", "faces"},
       {"available", faceCol.attempted},
       {"diagnostic", true},
-      {"pass", faceCol.allMatched},
+      {"passed", faceCol.allMatched},
   });
   checks.push_back({
       {"id", "edge_descriptor_match"},
@@ -2212,7 +2236,22 @@ std::string ToJson(const CompareResult &result) {
       {"limit_unit", "edges"},
       {"available", edgeCol.attempted},
       {"diagnostic", true},
-      {"pass", edgeCol.allMatched},
+      {"passed", edgeCol.allMatched},
+  });
+  checks.push_back({
+      {"id", "boolean_cut_residual"},
+      {"label", "布尔减法残留体积"},
+      {"actual", result.symmetricDifferenceVolumeMm3},
+      {"actual_text", FormatDouble(result.symmetricDifferenceVolumeMm3, 4) + " mm³"},
+      {"unit", "mm3"},
+      {"relative", result.symmetricDifferenceRelative},
+      {"relative_percent", result.symmetricDifferenceRelative * 100.0},
+      {"limit", effectiveAbsVolTol},
+      {"limit_text", FormatDouble(effectiveAbsVolTol, 4) + " mm³"},
+      {"limit_unit", "mm3"},
+      {"available", result.booleanExecuted},
+      {"diagnostic", false},
+      {"passed", boolPass},
   });
   root["checks"] = checks;
 
@@ -2318,16 +2357,38 @@ bool WriteResultJson(const std::filesystem::path &outputDirectory,
   try {
     std::error_code ec;
     std::filesystem::create_directories(outputDirectory, ec);
-    const std::filesystem::path jsonPath = outputDirectory / "result.json";
-    std::ofstream out(jsonPath);
-    if (!out.is_open()) {
-      error = "cannot open file for writing: " + jsonPath.string();
+
+    const auto finalPath = outputDirectory / "result.json";
+    const auto tempPath = outputDirectory / "result.json.tmp";
+
+    {
+      std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
+      if (!out.is_open()) {
+        error = "cannot open temporary result file: " + tempPath.string();
+        return false;
+      }
+
+      out << ToJson(result);
+      out.flush();
+
+      if (!out.good()) {
+        error = "failed to write temporary result file: " + tempPath.string();
+        return false;
+      }
+    }
+
+    std::filesystem::remove(finalPath, ec);
+    ec.clear();
+    std::filesystem::rename(tempPath, finalPath, ec);
+
+    if (ec) {
+      error = "failed to replace result.json: " + ec.message();
       return false;
     }
-    out << ToJson(result);
+
     return true;
-  } catch (const std::exception &e) {
-    error = e.what();
+  } catch (const std::exception &ex) {
+    error = ex.what();
     return false;
   }
 }
