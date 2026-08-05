@@ -43,6 +43,15 @@ enum class EntityKind {
   NormalizedEdge,
 };
 
+enum class EdgeComparisonRole {
+  Comparable,
+  PeriodicSeam,
+  Degenerated,
+  Unsupported,
+};
+
+const char *ToString(EdgeComparisonRole role);
+
 struct CompareConfig {
   double distanceToleranceMm = 0.01;
   double absoluteVolumeToleranceMm3 = 0.001;
@@ -116,6 +125,9 @@ struct NormalizedEdgeInfo {
   bool closed = false;
   bool comparable = false;
   int comparableIndex = 0;
+
+  EdgeComparisonRole comparisonRole = EdgeComparisonRole::Comparable;
+  std::string exclusionReason;
 };
 
 struct RemovedEdgeInfo {
@@ -141,8 +153,8 @@ struct EntityMatch {
 
   std::string geometryType;
 
-  double score = 0.0;
-  MatchMetrics metrics;
+  std::optional<double> score;
+  std::optional<MatchMetrics> metrics;
 
   std::vector<std::string> reasonCodes;
 };
@@ -206,6 +218,11 @@ struct FastPathAudit {
   std::vector<std::string> blockReasons;
 };
 
+struct EdgeAuditValidation {
+  bool valid = true;
+  std::vector<std::string> errors;
+};
+
 struct TopologyMatchAudit {
   bool attempted = false;
   std::string skipReason;
@@ -216,6 +233,8 @@ struct TopologyMatchAudit {
   FastPathAudit fastPath;
 
   bool normalizedTopologyMatch = false;
+  bool edgeAuditConsistent = true;
+  std::vector<std::string> edgeAuditErrors;
   double elapsedMs = 0.0;
 };
 

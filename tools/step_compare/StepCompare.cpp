@@ -39,7 +39,16 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
+#include <map>
+#include <set>
+#include <sstream>
+#include <system_error>
+#include <tuple>
+
 namespace cadstep {
+
+using json = nlohmann::ordered_json;
 
 int FindShapeIndex(const TopTools_IndexedMapOfShape &shapeMap, const TopoDS_Shape &target) {
   for (int i = 1; i <= shapeMap.Extent(); ++i) {
@@ -255,6 +264,7 @@ bool ExportEdgesVtp(const TopoDS_Shape &solid,
   std::vector<int> cellGeomType;
   std::vector<int> cellSourceCount;
   std::vector<int> cellComparable;
+  std::vector<int> cellRoleCode;
 
   for (int i = 1; i <= normalizedEdges.Extent(); ++i) {
     const TopoDS_Edge edge = TopoDS::Edge(normalizedEdges(i));
@@ -273,16 +283,34 @@ bool ExportEdgesVtp(const TopoDS_Shape &solid,
     }
     lines.push_back(line);
 
-    int matchStatus = matchStatusMap.count(i) ? matchStatusMap[i] : 1;
+    bool isComp = infoMap.count(i) ? infoMap[i].comparable : true;
+    int matchStatus = 3; // 3 = NOT_COMPARED
+    if (isComp) {
+      matchStatus = matchStatusMap.count(i) ? matchStatusMap[i] : 1; // 1 = UNMATCHED
+    } else {
+      matchStatus = 3; // 3 = NOT_COMPARED
+    }
+
     int geomTypeCode = infoMap.count(i) ? CurveTypeCode(infoMap[i].curveType) : 4;
     int sourceCount = infoMap.count(i) ? infoMap[i].sourceCount : 1;
-    int comparable = infoMap.count(i) ? (infoMap[i].comparable ? 1 : 0) : 1;
+    int comparable = isComp ? 1 : 0;
+
+    int roleCode = 0;
+    if (infoMap.count(i)) {
+      switch (infoMap[i].comparisonRole) {
+        case EdgeComparisonRole::Comparable: roleCode = 0; break;
+        case EdgeComparisonRole::PeriodicSeam: roleCode = 1; break;
+        case EdgeComparisonRole::Degenerated: roleCode = 2; break;
+        default: roleCode = 3; break;
+      }
+    }
 
     cellEntityIdx.push_back(i);
     cellMatchStatus.push_back(matchStatus);
     cellGeomType.push_back(geomTypeCode);
     cellSourceCount.push_back(sourceCount);
     cellComparable.push_back(comparable);
+    cellRoleCode.push_back(roleCode);
   }
 
   if (points.empty() || lines.empty()) return false;
@@ -329,6 +357,10 @@ bool ExportEdgesVtp(const TopoDS_Shape &solid,
   for (int v : cellMatchStatus) out << v << "\n";
   out << "        </DataArray>\n";
 
+  out << "        <DataArray type=\"Int32\" Name=\"comparison_role_code\" format=\"ascii\">\n";
+  for (int v : cellRoleCode) out << v << "\n";
+  out << "        </DataArray>\n";
+
   out << "        <DataArray type=\"Int32\" Name=\"geometry_type_code\" format=\"ascii\">\n";
   for (int v : cellGeomType) out << v << "\n";
   out << "        </DataArray>\n";
@@ -349,6 +381,16 @@ bool ExportEdgesVtp(const TopoDS_Shape &solid,
   return true;
 }
 
+const char *ToString(EdgeComparisonRole role) {
+  switch (role) {
+    case EdgeComparisonRole::Comparable: return "COMPARABLE";
+    case EdgeComparisonRole::PeriodicSeam: return "PERIODIC_SEAM";
+    case EdgeComparisonRole::Degenerated: return "DEGENERATED";
+    case EdgeComparisonRole::Unsupported: return "UNSUPPORTED";
+    default: return "UNKNOWN";
+  }
+}
+
 void RemoveOldArtifacts(const std::filesystem::path &outputDirectory) {
   std::error_code ec;
   std::filesystem::remove(outputDirectory / "reference_base.stl", ec);
@@ -359,13 +401,10 @@ void RemoveOldArtifacts(const std::filesystem::path &outputDirectory) {
   std::filesystem::remove(outputDirectory / "candidate_original.brep", ec);
   std::filesystem::remove(outputDirectory / "reference_normalized.brep", ec);
   std::filesystem::remove(outputDirectory / "candidate_normalized.brep", ec);
+  std::filesystem::remove(outputDirectory / "result.json", ec);
+  std::filesystem::remove(outputDirectory / "result.json.tmp", ec);
   std::filesystem::remove_all(outputDirectory / "visualization", ec);
 }
-#include <limits>
-#include <map>
-#include <sstream>
-#include <system_error>
-#include <tuple>
 
 using json = nlohmann::ordered_json;
 
@@ -714,6 +753,36 @@ std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape,
                                                    const TopTools_IndexedMapOfShape &normalizedEdges,
                                                    EntitySide side);
 
+struct EdgeComparisonClassification {
+  EdgeComparisonRole role = EdgeComparisonRole::Unsupported;
+  bool comparable = false;
+  std::string exclusionReason;
+};
+
+EdgeComparisonClassification ClassifyNormalizedEdge(
+    const TopoDS_Edge &edge,
+    const TopTools_IndexedDataMapOfShapeListOfShape &edgeFacesMap) {
+  if (BRep_Tool::Degenerated(edge)) {
+    return {EdgeComparisonRole::Degenerated, false, "DEGENERATED"};
+  }
+
+  if (edgeFacesMap.Contains(edge)) {
+    const auto &faces = edgeFacesMap.FindFromKey(edge);
+    for (const TopoDS_Shape &s : faces) {
+      const TopoDS_Face face = TopoDS::Face(s);
+      if (BRepTools::IsReallyClosed(edge, face)) {
+        return {EdgeComparisonRole::PeriodicSeam, false, "PERIODIC_SEAM"};
+      }
+    }
+  }
+
+  return {EdgeComparisonRole::Comparable, true, ""};
+}
+
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopTools_IndexedMapOfShape &normalizedEdges,
+                                                   const std::vector<NormalizedEdgeInfo> &edgeInfos,
+                                                   EntitySide side);
+
 NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
                                              const OriginalTopologyIndex &originalIndex,
                                              EntitySide side,
@@ -734,7 +803,6 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     result.audit.usedNormalizedShape = false;
     result.audit.faceCountAfter = result.audit.faceCountBefore;
     result.audit.edgeCountAfter = result.audit.edgeCountBefore;
-    result.audit.comparableEdgeCountAfter = result.audit.edgeCountBefore;
     result.audit.volumeAfterMm3 = result.audit.volumeBeforeMm3;
     result.audit.faceMappingComplete = true;
     result.audit.edgeMappingComplete = true;
@@ -742,6 +810,42 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
 
     TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
     TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
+
+    TopTools_IndexedDataMapOfShapeListOfShape edgeFacesMap;
+    TopExp::MapShapesAndAncestors(result.solid, TopAbs_EDGE, TopAbs_FACE, edgeFacesMap);
+
+    int compIdx = 1;
+    for (int i = 1; i <= result.normalizedEdges.Extent(); ++i) {
+      const TopoDS_Edge e = TopoDS::Edge(result.normalizedEdges(i));
+      NormalizedEdgeInfo info;
+      info.id = MakeEntityId(side, EntityKind::NormalizedEdge, i);
+      info.visualIndex = i;
+
+      BRepAdaptor_Curve curve(e);
+      info.curveType = CurveTypeName(curve.GetType());
+
+      GProp_GProps edgeProps;
+      BRepGProp::LinearProperties(e, edgeProps);
+      info.lengthMm = edgeProps.Mass();
+
+      const gp_Pnt edgeCentroid = edgeProps.CentreOfMass();
+      info.centroidMm = {edgeCentroid.X(), edgeCentroid.Y(), edgeCentroid.Z()};
+      info.boundsMm = ComputeBounds(e);
+      info.closed = (BRep_Tool::IsClosed(e) != 0);
+
+      const auto classification = ClassifyNormalizedEdge(e, edgeFacesMap);
+      info.comparisonRole = classification.role;
+      info.comparable = classification.comparable;
+      info.exclusionReason = classification.exclusionReason;
+      if (info.comparable) {
+        info.comparableIndex = compIdx++;
+      } else {
+        info.comparableIndex = 0;
+      }
+      result.audit.edges.push_back(info);
+    }
+    result.audit.comparableEdgeCountBefore = compIdx - 1;
+    result.audit.comparableEdgeCountAfter = compIdx - 1;
     return result;
   }
 
@@ -803,9 +907,6 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
 
   TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
   TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
-
-  result.audit.comparableEdgeCountBefore = static_cast<int>(CollectEdgeDescriptors(input, result.normalizedEdges, side).size());
-  result.audit.comparableEdgeCountAfter = static_cast<int>(CollectEdgeDescriptors(result.solid, result.normalizedEdges, side).size());
 
   // Build faces detail list
   std::map<int, NormalizedFaceInfo> normFaceMap;
@@ -909,7 +1010,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   }
 
   TopTools_IndexedDataMapOfShapeListOfShape edgeFacesMap;
-  TopExp::MapShapesAndAncestors(input, TopAbs_EDGE, TopAbs_FACE, edgeFacesMap);
+  TopExp::MapShapesAndAncestors(result.solid, TopAbs_EDGE, TopAbs_FACE, edgeFacesMap);
 
   bool edgeMappingComplete = true;
   for (int i = 1; i <= originalIndex.edges.Extent(); ++i) {
@@ -981,23 +1082,30 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     info.merged = info.sourceCount > 1;
 
     const TopoDS_Edge edge = TopoDS::Edge(result.normalizedEdges(j));
-    bool isDeg = BRep_Tool::Degenerated(edge);
-    bool isSeam = false;
-    if (edgeFacesMap.Contains(edge)) {
-      const auto &faces = edgeFacesMap.FindFromKey(edge);
-      for (const TopoDS_Shape &s : faces) {
-        if (BRepTools::IsReallyClosed(edge, TopoDS::Face(s))) {
-          isSeam = true;
-          break;
-        }
-      }
-    }
-    info.comparable = !isDeg && !isSeam;
+    const auto classification = ClassifyNormalizedEdge(edge, edgeFacesMap);
+    info.comparisonRole = classification.role;
+    info.comparable = classification.comparable;
+    info.exclusionReason = classification.exclusionReason;
     if (info.comparable) {
       info.comparableIndex = compIdx++;
+    } else {
+      info.comparableIndex = 0;
     }
     result.audit.edges.push_back(info);
   }
+
+  result.audit.comparableEdgeCountAfter = compIdx - 1;
+
+  TopTools_IndexedDataMapOfShapeListOfShape origEdgeFacesMap;
+  TopExp::MapShapesAndAncestors(input, TopAbs_EDGE, TopAbs_FACE, origEdgeFacesMap);
+  int origCompCount = 0;
+  for (int i = 1; i <= originalIndex.edges.Extent(); ++i) {
+    const TopoDS_Edge origE = TopoDS::Edge(originalIndex.edges(i));
+    if (ClassifyNormalizedEdge(origE, origEdgeFacesMap).comparable) {
+      origCompCount++;
+    }
+  }
+  result.audit.comparableEdgeCountBefore = origCompCount;
 
   result.audit.faceMappingComplete = faceMappingComplete;
   result.audit.edgeMappingComplete = edgeMappingComplete;
@@ -1053,36 +1161,23 @@ std::vector<FaceDescriptor> CollectFaceDescriptors(const TopoDS_Shape &shape, En
   return descriptors;
 }
 
-std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopoDS_Shape &shape,
-                                                   const TopTools_IndexedMapOfShape &normalizedEdges,
+std::vector<EdgeDescriptor> CollectEdgeDescriptors(const TopTools_IndexedMapOfShape &normalizedEdges,
+                                                   const std::vector<NormalizedEdgeInfo> &edgeInfos,
                                                    EntitySide side) {
   std::vector<EdgeDescriptor> descriptors;
-  TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
-  TopExp::MapShapesAndUniqueAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
-  for (int i = 1; i <= edgeFaces.Extent(); ++i) {
-    const TopoDS_Edge edge = TopoDS::Edge(edgeFaces.FindKey(i));
-    if (BRep_Tool::Degenerated(edge)) {
+  for (const auto &info : edgeInfos) {
+    if (!info.comparable) {
       continue;
     }
 
-    bool seam = false;
-    const TopTools_ListOfShape &faces = edgeFaces.FindFromIndex(i);
-    for (const TopoDS_Shape &s : faces) {
-      const TopoDS_Face face = TopoDS::Face(s);
-      if (BRepTools::IsReallyClosed(edge, face)) {
-        seam = true;
-        break;
-      }
-    }
-    if (seam) {
+    const int visualIndex = info.visualIndex;
+    if (visualIndex <= 0 || visualIndex > normalizedEdges.Extent()) {
       continue;
     }
 
-    int visualIndex = FindShapeIndex(normalizedEdges, edge);
-    if (visualIndex == 0) {
-      visualIndex = i;
-    }
+    const TopoDS_Edge edge = TopoDS::Edge(normalizedEdges(visualIndex));
+    if (edge.IsNull()) continue;
 
     EdgeDescriptor descriptor;
     descriptor.entityId = MakeEntityId(side, EntityKind::NormalizedEdge, visualIndex);
@@ -1207,7 +1302,9 @@ MatchCollection MatchFaceDescriptors(const std::vector<FaceDescriptor> &referenc
     } else {
       item.status = MatchStatus::Unmatched;
       item.candidateId = "";
-      item.score = 0.0;
+      item.score = std::nullopt;
+      item.metrics = std::nullopt;
+      item.reasonCodes.push_back("NO_ONE_TO_ONE_CANDIDATE");
       collection.unmatchedReferenceIds.push_back(refFace.entityId);
     }
     collection.items.push_back(item);
@@ -1320,7 +1417,9 @@ MatchCollection MatchEdgeDescriptors(const std::vector<EdgeDescriptor> &referenc
     } else {
       item.status = MatchStatus::Unmatched;
       item.candidateId = "";
-      item.score = 0.0;
+      item.score = std::nullopt;
+      item.metrics = std::nullopt;
+      item.reasonCodes.push_back("NO_ONE_TO_ONE_CANDIDATE");
       collection.unmatchedReferenceIds.push_back(refEdge.entityId);
     }
     collection.items.push_back(item);
@@ -1516,6 +1615,64 @@ int ExitCode(CompareStatus status) {
   return 5;
 }
 
+EdgeAuditValidation ValidateEdgeAudit(const NormalizationAudit &refNorm,
+                                     const NormalizationAudit &candNorm,
+                                     const MatchCollection &edgeMatches) {
+  EdgeAuditValidation validation;
+
+  auto checkNorm = [&](const NormalizationAudit &norm, const std::string &sideName) {
+    if (static_cast<int>(norm.edges.size()) != norm.edgeCountAfter) {
+      validation.valid = false;
+      validation.errors.push_back(sideName + "_EDGE_COUNT_MISMATCH: edges.size() != edgeCountAfter");
+    }
+
+    int compCount = 0;
+    std::set<int> compIndices;
+    for (const auto &info : norm.edges) {
+      if (info.comparable) {
+        compCount++;
+        compIndices.insert(info.comparableIndex);
+      } else {
+        if (info.comparableIndex != 0) {
+          validation.valid = false;
+          validation.errors.push_back(sideName + "_NON_COMPARABLE_EDGE_HAS_INDEX: " + info.id);
+        }
+      }
+    }
+
+    if (compCount != norm.comparableEdgeCountAfter) {
+      validation.valid = false;
+      validation.errors.push_back(sideName + "_COMPARABLE_COUNT_MISMATCH: count=" +
+                                  std::to_string(compCount) + " audit=" + std::to_string(norm.comparableEdgeCountAfter));
+    }
+
+    if (compCount > 0) {
+      if (*compIndices.begin() != 1 || *compIndices.rbegin() != compCount || static_cast<int>(compIndices.size()) != compCount) {
+        validation.valid = false;
+        validation.errors.push_back(sideName + "_COMPARABLE_INDICES_NOT_CONTIGUOUS");
+      }
+    }
+  };
+
+  checkNorm(refNorm, "REF");
+  checkNorm(candNorm, "CAND");
+
+  if (edgeMatches.attempted) {
+    if (edgeMatches.referenceCount != refNorm.comparableEdgeCountAfter) {
+      validation.valid = false;
+      validation.errors.push_back("EDGE_MATCH_REF_COUNT_MISMATCH: matchRef=" +
+                                  std::to_string(edgeMatches.referenceCount) + " normRef=" + std::to_string(refNorm.comparableEdgeCountAfter));
+    }
+    if (edgeMatches.candidateCount != candNorm.comparableEdgeCountAfter) {
+      validation.valid = false;
+      validation.errors.push_back("EDGE_MATCH_CAND_COUNT_MISMATCH: matchCand=" +
+                                  std::to_string(edgeMatches.candidateCount) + " normCand=" + std::to_string(candNorm.comparableEdgeCountAfter));
+    }
+  }
+
+  return validation;
+}
+
 CompareResult CompareStepFiles(const std::filesystem::path &reference,
                                const std::filesystem::path &candidate,
                                const CompareConfig &config,
@@ -1598,8 +1755,8 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     const auto descStart = std::chrono::high_resolution_clock::now();
     const std::vector<FaceDescriptor> refFaceDescs = CollectFaceDescriptors(compareSolidRef, EntitySide::Reference);
     const std::vector<FaceDescriptor> candFaceDescs = CollectFaceDescriptors(compareSolidCand, EntitySide::Candidate);
-    const std::vector<EdgeDescriptor> refEdgeDescs = CollectEdgeDescriptors(compareSolidRef, normRef.normalizedEdges, EntitySide::Reference);
-    const std::vector<EdgeDescriptor> candEdgeDescs = CollectEdgeDescriptors(compareSolidCand, normCand.normalizedEdges, EntitySide::Candidate);
+    const std::vector<EdgeDescriptor> refEdgeDescs = CollectEdgeDescriptors(normRef.normalizedEdges, normRef.audit.edges, EntitySide::Reference);
+    const std::vector<EdgeDescriptor> candEdgeDescs = CollectEdgeDescriptors(normCand.normalizedEdges, normCand.audit.edges, EntitySide::Candidate);
     result.timings.descriptorBuildMs = ElapsedMs(descStart);
 
     const auto faceMatchStart = std::chrono::high_resolution_clock::now();
@@ -1612,15 +1769,23 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     result.timings.edgeMatchMs = ElapsedMs(edgeMatchStart);
     result.normalizedTopology.edges.elapsedMs = result.timings.edgeMatchMs;
 
+    const auto edgeValidation = ValidateEdgeAudit(normRef.audit, normCand.audit, result.normalizedTopology.edges);
+    result.normalizedTopology.edgeAuditConsistent = edgeValidation.valid;
+    result.normalizedTopology.edgeAuditErrors = edgeValidation.errors;
+
     result.normalizedTopology.attempted = true;
     result.normalizedTopology.normalizedTopologyMatch =
         result.normalizedTopology.faces.allMatched && result.normalizedTopology.edges.allMatched &&
         (result.normalizedTopology.faces.ambiguousCount == 0) && (result.normalizedTopology.edges.ambiguousCount == 0) &&
-        result.normalizedTopology.faces.typeHistogramEqual && result.normalizedTopology.edges.typeHistogramEqual;
+        result.normalizedTopology.faces.typeHistogramEqual && result.normalizedTopology.edges.typeHistogramEqual &&
+        result.normalizedTopology.edgeAuditConsistent;
     result.normalizedTopology.elapsedMs = result.timings.descriptorBuildMs + result.timings.faceMatchMs + result.timings.edgeMatchMs;
 
     result.normalizedTopology.fastPath.enabled = config.enableNormalizedFastPath;
     result.normalizedTopology.fastPath.eligible = result.normalizedTopology.normalizedTopologyMatch;
+    if (!result.normalizedTopology.edgeAuditConsistent) {
+      result.normalizedTopology.fastPath.blockReasons.push_back("EDGE_AUDIT_INCONSISTENT");
+    }
     if (!result.normalizedTopology.faces.allMatched) {
       result.normalizedTopology.fastPath.blockReasons.push_back(
           "FACE_DESCRIPTOR_UNMATCHED:" + std::to_string(result.normalizedTopology.faces.referenceCount - result.normalizedTopology.faces.matchedCount));
@@ -1868,7 +2033,9 @@ std::string ToJson(const CompareResult &result) {
           {"merged", e.merged},
           {"closed", e.closed},
           {"comparable", e.comparable},
-          {"comparable_index", e.comparableIndex},
+          {"comparable_index", e.comparable ? json(e.comparableIndex) : json(nullptr)},
+          {"comparison_role", ToString(e.comparisonRole)},
+          {"exclusion_reason", e.exclusionReason.empty() ? json(nullptr) : json(e.exclusionReason)},
       });
     }
     node["edges"] = edgesArr;
@@ -1909,21 +2076,30 @@ std::string ToJson(const CompareResult &result) {
 
     json itemsArr = json::array();
     for (const auto &item : col.items) {
-      itemsArr.push_back({
+      json itemNode = {
           {"id", item.id},
           {"reference_id", item.referenceId},
           {"candidate_id", item.candidateId},
           {"geometry_type", item.geometryType},
           {"status", ToString(item.status)},
           {"verification_level", ToString(item.verificationLevel)},
-          {"score", item.score},
-          {"metrics",
-           {{"measure_difference", item.metrics.measureDifference},
-            {"relative_measure_difference", item.metrics.relativeMeasureDifference},
-            {"centroid_distance_mm", item.metrics.centroidDistanceMm},
-            {"bounds_difference_mm", item.metrics.boundsDifferenceMm}}},
           {"reason_codes", item.reasonCodes},
-      });
+      };
+      if (item.score.has_value()) {
+        itemNode["score"] = *item.score;
+      } else {
+        itemNode["score"] = nullptr;
+      }
+      if (item.metrics.has_value()) {
+        itemNode["metrics"] = {
+            {"measure_difference", item.metrics->measureDifference},
+            {"relative_measure_difference", item.metrics->relativeMeasureDifference},
+            {"centroid_distance_mm", item.metrics->centroidDistanceMm},
+            {"bounds_difference_mm", item.metrics->boundsDifferenceMm}};
+      } else {
+        itemNode["metrics"] = nullptr;
+      }
+      itemsArr.push_back(itemNode);
     }
     node["items"] = itemsArr;
     node["unmatched_reference_ids"] = col.unmatchedReferenceIds;
@@ -1934,6 +2110,8 @@ std::string ToJson(const CompareResult &result) {
   json matchesJson = json::object();
   matchesJson["faces"] = MakeMatchCollectionNode(result.normalizedTopology.faces);
   matchesJson["edges"] = MakeMatchCollectionNode(result.normalizedTopology.edges);
+  matchesJson["edge_audit_consistent"] = result.normalizedTopology.edgeAuditConsistent;
+  matchesJson["edge_audit_errors"] = result.normalizedTopology.edgeAuditErrors;
   matchesJson["fast_path"] = {
       {"enabled", result.normalizedTopology.fastPath.enabled},
       {"eligible", result.normalizedTopology.fastPath.eligible},
@@ -1985,51 +2163,26 @@ std::string ToJson(const CompareResult &result) {
       {"actual", result.absoluteInputVolumeDifferenceMm3},
       {"unit", "mm3"},
       {"relative", result.relativeInputVolumeDifference},
-      {"relative_percent", result.relativeInputVolumeDifference * 100.0},
-      {"limit", effectiveAbsVolTol},
-      {"limit_unit", "mm3"},
-      {"available", true},
-      {"diagnostic", false},
-      {"pass", volPass},
+      {"tolerance", effectiveAbsVolTol},
+      {"passed", volPass},
   });
   checks.push_back({
       {"id", "centroid_distance"},
       {"label", "质心距离"},
       {"actual", result.centroidDistanceMm},
       {"unit", "mm"},
-      {"relative", (diagScale > 0.0 ? (result.centroidDistanceMm / diagScale) : 0.0)},
-      {"relative_percent", (diagScale > 0.0 ? (result.centroidDistanceMm / diagScale * 100.0) : 0.0)},
-      {"limit", effectiveDistTol},
-      {"limit_unit", "mm"},
-      {"available", true},
-      {"diagnostic", false},
-      {"pass", centroidPass},
+      {"relative", nullptr},
+      {"tolerance", effectiveDistTol},
+      {"passed", centroidPass},
   });
   checks.push_back({
-      {"id", "bounding_box_difference"},
-      {"label", "包围盒极值差"},
+      {"id", "bounds_difference"},
+      {"label", "包围盒尺寸差异"},
       {"actual", result.maximumBoundsDifferenceMm},
       {"unit", "mm"},
-      {"relative", (diagScale > 0.0 ? (result.maximumBoundsDifferenceMm / diagScale) : 0.0)},
-      {"relative_percent", (diagScale > 0.0 ? (result.maximumBoundsDifferenceMm / diagScale * 100.0) : 0.0)},
-      {"limit", effectiveDistTol},
-      {"limit_unit", "mm"},
-      {"available", true},
-      {"diagnostic", false},
-      {"pass", boundsPass},
-  });
-  checks.push_back({
-      {"id", "boolean_residual"},
-      {"label", "布尔残体 (欠料 A-B / 多料 B-A)"},
-      {"actual", result.symmetricDifferenceVolumeMm3},
-      {"unit", "mm3"},
-      {"relative", result.symmetricDifferenceRelative},
-      {"relative_percent", result.symmetricDifferenceRelative * 100.0},
-      {"limit", effectiveAbsVolTol},
-      {"limit_unit", "mm3"},
-      {"available", result.booleanExecuted},
-      {"diagnostic", false},
-      {"pass", boolPass},
+      {"relative", nullptr},
+      {"tolerance", effectiveDistTol},
+      {"passed", boundsPass},
   });
   checks.push_back({
       {"id", "face_descriptor_match"},
