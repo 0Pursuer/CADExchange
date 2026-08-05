@@ -83,6 +83,14 @@ struct CRefFeature : public CRefEntityBase {
 };
 
 struct CRefSubTopo : public CRefEntityBase {
+  /**
+   * @brief 源端拓扑元素的来源特征标识。
+   *
+   * 该字段仅用于来源追踪、日志和设计历史展示。
+   * 不同 CAD 系统可能将同一几何元素归属于不同特征，
+   * 因此目标端拓扑匹配不得要求 parentFeatureID 相等，
+   * 也不得使用该字段限制候选边或候选面集合。
+   */
   std::string parentFeatureID;
   /**
    * @deprecated Legacy topology hint kept only for backward compatibility.
