@@ -935,6 +935,15 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
       info.axisDirection = Point3{dir.X(), dir.Y(), dir.Z()};
     }
 
+    TopTools_IndexedMapOfShape faceEdges;
+    TopExp::MapShapes(f, TopAbs_EDGE, faceEdges);
+    for (int j = 1; j <= faceEdges.Extent(); ++j) {
+      const int edgeIdx = FindShapeIndex(result.normalizedEdges, faceEdges(j));
+      if (edgeIdx > 0) {
+        info.boundaryEdgeIds.push_back(MakeEntityId(side, EntityKind::NormalizedEdge, edgeIdx));
+      }
+    }
+
     normFaceMap[i] = info;
   }
 
@@ -2010,6 +2019,7 @@ std::string ToJson(const CompareResult &result) {
             {"minimum", {{"x", f.boundsMm.minimum.x}, {"y", f.boundsMm.minimum.y}, {"z", f.boundsMm.minimum.z}}},
             {"maximum", {{"x", f.boundsMm.maximum.x}, {"y", f.boundsMm.maximum.y}, {"z", f.boundsMm.maximum.z}}}}},
           {"source_face_ids", f.sourceFaceIds},
+          {"boundary_edge_ids", f.boundaryEdgeIds},
           {"source_count", f.sourceCount},
           {"merged", f.merged},
       });

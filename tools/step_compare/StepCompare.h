@@ -101,6 +101,7 @@ struct NormalizedFaceInfo {
   Bounds3 boundsMm;
 
   std::vector<std::string> sourceFaceIds;
+  std::vector<std::string> boundaryEdgeIds;
   int sourceCount = 0;
   bool merged = false;
 
