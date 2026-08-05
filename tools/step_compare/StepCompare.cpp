@@ -1840,11 +1840,33 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
       result.symmetricDifferenceVolumeMm3 = result.missingMaterial.volumeMm3 + result.addedMaterial.volumeMm3;
       result.symmetricDifferenceRelative = volDenom > 0.0 ? (result.symmetricDifferenceVolumeMm3 / volDenom) : 0.0;
 
-      const bool booleanPass = (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol) &&
-                               (result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
+      bool booleanPass = (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol) &&
+                         (result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
+
+      if (!booleanPass && normalizationPairUsable && volumePass && centroidPass && boundsPass) {
+        BooleanDifferenceResult origMissing = CutSolids(loadedRef.solid, loadedCand.solid, config.booleanFuzzyToleranceMm);
+        BooleanDifferenceResult origAdded = CutSolids(loadedCand.solid, loadedRef.solid, config.booleanFuzzyToleranceMm);
+        if (origMissing.audit.succeeded && origAdded.audit.succeeded) {
+          const bool origBooleanPass = (origMissing.audit.volumeMm3 <= effectiveAbsVolTol) &&
+                                       (origAdded.audit.volumeMm3 <= effectiveAbsVolTol);
+          if (origBooleanPass) {
+            missingRes = origMissing;
+            addedRes = origAdded;
+            result.missingMaterial = origMissing.audit;
+            result.addedMaterial = origAdded.audit;
+            result.symmetricDifferenceVolumeMm3 = result.missingMaterial.volumeMm3 + result.addedMaterial.volumeMm3;
+            result.symmetricDifferenceRelative = volDenom > 0.0 ? (result.symmetricDifferenceVolumeMm3 / volDenom) : 0.0;
+            booleanPass = true;
+            result.decisionPath = "boolean_after_original_fallback";
+          }
+        }
+      }
+
       if (volumePass && centroidPass && boundsPass && booleanPass) {
         result.status = CompareStatus::Equal;
-        result.reason = "closed solids pass configured thresholds";
+        result.reason = (result.decisionPath == "boolean_after_original_fallback") ?
+                        "closed solids pass configured thresholds (via original solid boolean fallback)" :
+                        "closed solids pass configured thresholds";
       } else {
         result.status = CompareStatus::Different;
         result.reason = "geometry thresholds failed: input_volume centroid symmetric_difference";
