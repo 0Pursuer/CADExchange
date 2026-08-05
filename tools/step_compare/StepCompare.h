@@ -9,6 +9,7 @@ namespace cadstep {
 
 enum class CompareStatus {
   Equal,
+  LikelyEqual,
   Different,
   InvalidInput,
   UnsupportedShape,
@@ -289,6 +290,20 @@ struct DifferenceAudit {
   std::string report;
 };
 
+struct BooleanConsistencyMetrics {
+  double signedInputVolumeDiffMm3{0.0};
+  double signedBooleanVolumeDiffMm3{0.0};
+  double conservationErrorMm3{0.0};
+  double relativeConservationError{0.0};
+
+  bool cutReferenceMinusCandidateSucceeded{false};
+  bool cutCandidateMinusReferenceSucceeded{false};
+  bool conservationPassed{false};
+  bool booleanResultValid{false};
+
+  std::string invalidReason;
+};
+
 struct CompareResult {
   CompareStatus status = CompareStatus::InternalError;
   std::string reason;
@@ -302,6 +317,7 @@ struct CompareResult {
   TopologyMatchAudit normalizedTopology;
   ArtifactAudit artifacts;
   TimingAudit timings;
+  BooleanConsistencyMetrics booleanConsistency;
   bool booleanExecuted = false;
   std::string decisionPath;
   double absoluteInputVolumeDifferenceMm3 = 0.0;

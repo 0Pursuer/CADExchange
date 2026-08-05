@@ -164,6 +164,7 @@ struct CRefEdge : public CRefSubTopo {
   CPoint3D endPoint;
   CPoint3D midPoint;
   CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
+  double length = 0.0;
 
   CRefEdge() : CRefSubTopo(RefType::TOPO_EDGE) {}
 };

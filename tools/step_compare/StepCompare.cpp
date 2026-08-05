@@ -1562,6 +1562,8 @@ const char *ToString(CompareStatus status) {
   switch (status) {
   case CompareStatus::Equal:
     return "EQUAL";
+  case CompareStatus::LikelyEqual:
+    return "LIKELY_EQUAL";
   case CompareStatus::Different:
     return "DIFFERENT";
   case CompareStatus::InvalidInput:
@@ -2176,6 +2178,16 @@ std::string ToJson(const CompareResult &result) {
   metricsJson["symmetric_difference_volume_mm3"] = result.symmetricDifferenceVolumeMm3;
   metricsJson["symmetric_difference_relative"] = result.symmetricDifferenceRelative;
   root["metrics"] = metricsJson;
+
+  json boolCons = json::object();
+  boolCons["signed_input_volume_diff_mm3"] = result.booleanConsistency.signedInputVolumeDiffMm3;
+  boolCons["signed_boolean_volume_diff_mm3"] = result.booleanConsistency.signedBooleanVolumeDiffMm3;
+  boolCons["conservation_error_mm3"] = result.booleanConsistency.conservationErrorMm3;
+  boolCons["relative_conservation_error"] = result.booleanConsistency.relativeConservationError;
+  boolCons["conservation_passed"] = result.booleanConsistency.conservationPassed;
+  boolCons["boolean_result_valid"] = result.booleanConsistency.booleanResultValid;
+  boolCons["invalid_reason"] = result.booleanConsistency.invalidReason;
+  root["boolean_consistency"] = boolCons;
 
   // 8. checks
   const bool volPass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
