@@ -58,6 +58,7 @@ struct CompareConfig {
   double absoluteVolumeToleranceMm3 = 0.001;
   double relativeVolumeTolerance = 0.001;
   double booleanFuzzyToleranceMm = 0.01;
+  double booleanConservationRelativeTolerance = 1.0e-6;
 
   bool enableSameDomainNormalization = true;
   double normalizationLinearToleranceMm = 0.001;
@@ -303,6 +304,12 @@ struct BooleanConsistencyMetrics {
 
   std::string invalidReason;
 };
+
+namespace detail {
+CompareStatus ClassifyClosedSolidComparison(
+    bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,
+    const BooleanConsistencyMetrics &consistency);
+} // namespace detail
 
 struct CompareResult {
   CompareStatus status = CompareStatus::InternalError;

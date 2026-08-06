@@ -82,6 +82,41 @@ void TestEqualBoxes(const std::filesystem::path &root) {
          "result JSON must contain the EQUAL status");
 }
 
+void TestBooleanConservationMetrics(const std::filesystem::path &root) {
+  const TopoDS_Shape box = BRepPrimAPI_MakeBox(20.0, 30.0, 40.0).Shape();
+  const auto reference = root / "conservation_reference.step";
+  const auto candidate = root / "conservation_candidate.step";
+  WriteStep(box, reference);
+  WriteStep(box, candidate);
+
+  const auto result =
+      cadstep::CompareStepFiles(reference, candidate, cadstep::CompareConfig{});
+  Expect(result.booleanExecuted,
+         "conservation fixture must execute boolean comparison");
+  Expect(result.booleanConsistency.booleanResultValid,
+         "successful boolean cuts must produce valid conservation evidence");
+  Expect(result.booleanConsistency.conservationPassed,
+         "identical solids must pass boolean conservation");
+  Expect(result.booleanConsistency.conservationErrorMm3 <= 1.0e-9,
+         "identical solids must have zero conservation error");
+}
+
+void TestLikelyEqualExitCode() {
+  Expect(cadstep::ExitCode(cadstep::CompareStatus::LikelyEqual) == 3,
+         "LIKELY_EQUAL must use exit code 3");
+}
+
+void TestInvalidBooleanConservationIsLikelyEqual() {
+  cadstep::BooleanConsistencyMetrics consistency;
+  consistency.cutReferenceMinusCandidateSucceeded = true;
+  consistency.cutCandidateMinusReferenceSucceeded = true;
+
+  const auto status = cadstep::detail::ClassifyClosedSolidComparison(
+      true, true, true, true, consistency);
+  Expect(status == cadstep::CompareStatus::LikelyEqual,
+         "invalid boolean conservation must produce LIKELY_EQUAL");
+}
+
 void TestTranslatedBoxIsDifferent(const std::filesystem::path &root) {
   const TopoDS_Shape box = BRepPrimAPI_MakeBox(20.0, 30.0, 40.0).Shape();
   const auto reference = root / "translated_reference.step";
@@ -93,6 +128,8 @@ void TestTranslatedBoxIsDifferent(const std::filesystem::path &root) {
       cadstep::CompareStepFiles(reference, candidate, cadstep::CompareConfig{});
   Expect(result.status == cadstep::CompareStatus::Different,
          "0.02 mm translation must be DIFFERENT");
+  Expect(cadstep::ExitCode(result.status) == 1,
+         "DIFFERENT must use exit code 1");
   Expect(result.centroidDistanceMm > 0.01,
          "translation must be visible in centroid diagnostics");
 }
@@ -384,6 +421,9 @@ int main(int argc, char **argv) {
 
     TestEqualBoxes(root);
     TestTranslatedBoxIsDifferent(root);
+    TestBooleanConservationMetrics(root);
+    TestLikelyEqualExitCode();
+    TestInvalidBooleanConservationIsLikelyEqual();
     TestDimensionChangeIsDifferent(root);
     TestRelativeVolumeThresholdIsIndependent(root);
     TestAbsoluteVolumeThresholdIsIndependent(root);

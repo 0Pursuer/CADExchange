@@ -1612,6 +1612,8 @@ int ExitCode(CompareStatus status) {
   switch (status) {
   case CompareStatus::Equal:
     return 0;
+  case CompareStatus::LikelyEqual:
+    return 3;
   case CompareStatus::Different:
     return 1;
   case CompareStatus::InvalidInput:
@@ -1624,6 +1626,19 @@ int ExitCode(CompareStatus status) {
     return 5;
   }
   return 5;
+}
+
+CompareStatus detail::ClassifyClosedSolidComparison(
+    bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,
+    const BooleanConsistencyMetrics &consistency) {
+  if (volumePass && centroidPass && boundsPass && booleanPass &&
+      consistency.booleanResultValid) {
+    return CompareStatus::Equal;
+  }
+  if (volumePass && centroidPass && boundsPass && booleanPass) {
+    return CompareStatus::LikelyEqual;
+  }
+  return CompareStatus::Different;
 }
 
 EdgeAuditValidation ValidateEdgeAudit(const NormalizationAudit &refNorm,
@@ -1863,15 +1878,46 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
           }
         }
       }
+      auto &consistency = result.booleanConsistency;
+      consistency.cutReferenceMinusCandidateSucceeded = result.missingMaterial.succeeded;
+      consistency.cutCandidateMinusReferenceSucceeded = result.addedMaterial.succeeded;
+      consistency.signedInputVolumeDiffMm3 =
+          result.reference.signedVolumeMm3 - result.candidate.signedVolumeMm3;
+      consistency.signedBooleanVolumeDiffMm3 =
+          result.missingMaterial.volumeMm3 - result.addedMaterial.volumeMm3;
+      consistency.conservationErrorMm3 = std::abs(
+          consistency.signedInputVolumeDiffMm3 - consistency.signedBooleanVolumeDiffMm3);
+      const double conservationScale = std::max(
+          {1.0, std::abs(result.reference.signedVolumeMm3),
+           std::abs(result.candidate.signedVolumeMm3)});
+      consistency.relativeConservationError =
+          consistency.conservationErrorMm3 / conservationScale;
+      consistency.conservationPassed =
+          consistency.relativeConservationError <= config.booleanConservationRelativeTolerance;
+      consistency.booleanResultValid =
+          consistency.cutReferenceMinusCandidateSucceeded &&
+          consistency.cutCandidateMinusReferenceSucceeded && consistency.conservationPassed;
+      if (!consistency.booleanResultValid) {
+        consistency.invalidReason = "boolean volume conservation check failed";
+      }
 
-      if (volumePass && centroidPass && boundsPass && booleanPass) {
+
+      const CompareStatus classifiedStatus =
+          detail::ClassifyClosedSolidComparison(
+              volumePass, centroidPass, boundsPass, booleanPass, consistency);
+      if (classifiedStatus == CompareStatus::Equal) {
         result.status = CompareStatus::Equal;
         result.reason = (result.decisionPath == "boolean_after_original_fallback") ?
                         "closed solids pass configured thresholds (via original solid boolean fallback)" :
                         "closed solids pass configured thresholds";
+      } else if (classifiedStatus == CompareStatus::LikelyEqual) {
+        result.status = CompareStatus::LikelyEqual;
+        result.reason = "geometry thresholds passed but boolean conservation is invalid";
+        result.decisionPath = "boolean_conservation_invalid";
       } else {
         result.status = CompareStatus::Different;
         result.reason = "geometry thresholds failed: input_volume centroid symmetric_difference";
+        result.decisionPath = "boolean_difference";
       }
     }
   }
