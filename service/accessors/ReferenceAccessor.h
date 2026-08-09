@@ -38,7 +38,7 @@ public:
   // --- 类型识别 ---
   RefType GetRefType() const {
     if (!IsValid())
-      return RefType::FEATURE_DATUM_PLANE;
+      return RefType::UNKNOWN;
     return m_ref->refType;
   }
 
@@ -164,9 +164,7 @@ public:
   /**
    * @brief 尝试获取面 V 方向（如果是面引用）。
    */
-
-
-    bool GetFaceVDir(CVector3D &outVDir) const {
+  bool GetFaceVDir(CVector3D &outVDir) const {
     if (auto face = std::dynamic_pointer_cast<const CRefFace>(m_ref)) {
       outVDir = face->vDir;
       return true;
