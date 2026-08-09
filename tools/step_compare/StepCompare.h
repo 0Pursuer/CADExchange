@@ -53,6 +53,14 @@ enum class EdgeComparisonRole {
 
 const char *ToString(EdgeComparisonRole role);
 
+enum class MultiSolidPolicy {
+  Strict,
+  CollectionOnly,
+  Pairwise,
+};
+
+const char *ToString(MultiSolidPolicy policy);
+
 struct CompareConfig {
   double distanceToleranceMm = 0.01;
   double absoluteVolumeToleranceMm3 = 0.001;
@@ -72,6 +80,12 @@ struct CompareConfig {
   bool writeEntityDetails = true;
 
   bool printHumanSummary = true;
+
+  bool allowMultipleSolids = false;
+  MultiSolidPolicy multiSolidPolicy = MultiSolidPolicy::Strict;
+  double solidMatchVolumeRelTol = 0.001;
+  double solidMatchCentroidTolMm = 0.01;
+  double solidMatchBoundsTolMm = 0.01;
 };
 
 struct Point3 {
@@ -311,12 +325,40 @@ CompareStatus ClassifyClosedSolidComparison(
     const BooleanConsistencyMetrics &consistency);
 } // namespace detail
 
+struct SolidMatchRecord {
+  std::string referenceSolidId;
+  std::string candidateSolidId;
+  int referenceIndex = -1;
+  int candidateIndex = -1;
+  MatchStatus matchStatus = MatchStatus::Unmatched;
+  CompareStatus status = CompareStatus::InternalError;
+  std::string reason;
+  double volumeDifferenceMm3 = 0.0;
+  double relativeVolumeDifference = 0.0;
+  double centroidDistanceMm = 0.0;
+  double boundsDifferenceMm = 0.0;
+};
+
+struct MultiSolidAudit {
+  bool enabled = false;
+  MultiSolidPolicy policy = MultiSolidPolicy::Strict;
+  int referenceSolidCount = 0;
+  int candidateSolidCount = 0;
+  int matchedSolidCount = 0;
+  int unmatchedReferenceSolidCount = 0;
+  int unmatchedCandidateSolidCount = 0;
+  std::vector<SolidMatchRecord> solidMatches;
+  std::vector<std::string> unmatchedReferenceSolidIds;
+  std::vector<std::string> unmatchedCandidateSolidIds;
+};
+
 struct CompareResult {
   CompareStatus status = CompareStatus::InternalError;
   std::string reason;
   CompareConfig thresholds;
   InputAudit reference;
   InputAudit candidate;
+  MultiSolidAudit multiSolid;
   DifferenceAudit missingMaterial;
   DifferenceAudit addedMaterial;
   NormalizationAudit referenceNormalization;

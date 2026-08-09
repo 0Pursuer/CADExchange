@@ -409,6 +409,96 @@ void TestSameDomainNormalizationAndFastPath(const std::filesystem::path &root) {
          "boolean cut must be skipped on fast-path");
 }
 
+void TestMultiSolidBoxesEqual(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(20.0, 20.0, 20.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  TopoDS_Compound compCand;
+  builder.MakeCompound(compCand);
+  builder.Add(compCand, boxA);
+  builder.Add(compCand, boxB);
+
+  const auto reference = root / "multisolid_ref.step";
+  const auto candidate = root / "multisolid_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(compCand, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Equal,
+         "multi-solid identical pairs must be EQUAL");
+  Expect(result.multiSolid.enabled, "multiSolid.enabled must be true");
+  Expect(result.multiSolid.referenceSolidCount == 2, "reference solid count must be 2");
+  Expect(result.multiSolid.candidateSolidCount == 2, "candidate solid count must be 2");
+  Expect(result.multiSolid.matchedSolidCount == 2, "matched solid count must be 2");
+  Expect(result.multiSolid.unmatchedReferenceSolidCount == 0, "unmatched ref count must be 0");
+  Expect(result.multiSolid.unmatchedCandidateSolidCount == 0, "unmatched cand count must be 0");
+}
+
+void TestMultiSolidBoxesPermutationEqual(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(20.0, 20.0, 20.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  TopoDS_Compound compCand;
+  builder.MakeCompound(compCand);
+  builder.Add(compCand, boxB);
+  builder.Add(compCand, boxA);
+
+  const auto reference = root / "multisolid_perm_ref.step";
+  const auto candidate = root / "multisolid_perm_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(compCand, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Equal,
+         "multi-solid permuted solid order must be EQUAL");
+  Expect(result.multiSolid.matchedSolidCount == 2, "matched solid count must be 2");
+}
+
+void TestMultiSolidUnmatchedSolidsIsDifferent(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(20.0, 20.0, 20.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  const auto reference = root / "multisolid_unmatched_ref.step";
+  const auto candidate = root / "multisolid_unmatched_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(boxA, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Different,
+         "multi-solid unmatched solid must be DIFFERENT");
+  Expect(result.multiSolid.referenceSolidCount == 2, "reference solid count must be 2");
+  Expect(result.multiSolid.candidateSolidCount == 1, "candidate solid count must be 1");
+  Expect(result.multiSolid.matchedSolidCount == 1, "matched solid count must be 1");
+  Expect(result.multiSolid.unmatchedReferenceSolidCount == 1, "unmatched ref count must be 1");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -437,6 +527,9 @@ int main(int argc, char **argv) {
     TestSurfaceModelIsUnsupported(root);
     TestBooleanFuzzyToleranceOption(root);
     TestSameDomainNormalizationAndFastPath(root);
+    TestMultiSolidBoxesEqual(root);
+    TestMultiSolidBoxesPermutationEqual(root);
+    TestMultiSolidUnmatchedSolidsIsDifferent(root);
     std::cout << "cad_step_compare_tests: PASS\n";
     return 0;
   } catch (const std::exception &error) {

@@ -32,6 +32,11 @@ void PrintUsage() {
                " [--normalize-linear-tol-mm 0.001]"
                " [--normalize-angular-tol-rad 1e-6]"
                " [--normalized-fast-path]"
+               " [--allow-multi-solid]"
+               " [--multi-solid-policy strict|collection|pairwise]"
+               " [--solid-match-volume-rel-tol 1e-4]"
+               " [--solid-match-centroid-tol-mm 0.1]"
+               " [--solid-match-bounds-tol-mm 0.1]"
                " [--quiet]\n";
 }
 
@@ -85,6 +90,30 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
           ParseNumber(requireValue(), "--normalize-angular-tol-rad");
     } else if (argument == L"--normalized-fast-path") {
       options.config.enableNormalizedFastPath = true;
+    } else if (argument == L"--allow-multi-solid" || argument == L"--allow-multiple-solids") {
+      options.config.allowMultipleSolids = true;
+    } else if (argument == L"--no-allow-multi-solid") {
+      options.config.allowMultipleSolids = false;
+    } else if (argument == L"--multi-solid-policy") {
+      const std::wstring polStr = requireValue();
+      if (polStr == L"strict") {
+        options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::Strict;
+      } else if (polStr == L"collection") {
+        options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::CollectionOnly;
+      } else if (polStr == L"pairwise") {
+        options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::Pairwise;
+      } else {
+        throw std::invalid_argument("invalid --multi-solid-policy (must be strict, collection, or pairwise)");
+      }
+    } else if (argument == L"--solid-match-volume-rel-tol") {
+      options.config.solidMatchVolumeRelTol =
+          ParseNumber(requireValue(), "--solid-match-volume-rel-tol");
+    } else if (argument == L"--solid-match-centroid-tol-mm") {
+      options.config.solidMatchCentroidTolMm =
+          ParseNumber(requireValue(), "--solid-match-centroid-tol-mm");
+    } else if (argument == L"--solid-match-bounds-tol-mm") {
+      options.config.solidMatchBoundsTolMm =
+          ParseNumber(requireValue(), "--solid-match-bounds-tol-mm");
     } else if (argument == L"--export-stl") {
       options.config.exportStl = true;
     } else if (argument == L"--no-export-stl") {

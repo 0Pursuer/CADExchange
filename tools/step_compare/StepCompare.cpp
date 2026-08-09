@@ -30,6 +30,8 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shell.hxx>
 #include <TopoDS_Solid.hxx>
+#include <TopoDS_Compound.hxx>
+#include <BRep_Builder.hxx>
 #include <gp_Pnt.hxx>
 #include <json/single_include/nlohmann/json.hpp>
 
@@ -417,10 +419,17 @@ enum class LoadClass {
   InternalError,
 };
 
-struct LoadedSolid {
-  LoadClass classification = LoadClass::InternalError;
-  TopoDS_Solid solid;
+struct LoadedSolidItem {
+  int index = 0;
+  std::string id;
   InputAudit audit;
+  TopoDS_Solid solid;
+};
+
+struct LoadedStepModel {
+  LoadClass classification = LoadClass::InternalError;
+  InputAudit compositeAudit;
+  std::vector<LoadedSolidItem> solids;
   std::string reason;
 };
 
@@ -640,9 +649,9 @@ OriginalTopologyIndex BuildOriginalTopologyIndex(const TopoDS_Solid &solid, Enti
   return index;
 }
 
-LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
-  LoadedSolid result;
-  result.audit.path = stepPath.string();
+LoadedStepModel LoadStepModel(const std::filesystem::path &stepPath, const CompareConfig &config, EntitySide side) {
+  LoadedStepModel result;
+  result.compositeAudit.path = stepPath.string();
 
   if (!std::filesystem::exists(stepPath)) {
     result.classification = LoadClass::Invalid;
@@ -655,7 +664,7 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
 
   std::ostringstream loadDiag;
   loadDiag << "ReadFile status=" << ReadStatusText(readStatus);
-  result.audit.loadDiagnostics = loadDiag.str();
+  result.compositeAudit.loadDiagnostics = loadDiag.str();
 
   if (readStatus != IFSelect_RetDone) {
     result.classification = LoadClass::Invalid;
@@ -668,13 +677,13 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
   TColStd_SequenceOfAsciiString solidAngleUnits;
   reader.FileUnits(lengthUnits, planeAngleUnits, solidAngleUnits);
   for (int i = 1; i <= lengthUnits.Length(); ++i) {
-    result.audit.fileLengthUnits.push_back(lengthUnits.Value(i).ToCString());
+    result.compositeAudit.fileLengthUnits.push_back(lengthUnits.Value(i).ToCString());
   }
 
   const int rootsCount = reader.TransferRoots();
   std::ostringstream transferDiag;
   transferDiag << "transferred_roots=" << rootsCount;
-  result.audit.transferDiagnostics = transferDiag.str();
+  result.compositeAudit.transferDiagnostics = transferDiag.str();
 
   const TopoDS_Shape compositeShape = reader.OneShape();
   if (compositeShape.IsNull()) {
@@ -683,67 +692,121 @@ LoadedSolid LoadStepSolid(const std::filesystem::path &stepPath) {
     return result;
   }
 
-  result.audit.solidCount = CountUniqueSubShapes(compositeShape, TopAbs_SOLID);
-  result.audit.shellCount = CountUniqueSubShapes(compositeShape, TopAbs_SHELL);
-  result.audit.faceCount = CountUniqueSubShapes(compositeShape, TopAbs_FACE);
-  result.audit.edgeCount = CountUniqueSubShapes(compositeShape, TopAbs_EDGE);
+  result.compositeAudit.solidCount = CountUniqueSubShapes(compositeShape, TopAbs_SOLID);
+  result.compositeAudit.shellCount = CountUniqueSubShapes(compositeShape, TopAbs_SHELL);
+  result.compositeAudit.faceCount = CountUniqueSubShapes(compositeShape, TopAbs_FACE);
+  result.compositeAudit.edgeCount = CountUniqueSubShapes(compositeShape, TopAbs_EDGE);
 
-  if (result.audit.solidCount == 0) {
+  if (result.compositeAudit.solidCount == 0) {
     result.classification = LoadClass::Unsupported;
-    result.reason = "STEP file contains no 3D solids (shell_count=" + std::to_string(result.audit.shellCount) +
-                    ", face_count=" + std::to_string(result.audit.faceCount) + ")";
+    result.reason = "STEP file contains no 3D solids (shell_count=" + std::to_string(result.compositeAudit.shellCount) +
+                    ", face_count=" + std::to_string(result.compositeAudit.faceCount) + ")";
     return result;
   }
 
-  if (result.audit.solidCount > 1) {
+  if (result.compositeAudit.solidCount > 1 && !config.allowMultipleSolids && config.multiSolidPolicy == MultiSolidPolicy::Strict) {
     result.classification = LoadClass::Unsupported;
-    result.reason = "multiple 3D solids are not supported (solid_count=" + std::to_string(result.audit.solidCount) + ")";
+    result.reason = "multiple 3D solids are not supported (solid_count=" + std::to_string(result.compositeAudit.solidCount) + ")";
     return result;
   }
 
   TopExp_Explorer solidExplorer(compositeShape, TopAbs_SOLID);
-  if (!solidExplorer.More()) {
+  int solidIndex = 0;
+  double totalVolume = 0.0;
+  double totalSurfaceArea = 0.0;
+  gp_Vec weightedCentroidSum(0.0, 0.0, 0.0);
+  Bounds3 compositeBounds;
+
+  while (solidExplorer.More()) {
+    TopoDS_Solid s = TopoDS::Solid(solidExplorer.Current());
+    solidExplorer.Next();
+    if (s.IsNull()) continue;
+
+    LoadedSolidItem item;
+    item.index = solidIndex;
+    item.id = (side == EntitySide::Reference ? "ref_solid_" : "cand_solid_") + std::to_string(solidIndex);
+    item.solid = s;
+
+    item.audit.path = stepPath.string();
+    item.audit.fileLengthUnits = result.compositeAudit.fileLengthUnits;
+    item.audit.loadDiagnostics = result.compositeAudit.loadDiagnostics;
+    item.audit.transferDiagnostics = result.compositeAudit.transferDiagnostics;
+    item.audit.solidCount = 1;
+    item.audit.shellCount = CountUniqueSubShapes(s, TopAbs_SHELL);
+    item.audit.faceCount = CountUniqueSubShapes(s, TopAbs_FACE);
+    item.audit.edgeCount = CountUniqueSubShapes(s, TopAbs_EDGE);
+
+    BRepCheck_Analyzer analyzer(s);
+    item.audit.brepValid = analyzer.IsValid() != 0;
+    item.audit.closed = (s.Closed() != 0) || (CountSubShapes(s, TopAbs_SHELL) > 0);
+
+    if (!item.audit.brepValid) {
+      result.classification = LoadClass::Invalid;
+      result.reason = "solid fail BRepCheck validation";
+      return result;
+    }
+
+    GProp_GProps systemProps;
+    BRepGProp::VolumeProperties(s, systemProps);
+    item.audit.signedVolumeMm3 = systemProps.Mass();
+
+    GProp_GProps surfaceProps;
+    BRepGProp::SurfaceProperties(s, surfaceProps);
+    item.audit.surfaceAreaMm2 = surfaceProps.Mass();
+
+    const gp_Pnt centroidPnt = systemProps.CentreOfMass();
+    item.audit.centroidMm = {centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()};
+    item.audit.boundsMm = ComputeBounds(s);
+
+    totalVolume += item.audit.signedVolumeMm3;
+    totalSurfaceArea += item.audit.surfaceAreaMm2;
+    weightedCentroidSum += gp_Vec(centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()) * item.audit.signedVolumeMm3;
+
+    if (compositeBounds.isVoid) {
+      compositeBounds = item.audit.boundsMm;
+    } else {
+      compositeBounds.minimum.x = std::min(compositeBounds.minimum.x, item.audit.boundsMm.minimum.x);
+      compositeBounds.minimum.y = std::min(compositeBounds.minimum.y, item.audit.boundsMm.minimum.y);
+      compositeBounds.minimum.z = std::min(compositeBounds.minimum.z, item.audit.boundsMm.minimum.z);
+      compositeBounds.maximum.x = std::max(compositeBounds.maximum.x, item.audit.boundsMm.maximum.x);
+      compositeBounds.maximum.y = std::max(compositeBounds.maximum.y, item.audit.boundsMm.maximum.y);
+      compositeBounds.maximum.z = std::max(compositeBounds.maximum.z, item.audit.boundsMm.maximum.z);
+    }
+
+    result.solids.push_back(item);
+    solidIndex++;
+  }
+
+  if (result.solids.empty()) {
     result.classification = LoadClass::Invalid;
     result.reason = "failed to extract solid shape";
     return result;
   }
 
-  result.solid = TopoDS::Solid(solidExplorer.Current());
-  if (result.solid.IsNull()) {
-    result.classification = LoadClass::Invalid;
-    result.reason = "extracted solid is null";
-    return result;
+  TopTools_IndexedMapOfShape solidFacesMap;
+  TopTools_IndexedMapOfShape solidEdgesMap;
+  for (const auto &item : result.solids) {
+    TopExp::MapShapes(item.solid, TopAbs_FACE, solidFacesMap);
+    TopExp::MapShapes(item.solid, TopAbs_EDGE, solidEdgesMap);
   }
 
-  const int edgesInSolid = CountUniqueSubShapes(result.solid, TopAbs_EDGE);
-  const int facesInSolid = CountUniqueSubShapes(result.solid, TopAbs_FACE);
-  if (result.audit.edgeCount > edgesInSolid || result.audit.faceCount > facesInSolid) {
+  if (result.compositeAudit.faceCount > solidFacesMap.Extent() ||
+      result.compositeAudit.edgeCount > solidEdgesMap.Extent()) {
     result.classification = LoadClass::Unsupported;
-    result.reason = "STEP file contains unattached non-solid elements (free edges/faces)";
+    result.reason = "STEP file contains non-solid topological entities (free curves or surface faces)";
     return result;
   }
 
-  BRepCheck_Analyzer analyzer(result.solid);
-  result.audit.brepValid = analyzer.IsValid() != 0;
-  result.audit.closed = (result.solid.Closed() != 0) || (CountSubShapes(result.solid, TopAbs_SHELL) > 0);
-
-  if (!result.audit.brepValid) {
-    result.classification = LoadClass::Invalid;
-    result.reason = "solid fail BRepCheck validation";
-    return result;
+  result.compositeAudit.signedVolumeMm3 = totalVolume;
+  result.compositeAudit.surfaceAreaMm2 = totalSurfaceArea;
+  if (totalVolume > 0.0) {
+    result.compositeAudit.centroidMm = {weightedCentroidSum.X() / totalVolume, weightedCentroidSum.Y() / totalVolume, weightedCentroidSum.Z() / totalVolume};
+  } else {
+    result.compositeAudit.centroidMm = result.solids[0].audit.centroidMm;
   }
-
-  GProp_GProps systemProps;
-  BRepGProp::VolumeProperties(result.solid, systemProps);
-  result.audit.signedVolumeMm3 = systemProps.Mass();
-
-  GProp_GProps surfaceProps;
-  BRepGProp::SurfaceProperties(result.solid, surfaceProps);
-  result.audit.surfaceAreaMm2 = surfaceProps.Mass();
-
-  const gp_Pnt centroidPnt = systemProps.CentreOfMass();
-  result.audit.centroidMm = {centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()};
-  result.audit.boundsMm = ComputeBounds(result.solid);
+  result.compositeAudit.boundsMm = compositeBounds;
+  result.compositeAudit.brepValid = true;
+  result.compositeAudit.closed = true;
 
   result.classification = LoadClass::Ready;
   return result;
@@ -1699,57 +1762,48 @@ EdgeAuditValidation ValidateEdgeAudit(const NormalizationAudit &refNorm,
   return validation;
 }
 
-CompareResult CompareStepFiles(const std::filesystem::path &reference,
-                               const std::filesystem::path &candidate,
-                               const CompareConfig &config,
-                               const std::filesystem::path &outputDirectory) {
+const char *ToString(MultiSolidPolicy policy) {
+  switch (policy) {
+  case MultiSolidPolicy::Strict:
+    return "strict";
+  case MultiSolidPolicy::CollectionOnly:
+    return "collection";
+  case MultiSolidPolicy::Pairwise:
+    return "pairwise";
+  }
+  return "unknown";
+}
+
+CompareResult CompareSolidPairInternal(const TopoDS_Solid &solidRef,
+                                       const InputAudit &auditRef,
+                                       const TopoDS_Solid &solidCand,
+                                       const InputAudit &auditCand,
+                                       const CompareConfig &config,
+                                       const std::filesystem::path &outputDirectory,
+                                       const std::string &artifactSuffix) {
   const auto totalStart = std::chrono::high_resolution_clock::now();
   CompareResult result;
   result.thresholds = config;
+  result.reference = auditRef;
+  result.candidate = auditCand;
 
-  const auto loadRefStart = std::chrono::high_resolution_clock::now();
-  const LoadedSolid loadedRef = LoadStepSolid(reference);
-  result.timings.loadReferenceMs = ElapsedMs(loadRefStart);
-  result.reference = loadedRef.audit;
-
-  const auto loadCandStart = std::chrono::high_resolution_clock::now();
-  const LoadedSolid loadedCand = LoadStepSolid(candidate);
-  result.timings.loadCandidateMs = ElapsedMs(loadCandStart);
-  result.candidate = loadedCand.audit;
-
-  if (loadedRef.classification == LoadClass::Invalid || loadedCand.classification == LoadClass::Invalid) {
-    result.status = CompareStatus::InvalidInput;
-    result.reason = loadedRef.classification == LoadClass::Invalid ? loadedRef.reason : loadedCand.reason;
-    result.decisionPath = "input_invalid";
-    result.timings.totalMs = ElapsedMs(totalStart);
-    return result;
-  }
-
-  if (loadedRef.classification == LoadClass::Unsupported || loadedCand.classification == LoadClass::Unsupported) {
-    result.status = CompareStatus::UnsupportedShape;
-    result.reason = loadedRef.classification == LoadClass::Unsupported ? loadedRef.reason : loadedCand.reason;
-    result.decisionPath = "input_unsupported";
-    result.timings.totalMs = ElapsedMs(totalStart);
-    return result;
-  }
-
-  const OriginalTopologyIndex refOriginalIndex = BuildOriginalTopologyIndex(loadedRef.solid, EntitySide::Reference);
-  const OriginalTopologyIndex candOriginalIndex = BuildOriginalTopologyIndex(loadedCand.solid, EntitySide::Candidate);
+  const OriginalTopologyIndex refOriginalIndex = BuildOriginalTopologyIndex(solidRef, EntitySide::Reference);
+  const OriginalTopologyIndex candOriginalIndex = BuildOriginalTopologyIndex(solidCand, EntitySide::Candidate);
 
   const auto normRefStart = std::chrono::high_resolution_clock::now();
-  const NormalizedSolidInternal normRef = NormalizeSameDomain(loadedRef.solid, refOriginalIndex, EntitySide::Reference, config);
+  const NormalizedSolidInternal normRef = NormalizeSameDomain(solidRef, refOriginalIndex, EntitySide::Reference, config);
   result.timings.normalizeReferenceMs = ElapsedMs(normRefStart);
   result.referenceNormalization = normRef.audit;
 
   const auto normCandStart = std::chrono::high_resolution_clock::now();
-  const NormalizedSolidInternal normCand = NormalizeSameDomain(loadedCand.solid, candOriginalIndex, EntitySide::Candidate, config);
+  const NormalizedSolidInternal normCand = NormalizeSameDomain(solidCand, candOriginalIndex, EntitySide::Candidate, config);
   result.timings.normalizeCandidateMs = ElapsedMs(normCandStart);
   result.candidateNormalization = normCand.audit;
 
   const bool normalizationPairUsable = result.referenceNormalization.succeeded && result.candidateNormalization.succeeded;
 
-  const TopoDS_Solid &compareSolidRef = normalizationPairUsable ? normRef.solid : loadedRef.solid;
-  const TopoDS_Solid &compareSolidCand = normalizationPairUsable ? normCand.solid : loadedCand.solid;
+  const TopoDS_Solid &compareSolidRef = normalizationPairUsable ? normRef.solid : solidRef;
+  const TopoDS_Solid &compareSolidCand = normalizationPairUsable ? normCand.solid : solidCand;
 
   result.decisionPath = normalizationPairUsable ? "boolean_after_normalization" : "boolean_after_original";
 
@@ -1861,8 +1915,8 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
                          (result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
 
       if (!booleanPass && normalizationPairUsable && volumePass && centroidPass && boundsPass) {
-        BooleanDifferenceResult origMissing = CutSolids(loadedRef.solid, loadedCand.solid, config.booleanFuzzyToleranceMm);
-        BooleanDifferenceResult origAdded = CutSolids(loadedCand.solid, loadedRef.solid, config.booleanFuzzyToleranceMm);
+        BooleanDifferenceResult origMissing = CutSolids(solidRef, solidCand, config.booleanFuzzyToleranceMm);
+        BooleanDifferenceResult origAdded = CutSolids(solidCand, solidRef, config.booleanFuzzyToleranceMm);
         if (origMissing.audit.succeeded && origAdded.audit.succeeded) {
           const bool origBooleanPass = (origMissing.audit.volumeMm3 <= effectiveAbsVolTol) &&
                                        (origAdded.audit.volumeMm3 <= effectiveAbsVolTol);
@@ -1901,7 +1955,6 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
         consistency.invalidReason = "boolean volume conservation check failed";
       }
 
-
       const CompareStatus classifiedStatus =
           detail::ClassifyClosedSolidComparison(
               volumePass, centroidPass, boundsPass, booleanPass, consistency);
@@ -1922,62 +1975,317 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     }
   }
 
-  // Artifact Export (always executed if outputDirectory is specified)
   if (!outputDirectory.empty()) {
     const auto exportStart = std::chrono::high_resolution_clock::now();
     std::error_code ec;
     std::filesystem::create_directories(outputDirectory, ec);
-    RemoveOldArtifacts(outputDirectory);
+    if (artifactSuffix.empty()) {
+      RemoveOldArtifacts(outputDirectory);
+    }
 
+    const std::string sfx = artifactSuffix;
     if (config.exportStl) {
-      const auto refStl = outputDirectory / "reference_base.stl";
+      const auto refStl = outputDirectory / ("reference_base" + sfx + ".stl");
       if (ExportShapeStl(compareSolidRef, refStl)) {
-        result.artifacts.items.push_back({"reference_base", "reference_base.stl", "STL", true, ""});
+        result.artifacts.items.push_back({"reference_base" + sfx, "reference_base" + sfx + ".stl", "STL", true, ""});
       }
-      const auto candStl = outputDirectory / "candidate_base.stl";
+      const auto candStl = outputDirectory / ("candidate_base" + sfx + ".stl");
       if (ExportShapeStl(compareSolidCand, candStl)) {
-        result.artifacts.items.push_back({"candidate_base", "candidate_base.stl", "STL", true, ""});
+        result.artifacts.items.push_back({"candidate_base" + sfx, "candidate_base" + sfx + ".stl", "STL", true, ""});
       }
       if (result.booleanExecuted && result.missingMaterial.volumeMm3 > 0.0) {
-        const auto missStl = outputDirectory / "missing_material.stl";
+        const auto missStl = outputDirectory / ("missing_material" + sfx + ".stl");
         if (ExportShapeStl(missingRes.shape, missStl)) {
-          result.artifacts.items.push_back({"missing_material", "missing_material.stl", "STL", true, ""});
+          result.artifacts.items.push_back({"missing_material" + sfx, "missing_material" + sfx + ".stl", "STL", true, ""});
         }
       }
       if (result.booleanExecuted && result.addedMaterial.volumeMm3 > 0.0) {
-        const auto addStl = outputDirectory / "added_material.stl";
+        const auto addStl = outputDirectory / ("added_material" + sfx + ".stl");
         if (ExportShapeStl(addedRes.shape, addStl)) {
-          result.artifacts.items.push_back({"added_material", "added_material.stl", "STL", true, ""});
+          result.artifacts.items.push_back({"added_material" + sfx, "added_material" + sfx + ".stl", "STL", true, ""});
         }
       }
     }
 
     if (config.exportBrep) {
-      ExportShapeBrep(loadedRef.solid, outputDirectory / "reference_original.brep");
-      ExportShapeBrep(loadedCand.solid, outputDirectory / "candidate_original.brep");
+      ExportShapeBrep(solidRef, outputDirectory / ("reference_original" + sfx + ".brep"));
+      ExportShapeBrep(solidCand, outputDirectory / ("candidate_original" + sfx + ".brep"));
       if (normalizationPairUsable) {
-        ExportShapeBrep(normRef.solid, outputDirectory / "reference_normalized.brep");
-        ExportShapeBrep(normCand.solid, outputDirectory / "candidate_normalized.brep");
+        ExportShapeBrep(normRef.solid, outputDirectory / ("reference_normalized" + sfx + ".brep"));
+        ExportShapeBrep(normCand.solid, outputDirectory / ("candidate_normalized" + sfx + ".brep"));
       }
     }
 
     const auto visDir = outputDirectory / "visualization";
     std::filesystem::create_directories(visDir, ec);
 
-    if (ExportFacesVtp(normRef.solid, normRef.normalizedFaces, normRef.audit.faces, result.normalizedTopology.faces, EntitySide::Reference, visDir / "reference_faces.vtp")) {
-      result.artifacts.items.push_back({"reference_faces", "visualization/reference_faces.vtp", "VTP", true, "entity_index"});
+    if (ExportFacesVtp(normRef.solid, normRef.normalizedFaces, normRef.audit.faces, result.normalizedTopology.faces, EntitySide::Reference, visDir / ("reference_faces" + sfx + ".vtp"))) {
+      result.artifacts.items.push_back({"reference_faces" + sfx, "visualization/reference_faces" + sfx + ".vtp", "VTP", true, "entity_index"});
     }
-    if (ExportFacesVtp(normCand.solid, normCand.normalizedFaces, normCand.audit.faces, result.normalizedTopology.faces, EntitySide::Candidate, visDir / "candidate_faces.vtp")) {
-      result.artifacts.items.push_back({"candidate_faces", "visualization/candidate_faces.vtp", "VTP", true, "entity_index"});
+    if (ExportFacesVtp(normCand.solid, normCand.normalizedFaces, normCand.audit.faces, result.normalizedTopology.faces, EntitySide::Candidate, visDir / ("candidate_faces" + sfx + ".vtp"))) {
+      result.artifacts.items.push_back({"candidate_faces" + sfx, "visualization/candidate_faces" + sfx + ".vtp", "VTP", true, "entity_index"});
     }
-    if (ExportEdgesVtp(normRef.solid, normRef.normalizedEdges, normRef.audit.edges, result.normalizedTopology.edges, EntitySide::Reference, visDir / "reference_edges.vtp")) {
-      result.artifacts.items.push_back({"reference_edges", "visualization/reference_edges.vtp", "VTP", true, "entity_index"});
+    if (ExportEdgesVtp(normRef.solid, normRef.normalizedEdges, normRef.audit.edges, result.normalizedTopology.edges, EntitySide::Reference, visDir / ("reference_edges" + sfx + ".vtp"))) {
+      result.artifacts.items.push_back({"reference_edges" + sfx, "visualization/reference_edges" + sfx + ".vtp", "VTP", true, "entity_index"});
     }
-    if (ExportEdgesVtp(normCand.solid, normCand.normalizedEdges, normCand.audit.edges, result.normalizedTopology.edges, EntitySide::Candidate, visDir / "candidate_edges.vtp")) {
-      result.artifacts.items.push_back({"candidate_edges", "visualization/candidate_edges.vtp", "VTP", true, "entity_index"});
+    if (ExportEdgesVtp(normCand.solid, normCand.normalizedEdges, normCand.audit.edges, result.normalizedTopology.edges, EntitySide::Candidate, visDir / ("candidate_edges" + sfx + ".vtp"))) {
+      result.artifacts.items.push_back({"candidate_edges" + sfx, "visualization/candidate_edges" + sfx + ".vtp", "VTP", true, "entity_index"});
     }
 
     result.timings.artifactExportMs = ElapsedMs(exportStart);
+  }
+
+  result.timings.totalMs = ElapsedMs(totalStart);
+  return result;
+}
+
+CompareResult CompareStepFiles(const std::filesystem::path &reference,
+                               const std::filesystem::path &candidate,
+                               const CompareConfig &config,
+                               const std::filesystem::path &outputDirectory) {
+  const auto totalStart = std::chrono::high_resolution_clock::now();
+  CompareResult result;
+  result.thresholds = config;
+
+  const auto loadRefStart = std::chrono::high_resolution_clock::now();
+  const LoadedStepModel loadedRef = LoadStepModel(reference, config, EntitySide::Reference);
+  result.timings.loadReferenceMs = ElapsedMs(loadRefStart);
+  result.reference = loadedRef.compositeAudit;
+
+  const auto loadCandStart = std::chrono::high_resolution_clock::now();
+  const LoadedStepModel loadedCand = LoadStepModel(candidate, config, EntitySide::Candidate);
+  result.timings.loadCandidateMs = ElapsedMs(loadCandStart);
+  result.candidate = loadedCand.compositeAudit;
+
+  if (loadedRef.classification == LoadClass::Invalid || loadedCand.classification == LoadClass::Invalid) {
+    result.status = CompareStatus::InvalidInput;
+    result.reason = loadedRef.classification == LoadClass::Invalid ? loadedRef.reason : loadedCand.reason;
+    result.decisionPath = "input_invalid";
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  if (loadedRef.classification == LoadClass::Unsupported || loadedCand.classification == LoadClass::Unsupported) {
+    result.status = CompareStatus::UnsupportedShape;
+    result.reason = loadedRef.classification == LoadClass::Unsupported ? loadedRef.reason : loadedCand.reason;
+    result.decisionPath = "input_unsupported";
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  const bool isMultiSolidMode = config.allowMultipleSolids || (loadedRef.solids.size() > 1 || loadedCand.solids.size() > 1);
+
+  if (!isMultiSolidMode) {
+    CompareResult pairRes = CompareSolidPairInternal(
+        loadedRef.solids[0].solid, loadedRef.solids[0].audit,
+        loadedCand.solids[0].solid, loadedCand.solids[0].audit,
+        config, outputDirectory, "");
+
+    pairRes.reference = loadedRef.compositeAudit;
+    pairRes.candidate = loadedCand.compositeAudit;
+    pairRes.thresholds = config;
+    pairRes.timings.loadReferenceMs = result.timings.loadReferenceMs;
+    pairRes.timings.loadCandidateMs = result.timings.loadCandidateMs;
+    pairRes.timings.totalMs = ElapsedMs(totalStart);
+
+    pairRes.multiSolid.enabled = config.allowMultipleSolids;
+    pairRes.multiSolid.policy = config.multiSolidPolicy;
+    pairRes.multiSolid.referenceSolidCount = 1;
+    pairRes.multiSolid.candidateSolidCount = 1;
+    pairRes.multiSolid.matchedSolidCount = 1;
+    pairRes.multiSolid.unmatchedReferenceSolidCount = 0;
+    pairRes.multiSolid.unmatchedCandidateSolidCount = 0;
+
+    SolidMatchRecord matchRec;
+    matchRec.referenceSolidId = loadedRef.solids[0].id;
+    matchRec.candidateSolidId = loadedCand.solids[0].id;
+    matchRec.referenceIndex = 0;
+    matchRec.candidateIndex = 0;
+    matchRec.matchStatus = MatchStatus::Matched;
+    matchRec.status = pairRes.status;
+    matchRec.reason = pairRes.reason;
+    matchRec.volumeDifferenceMm3 = pairRes.absoluteInputVolumeDifferenceMm3;
+    matchRec.relativeVolumeDifference = pairRes.relativeInputVolumeDifference;
+    matchRec.centroidDistanceMm = pairRes.centroidDistanceMm;
+    matchRec.boundsDifferenceMm = pairRes.maximumBoundsDifferenceMm;
+    pairRes.multiSolid.solidMatches.push_back(matchRec);
+
+    return pairRes;
+  }
+
+  result.multiSolid.enabled = true;
+  result.multiSolid.policy = config.multiSolidPolicy;
+  result.multiSolid.referenceSolidCount = static_cast<int>(loadedRef.solids.size());
+  result.multiSolid.candidateSolidCount = static_cast<int>(loadedCand.solids.size());
+
+  const double diagScale = BoundsDiagonal(result.reference.boundsMm);
+  const double effectiveDistTol = std::max(config.solidMatchCentroidTolMm, std::max(config.distanceToleranceMm, 1.0e-4 * diagScale));
+
+  std::vector<bool> candMatched(loadedCand.solids.size(), false);
+  int matchedCount = 0;
+  std::vector<CompareResult> pairResults;
+
+  for (std::size_t i = 0; i < loadedRef.solids.size(); ++i) {
+    const auto &refItem = loadedRef.solids[i];
+    int bestCandIdx = -1;
+    double bestCost = 1.0e12;
+    double bestVolDiff = 0.0;
+    double bestRelVolDiff = 0.0;
+    double bestCentDist = 0.0;
+    double bestBoundsDiff = 0.0;
+
+    for (std::size_t j = 0; j < loadedCand.solids.size(); ++j) {
+      if (candMatched[j]) continue;
+      const auto &candItem = loadedCand.solids[j];
+
+      const double volDiff = std::abs(refItem.audit.signedVolumeMm3 - candItem.audit.signedVolumeMm3);
+      const double relVolDiff = refItem.audit.signedVolumeMm3 > 0.0 ? (volDiff / refItem.audit.signedVolumeMm3) : 0.0;
+      const double centDist = PointDistance(refItem.audit.centroidMm, candItem.audit.centroidMm);
+      const double boundsDiff = ComputeBoundsDifference(refItem.audit.boundsMm, candItem.audit.boundsMm);
+
+      if (relVolDiff <= config.solidMatchVolumeRelTol && centDist <= effectiveDistTol && boundsDiff <= effectiveDistTol) {
+        const double cost = relVolDiff * 100.0 + centDist + boundsDiff;
+        if (cost < bestCost) {
+          bestCost = cost;
+          bestCandIdx = static_cast<int>(j);
+          bestVolDiff = volDiff;
+          bestRelVolDiff = relVolDiff;
+          bestCentDist = centDist;
+          bestBoundsDiff = boundsDiff;
+        }
+      }
+    }
+
+    if (bestCandIdx >= 0) {
+      candMatched[bestCandIdx] = true;
+      matchedCount++;
+
+      std::string pairSuffix = "_pair_" + std::to_string(i) + "_" + std::to_string(bestCandIdx);
+      CompareResult pairRes = CompareSolidPairInternal(
+          refItem.solid, refItem.audit,
+          loadedCand.solids[bestCandIdx].solid, loadedCand.solids[bestCandIdx].audit,
+          config, outputDirectory, pairSuffix);
+      pairResults.push_back(pairRes);
+
+      SolidMatchRecord matchRec;
+      matchRec.referenceSolidId = refItem.id;
+      matchRec.candidateSolidId = loadedCand.solids[bestCandIdx].id;
+      matchRec.referenceIndex = static_cast<int>(i);
+      matchRec.candidateIndex = bestCandIdx;
+      matchRec.matchStatus = MatchStatus::Matched;
+      matchRec.status = pairRes.status;
+      matchRec.reason = pairRes.reason;
+      matchRec.volumeDifferenceMm3 = bestVolDiff;
+      matchRec.relativeVolumeDifference = bestRelVolDiff;
+      matchRec.centroidDistanceMm = bestCentDist;
+      matchRec.boundsDifferenceMm = bestBoundsDiff;
+      result.multiSolid.solidMatches.push_back(matchRec);
+    } else {
+      SolidMatchRecord matchRec;
+      matchRec.referenceSolidId = refItem.id;
+      matchRec.candidateSolidId = "";
+      matchRec.referenceIndex = static_cast<int>(i);
+      matchRec.candidateIndex = -1;
+      matchRec.matchStatus = MatchStatus::Unmatched;
+      matchRec.status = CompareStatus::Different;
+      matchRec.reason = "unmatched reference solid";
+      result.multiSolid.solidMatches.push_back(matchRec);
+      result.multiSolid.unmatchedReferenceSolidIds.push_back(refItem.id);
+    }
+  }
+
+  for (std::size_t j = 0; j < loadedCand.solids.size(); ++j) {
+    if (!candMatched[j]) {
+      const auto &candItem = loadedCand.solids[j];
+      SolidMatchRecord matchRec;
+      matchRec.referenceSolidId = "";
+      matchRec.candidateSolidId = candItem.id;
+      matchRec.referenceIndex = -1;
+      matchRec.candidateIndex = static_cast<int>(j);
+      matchRec.matchStatus = MatchStatus::Unmatched;
+      matchRec.status = CompareStatus::Different;
+      matchRec.reason = "unmatched candidate solid";
+      result.multiSolid.solidMatches.push_back(matchRec);
+      result.multiSolid.unmatchedCandidateSolidIds.push_back(candItem.id);
+    }
+  }
+
+  result.multiSolid.matchedSolidCount = matchedCount;
+  result.multiSolid.unmatchedReferenceSolidCount = static_cast<int>(result.multiSolid.unmatchedReferenceSolidIds.size());
+  result.multiSolid.unmatchedCandidateSolidCount = static_cast<int>(result.multiSolid.unmatchedCandidateSolidIds.size());
+
+  if (result.multiSolid.unmatchedReferenceSolidCount > 0 || result.multiSolid.unmatchedCandidateSolidCount > 0) {
+    result.status = CompareStatus::Different;
+    result.reason = "multi-solid matching failed: reference_solids=" + std::to_string(result.multiSolid.referenceSolidCount) +
+                    ", candidate_solids=" + std::to_string(result.multiSolid.candidateSolidCount) +
+                    ", matched=" + std::to_string(matchedCount);
+    result.decisionPath = "multi_solid_unmatched";
+  } else {
+    bool allEqual = true;
+    bool anyDifferent = false;
+    bool anyLikelyEqual = false;
+    std::string firstDiffReason;
+
+    for (const auto &pairRes : pairResults) {
+      if (pairRes.status != CompareStatus::Equal) {
+        allEqual = false;
+      }
+      if (pairRes.status == CompareStatus::Different) {
+        anyDifferent = true;
+        if (firstDiffReason.empty()) firstDiffReason = pairRes.reason;
+      } else if (pairRes.status == CompareStatus::LikelyEqual) {
+        anyLikelyEqual = true;
+      }
+    }
+
+    if (allEqual) {
+      result.status = CompareStatus::Equal;
+      result.reason = "all " + std::to_string(matchedCount) + " solid pairs are EQUAL";
+      result.decisionPath = "multi_solid_pairs_equal";
+    } else if (anyDifferent) {
+      result.status = CompareStatus::Different;
+      result.reason = "solid pair comparison failed: " + firstDiffReason;
+      result.decisionPath = "multi_solid_pair_different";
+    } else if (anyLikelyEqual) {
+      result.status = CompareStatus::LikelyEqual;
+      result.reason = "all solid pairs matched (with likely equal pairs)";
+      result.decisionPath = "multi_solid_pairs_likely_equal";
+    } else {
+      result.status = CompareStatus::Indeterminate;
+      result.reason = "solid pair comparison indeterminate";
+      result.decisionPath = "multi_solid_pairs_indeterminate";
+    }
+  }
+
+  if (config.exportStl && !outputDirectory.empty()) {
+    BRep_Builder builder;
+    TopoDS_Compound compRef;
+    builder.MakeCompound(compRef);
+    for (const auto &item : loadedRef.solids) {
+      if (!item.solid.IsNull()) builder.Add(compRef, item.solid);
+    }
+
+    TopoDS_Compound compCand;
+    builder.MakeCompound(compCand);
+    for (const auto &item : loadedCand.solids) {
+      if (!item.solid.IsNull()) builder.Add(compCand, item.solid);
+    }
+
+    const auto refStl = outputDirectory / "reference_base.stl";
+    if (ExportShapeStl(compRef, refStl)) {
+      result.artifacts.items.push_back({"reference_base", "reference_base.stl", "STL", true, ""});
+    }
+
+    const auto candStl = outputDirectory / "candidate_base.stl";
+    if (ExportShapeStl(compCand, candStl)) {
+      result.artifacts.items.push_back({"candidate_base", "candidate_base.stl", "STL", true, ""});
+    }
+
+    for (const auto &pairRes : pairResults) {
+      for (const auto &art : pairRes.artifacts.items) {
+        result.artifacts.items.push_back(art);
+      }
+    }
   }
 
   result.timings.totalMs = ElapsedMs(totalStart);
@@ -2015,9 +2323,45 @@ std::string ToJson(const CompareResult &result) {
   configJson["normalization_angular_tolerance_rad"] = result.thresholds.normalizationAngularToleranceRad;
   configJson["normalized_fast_path_enabled"] = result.thresholds.enableNormalizedFastPath;
   configJson["ambiguous_match_margin"] = result.thresholds.ambiguousMatchMargin;
+  configJson["allow_multiple_solids"] = result.thresholds.allowMultipleSolids;
+  configJson["multi_solid_policy"] = ToString(result.thresholds.multiSolidPolicy);
+  configJson["solid_match_volume_rel_tol"] = result.thresholds.solidMatchVolumeRelTol;
+  configJson["solid_match_centroid_tol_mm"] = result.thresholds.solidMatchCentroidTolMm;
+  configJson["solid_match_bounds_tol_mm"] = result.thresholds.solidMatchBoundsTolMm;
   root["configuration"] = configJson;
 
-  // 3. inputs
+  // 3. multi_solid
+  json multiNode = json::object();
+  multiNode["enabled"] = result.multiSolid.enabled;
+  multiNode["policy"] = ToString(result.multiSolid.policy);
+  multiNode["reference_solid_count"] = result.multiSolid.referenceSolidCount;
+  multiNode["candidate_solid_count"] = result.multiSolid.candidateSolidCount;
+  multiNode["matched_solid_count"] = result.multiSolid.matchedSolidCount;
+  multiNode["unmatched_reference_solid_count"] = result.multiSolid.unmatchedReferenceSolidCount;
+  multiNode["unmatched_candidate_solid_count"] = result.multiSolid.unmatchedCandidateSolidCount;
+
+  json matchesArray = json::array();
+  for (const auto &m : result.multiSolid.solidMatches) {
+    json item = json::object();
+    item["reference_solid_id"] = m.referenceSolidId;
+    item["candidate_solid_id"] = m.candidateSolidId;
+    item["reference_index"] = m.referenceIndex;
+    item["candidate_index"] = m.candidateIndex;
+    item["match_status"] = ToString(m.matchStatus);
+    item["status"] = ToString(m.status);
+    item["reason"] = m.reason;
+    item["volume_difference_mm3"] = m.volumeDifferenceMm3;
+    item["relative_volume_difference"] = m.relativeVolumeDifference;
+    item["centroid_distance_mm"] = m.centroidDistanceMm;
+    item["bounds_difference_mm"] = m.boundsDifferenceMm;
+    matchesArray.push_back(item);
+  }
+  multiNode["solid_matches"] = matchesArray;
+  multiNode["unmatched_reference_solid_ids"] = result.multiSolid.unmatchedReferenceSolidIds;
+  multiNode["unmatched_candidate_solid_ids"] = result.multiSolid.unmatchedCandidateSolidIds;
+  root["multi_solid"] = multiNode;
+
+  // 4. inputs
   auto MakeInputNode = [](const InputAudit &audit) {
     json node = json::object();
     node["path"] = audit.path;
@@ -2045,7 +2389,7 @@ std::string ToJson(const CompareResult &result) {
   inputs["candidate"] = MakeInputNode(result.candidate);
   root["inputs"] = inputs;
 
-  // 4. normalization
+  // 5. normalization
   auto MakeNormNode = [](const NormalizationAudit &audit) {
     json node = json::object();
     node["enabled"] = audit.enabled;
@@ -2138,7 +2482,7 @@ std::string ToJson(const CompareResult &result) {
   normJson["candidate"] = MakeNormNode(result.candidateNormalization);
   root["normalization"] = normJson;
 
-  // 5. matches
+  // 6. matches
   auto MakeMatchCollectionNode = [](const MatchCollection &col) {
     json node = json::object();
     json summary = json::object();
@@ -2190,7 +2534,6 @@ std::string ToJson(const CompareResult &result) {
   json matchesJson = json::object();
   matchesJson["faces"] = MakeMatchCollectionNode(result.normalizedTopology.faces);
   matchesJson["edges"] = MakeMatchCollectionNode(result.normalizedTopology.edges);
-  matchesJson["edge_audit_consistent"] = result.normalizedTopology.edgeAuditConsistent;
   matchesJson["edge_audit_errors"] = result.normalizedTopology.edgeAuditErrors;
   matchesJson["fast_path"] = {
       {"enabled", result.normalizedTopology.fastPath.enabled},
@@ -2402,8 +2745,19 @@ std::string ToHumanSummary(const CompareResult &result) {
      << "============================================================\n\n"
      << "INPUT\n"
      << "  Reference : " << refName << "\n"
-     << "  Candidate : " << candName << "\n\n"
-     << "NORMALIZATION\n"
+     << "  Candidate : " << candName << "\n\n";
+
+  if (result.multiSolid.enabled) {
+    ss << "MULTI-SOLID MATCH\n"
+       << "  Policy     : " << ToString(result.multiSolid.policy) << "\n"
+       << "  Reference  : " << result.multiSolid.referenceSolidCount << " solids\n"
+       << "  Candidate  : " << result.multiSolid.candidateSolidCount << " solids\n"
+       << "  Matched    : " << result.multiSolid.matchedSolidCount << "\n"
+       << "  Unmatched  : ref=" << result.multiSolid.unmatchedReferenceSolidCount
+       << ", cand=" << result.multiSolid.unmatchedCandidateSolidCount << "\n\n";
+  }
+
+  ss << "NORMALIZATION\n"
      << "  Pair usable    : " << (pairUsable ? "YES" : "NO") << "\n"
      << "  Reference face : " << result.reference.faceCount << " -> " << result.referenceNormalization.faceCountAfter << "\n"
      << "  Candidate face : " << result.candidate.faceCount << " -> " << result.candidateNormalization.faceCountAfter << "\n"
