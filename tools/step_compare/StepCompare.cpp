@@ -1818,6 +1818,7 @@ CompareResult CompareSolidPairInternal(const TopoDS_Solid &solidRef,
 
   result.centroidDistanceMm = PointDistance(result.reference.centroidMm, result.candidate.centroidMm);
   result.maximumBoundsDifferenceMm = ComputeBoundsDifference(result.reference.boundsMm, result.candidate.boundsMm);
+  result.globalMetricsExecuted = true;
 
   const bool volumePass = (result.absoluteInputVolumeDifferenceMm3 <= effectiveAbsVolTol) &&
                           (result.relativeInputVolumeDifference <= config.relativeVolumeTolerance);
@@ -2073,9 +2074,11 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     return result;
   }
 
-  const bool isMultiSolidMode = config.allowMultipleSolids || (loadedRef.solids.size() > 1 || loadedCand.solids.size() > 1);
+  const bool referenceIsMulti = loadedRef.solids.size() > 1;
+  const bool candidateIsMulti = loadedCand.solids.size() > 1;
+  const bool actuallyMultiSolid = referenceIsMulti || candidateIsMulti;
 
-  if (!isMultiSolidMode) {
+  if (!actuallyMultiSolid) {
     CompareResult pairRes = CompareSolidPairInternal(
         loadedRef.solids[0].solid, loadedRef.solids[0].audit,
         loadedCand.solids[0].solid, loadedCand.solids[0].audit,
@@ -2088,7 +2091,9 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     pairRes.timings.loadCandidateMs = result.timings.loadCandidateMs;
     pairRes.timings.totalMs = ElapsedMs(totalStart);
 
-    pairRes.multiSolid.enabled = config.allowMultipleSolids;
+    pairRes.multiSolid.allowed = config.allowMultipleSolids;
+    pairRes.multiSolid.executed = false;
+    pairRes.multiSolid.enabled = false;
     pairRes.multiSolid.policy = config.multiSolidPolicy;
     pairRes.multiSolid.referenceSolidCount = 1;
     pairRes.multiSolid.candidateSolidCount = 1;
@@ -2108,18 +2113,59 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     matchRec.relativeVolumeDifference = pairRes.relativeInputVolumeDifference;
     matchRec.centroidDistanceMm = pairRes.centroidDistanceMm;
     matchRec.boundsDifferenceMm = pairRes.maximumBoundsDifferenceMm;
+    matchRec.volumeEligible = true;
+    matchRec.centroidEligible = true;
+    matchRec.boundsEligible = true;
+    matchRec.volumeTolerance = config.solidMatchVolumeRelTol;
+    matchRec.centroidToleranceMm = config.solidMatchCentroidTolMm;
+    matchRec.boundsToleranceMm = config.solidMatchBoundsTolMm;
     pairRes.multiSolid.solidMatches.push_back(matchRec);
 
     return pairRes;
   }
 
+  if (!config.allowMultipleSolids || config.multiSolidPolicy == MultiSolidPolicy::Strict) {
+    result.status = CompareStatus::UnsupportedShape;
+    result.reason = "multiple 3D solids detected (reference_solids=" + std::to_string(loadedRef.solids.size()) +
+                    ", candidate_solids=" + std::to_string(loadedCand.solids.size()) +
+                    "); allowMultipleSolids=false or policy=strict";
+    result.decisionPath = "input_unsupported";
+    result.multiSolid.allowed = config.allowMultipleSolids;
+    result.multiSolid.executed = false;
+    result.multiSolid.enabled = false;
+    result.multiSolid.policy = config.multiSolidPolicy;
+    result.multiSolid.referenceSolidCount = static_cast<int>(loadedRef.solids.size());
+    result.multiSolid.candidateSolidCount = static_cast<int>(loadedCand.solids.size());
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  if (config.multiSolidPolicy == MultiSolidPolicy::CollectionOnly) {
+    result.status = CompareStatus::UnsupportedShape;
+    result.reason = "multi-solid collection policy is not implemented yet";
+    result.decisionPath = "input_unsupported_policy";
+    result.multiSolid.allowed = config.allowMultipleSolids;
+    result.multiSolid.executed = false;
+    result.multiSolid.enabled = false;
+    result.multiSolid.policy = config.multiSolidPolicy;
+    result.multiSolid.referenceSolidCount = static_cast<int>(loadedRef.solids.size());
+    result.multiSolid.candidateSolidCount = static_cast<int>(loadedCand.solids.size());
+    result.timings.totalMs = ElapsedMs(totalStart);
+    return result;
+  }
+
+  result.multiSolid.allowed = true;
+  result.multiSolid.executed = true;
   result.multiSolid.enabled = true;
   result.multiSolid.policy = config.multiSolidPolicy;
   result.multiSolid.referenceSolidCount = static_cast<int>(loadedRef.solids.size());
   result.multiSolid.candidateSolidCount = static_cast<int>(loadedCand.solids.size());
+  result.globalMetricsExecuted = false;
 
   const double diagScale = BoundsDiagonal(result.reference.boundsMm);
-  const double effectiveDistTol = std::max(config.solidMatchCentroidTolMm, std::max(config.distanceToleranceMm, 1.0e-4 * diagScale));
+  const double scaleTol = std::max(config.distanceToleranceMm, 1.0e-4 * diagScale);
+  const double effectiveCentroidTol = std::max(config.solidMatchCentroidTolMm, scaleTol);
+  const double effectiveBoundsTol = std::max(config.solidMatchBoundsTolMm, scaleTol);
 
   std::vector<bool> candMatched(loadedCand.solids.size(), false);
   int matchedCount = 0;
@@ -2134,6 +2180,16 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
     double bestCentDist = 0.0;
     double bestBoundsDiff = 0.0;
 
+    int bestRejectedIdx = -1;
+    double bestRejectedCost = 1.0e12;
+    double bestRejectedVolDiff = 0.0;
+    double bestRejectedRelVolDiff = 0.0;
+    double bestRejectedCentDist = 0.0;
+    double bestRejectedBoundsDiff = 0.0;
+    bool bestRejectedVolEligible = false;
+    bool bestRejectedCentEligible = false;
+    bool bestRejectedBoundsEligible = false;
+
     for (std::size_t j = 0; j < loadedCand.solids.size(); ++j) {
       if (candMatched[j]) continue;
       const auto &candItem = loadedCand.solids[j];
@@ -2143,8 +2199,14 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
       const double centDist = PointDistance(refItem.audit.centroidMm, candItem.audit.centroidMm);
       const double boundsDiff = ComputeBoundsDifference(refItem.audit.boundsMm, candItem.audit.boundsMm);
 
-      if (relVolDiff <= config.solidMatchVolumeRelTol && centDist <= effectiveDistTol && boundsDiff <= effectiveDistTol) {
-        const double cost = relVolDiff * 100.0 + centDist + boundsDiff;
+      const bool volEligible = relVolDiff <= config.solidMatchVolumeRelTol;
+      const bool centEligible = centDist <= effectiveCentroidTol;
+      const bool bdsEligible = boundsDiff <= effectiveBoundsTol;
+      const bool isEligible = volEligible && centEligible && bdsEligible;
+
+      const double cost = relVolDiff * 100.0 + centDist + boundsDiff;
+
+      if (isEligible) {
         if (cost < bestCost) {
           bestCost = cost;
           bestCandIdx = static_cast<int>(j);
@@ -2152,6 +2214,18 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
           bestRelVolDiff = relVolDiff;
           bestCentDist = centDist;
           bestBoundsDiff = boundsDiff;
+        }
+      } else {
+        if (cost < bestRejectedCost) {
+          bestRejectedCost = cost;
+          bestRejectedIdx = static_cast<int>(j);
+          bestRejectedVolDiff = volDiff;
+          bestRejectedRelVolDiff = relVolDiff;
+          bestRejectedCentDist = centDist;
+          bestRejectedBoundsDiff = boundsDiff;
+          bestRejectedVolEligible = volEligible;
+          bestRejectedCentEligible = centEligible;
+          bestRejectedBoundsEligible = bdsEligible;
         }
       }
     }
@@ -2179,16 +2253,45 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
       matchRec.relativeVolumeDifference = bestRelVolDiff;
       matchRec.centroidDistanceMm = bestCentDist;
       matchRec.boundsDifferenceMm = bestBoundsDiff;
+      matchRec.volumeEligible = true;
+      matchRec.centroidEligible = true;
+      matchRec.boundsEligible = true;
+      matchRec.volumeTolerance = config.solidMatchVolumeRelTol;
+      matchRec.centroidToleranceMm = effectiveCentroidTol;
+      matchRec.boundsToleranceMm = effectiveBoundsTol;
       result.multiSolid.solidMatches.push_back(matchRec);
     } else {
       SolidMatchRecord matchRec;
       matchRec.referenceSolidId = refItem.id;
-      matchRec.candidateSolidId = "";
       matchRec.referenceIndex = static_cast<int>(i);
-      matchRec.candidateIndex = -1;
       matchRec.matchStatus = MatchStatus::Unmatched;
       matchRec.status = CompareStatus::Different;
-      matchRec.reason = "unmatched reference solid";
+      matchRec.volumeTolerance = config.solidMatchVolumeRelTol;
+      matchRec.centroidToleranceMm = effectiveCentroidTol;
+      matchRec.boundsToleranceMm = effectiveBoundsTol;
+
+      if (bestRejectedIdx >= 0) {
+        matchRec.candidateSolidId = loadedCand.solids[bestRejectedIdx].id;
+        matchRec.candidateIndex = bestRejectedIdx;
+        matchRec.volumeDifferenceMm3 = bestRejectedVolDiff;
+        matchRec.relativeVolumeDifference = bestRejectedRelVolDiff;
+        matchRec.centroidDistanceMm = bestRejectedCentDist;
+        matchRec.boundsDifferenceMm = bestRejectedBoundsDiff;
+        matchRec.volumeEligible = bestRejectedVolEligible;
+        matchRec.centroidEligible = bestRejectedCentEligible;
+        matchRec.boundsEligible = bestRejectedBoundsEligible;
+
+        if (!bestRejectedVolEligible) matchRec.rejectReasons.push_back("VOLUME_THRESHOLD_EXCEEDED");
+        if (!bestRejectedCentEligible) matchRec.rejectReasons.push_back("CENTROID_THRESHOLD_EXCEEDED");
+        if (!bestRejectedBoundsEligible) matchRec.rejectReasons.push_back("BOUNDS_THRESHOLD_EXCEEDED");
+
+        matchRec.reason = "best candidate rejected due to threshold failure";
+      } else {
+        matchRec.candidateSolidId = "";
+        matchRec.candidateIndex = -1;
+        matchRec.reason = "no available candidate solid for matching";
+      }
+
       result.multiSolid.solidMatches.push_back(matchRec);
       result.multiSolid.unmatchedReferenceSolidIds.push_back(refItem.id);
     }
@@ -2205,6 +2308,9 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
       matchRec.matchStatus = MatchStatus::Unmatched;
       matchRec.status = CompareStatus::Different;
       matchRec.reason = "unmatched candidate solid";
+      matchRec.volumeTolerance = config.solidMatchVolumeRelTol;
+      matchRec.centroidToleranceMm = effectiveCentroidTol;
+      matchRec.boundsToleranceMm = effectiveBoundsTol;
       result.multiSolid.solidMatches.push_back(matchRec);
       result.multiSolid.unmatchedCandidateSolidIds.push_back(candItem.id);
     }
@@ -2332,6 +2438,8 @@ std::string ToJson(const CompareResult &result) {
 
   // 3. multi_solid
   json multiNode = json::object();
+  multiNode["allowed"] = result.multiSolid.allowed;
+  multiNode["executed"] = result.multiSolid.executed;
   multiNode["enabled"] = result.multiSolid.enabled;
   multiNode["policy"] = ToString(result.multiSolid.policy);
   multiNode["reference_solid_count"] = result.multiSolid.referenceSolidCount;
@@ -2354,12 +2462,22 @@ std::string ToJson(const CompareResult &result) {
     item["relative_volume_difference"] = m.relativeVolumeDifference;
     item["centroid_distance_mm"] = m.centroidDistanceMm;
     item["bounds_difference_mm"] = m.boundsDifferenceMm;
+    item["volume_eligible"] = m.volumeEligible;
+    item["centroid_eligible"] = m.centroidEligible;
+    item["bounds_eligible"] = m.boundsEligible;
+    item["volume_tolerance"] = m.volumeTolerance;
+    item["centroid_tolerance_mm"] = m.centroidToleranceMm;
+    item["bounds_tolerance_mm"] = m.boundsToleranceMm;
+    item["reject_reasons"] = m.rejectReasons;
     matchesArray.push_back(item);
   }
   multiNode["solid_matches"] = matchesArray;
   multiNode["unmatched_reference_solid_ids"] = result.multiSolid.unmatchedReferenceSolidIds;
   multiNode["unmatched_candidate_solid_ids"] = result.multiSolid.unmatchedCandidateSolidIds;
   root["multi_solid"] = multiNode;
+
+  // 4. inputs
+  root["global_metrics_executed"] = result.globalMetricsExecuted;
 
   // 4. inputs
   auto MakeInputNode = [](const InputAudit &audit) {
@@ -2739,22 +2857,36 @@ std::string ToHumanSummary(const CompareResult &result) {
                         (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol && result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
 
   const bool pairUsable = result.referenceNormalization.succeeded && result.candidateNormalization.succeeded;
+  const bool detectedMulti = (result.reference.solidCount > 1 || result.candidate.solidCount > 1);
 
   ss << "============================================================\n"
      << "STEP GEOMETRY COMPARISON\n"
      << "============================================================\n\n"
+     << "COMPARE MODE\n"
+     << "  Detected    : " << (detectedMulti ? "multi-solid" : "single-solid") << "\n"
+     << "  Allow multi : " << (result.thresholds.allowMultipleSolids ? "YES" : "NO") << "\n"
+     << "  Selected    : " << (result.multiSolid.executed ? ToString(result.multiSolid.policy) : (detectedMulti ? "strict" : "single-solid")) << "\n\n"
      << "INPUT\n"
      << "  Reference : " << refName << "\n"
      << "  Candidate : " << candName << "\n\n";
 
-  if (result.multiSolid.enabled) {
+  if (result.multiSolid.executed) {
     ss << "MULTI-SOLID MATCH\n"
        << "  Policy     : " << ToString(result.multiSolid.policy) << "\n"
        << "  Reference  : " << result.multiSolid.referenceSolidCount << " solids\n"
        << "  Candidate  : " << result.multiSolid.candidateSolidCount << " solids\n"
        << "  Matched    : " << result.multiSolid.matchedSolidCount << "\n"
        << "  Unmatched  : ref=" << result.multiSolid.unmatchedReferenceSolidCount
-       << ", cand=" << result.multiSolid.unmatchedCandidateSolidCount << "\n\n";
+       << ", cand=" << result.multiSolid.unmatchedCandidateSolidCount << "\n";
+    for (const auto &m : result.multiSolid.solidMatches) {
+      if (m.matchStatus == MatchStatus::Unmatched && !m.rejectReasons.empty()) {
+        ss << "  [Match Rejected] Ref: " << m.referenceSolidId << ", Best Cand: " << m.candidateSolidId << "\n"
+           << "    Vol rel diff: " << (m.relativeVolumeDifference * 100.0) << "% <= " << (m.volumeTolerance * 100.0) << "% [" << (m.volumeEligible ? "PASS" : "FAIL") << "]\n"
+           << "    Centroid dist: " << m.centroidDistanceMm << " mm <= " << m.centroidToleranceMm << " mm [" << (m.centroidEligible ? "PASS" : "FAIL") << "]\n"
+           << "    Bounds diff  : " << m.boundsDifferenceMm << " mm <= " << m.boundsToleranceMm << " mm [" << (m.boundsEligible ? "PASS" : "FAIL") << "]\n";
+      }
+    }
+    ss << "\n";
   }
 
   ss << "NORMALIZATION\n"
@@ -2770,17 +2902,32 @@ std::string ToHumanSummary(const CompareResult &result) {
      << "  Ambiguous : faces=" << result.normalizedTopology.faces.ambiguousCount << ", edges=" << result.normalizedTopology.edges.ambiguousCount << "\n"
      << "  Unmatched : faces=" << result.normalizedTopology.faces.unmatchedReferenceIds.size()
      << ", edges=" << result.normalizedTopology.edges.unmatchedReferenceIds.size() << "\n\n"
-     << "GLOBAL METRICS\n"
-     << "  Volume diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm³ ("
-     << (result.relativeInputVolumeDifference * 100.0) << "%) [" << (volPass ? "PASS" : "FAIL") << "]\n"
-     << "  Centroid dist : " << result.centroidDistanceMm << " mm [" << (centroidPass ? "PASS" : "FAIL") << "]\n"
-     << "  Bounds diff   : " << result.maximumBoundsDifferenceMm << " mm [" << (boundsPass ? "PASS" : "FAIL") << "]\n\n"
-     << "BOOLEAN\n"
-     << "  Executed   : " << (result.booleanExecuted ? "YES" : "NO") << "\n"
-     << "  A-B volume : " << result.missingMaterial.volumeMm3 << " mm³\n"
-     << "  B-A volume : " << result.addedMaterial.volumeMm3 << " mm³\n"
-     << "  Residual   : " << result.symmetricDifferenceVolumeMm3 << " mm³ [" << (boolPass ? "PASS" : "FAIL") << "]\n\n"
-     << "TIMING\n"
+     << "GLOBAL METRICS\n";
+
+  if (result.globalMetricsExecuted) {
+    ss << "  Volume diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm³ ("
+       << (result.relativeInputVolumeDifference * 100.0) << "%) [" << (volPass ? "PASS" : "FAIL") << "]\n"
+       << "  Centroid dist : " << result.centroidDistanceMm << " mm [" << (centroidPass ? "PASS" : "FAIL") << "]\n"
+       << "  Bounds diff   : " << result.maximumBoundsDifferenceMm << " mm [" << (boundsPass ? "PASS" : "FAIL") << "]\n\n";
+  } else {
+    ss << "  Volume diff   : N/A [NOT EXECUTED]\n"
+       << "  Centroid dist : N/A [NOT EXECUTED]\n"
+       << "  Bounds diff   : N/A [NOT EXECUTED]\n\n";
+  }
+
+  ss << "BOOLEAN\n"
+     << "  Executed   : " << (result.booleanExecuted ? "YES" : "NO") << "\n";
+  if (result.booleanExecuted) {
+    ss << "  A-B volume : " << result.missingMaterial.volumeMm3 << " mm³\n"
+       << "  B-A volume : " << result.addedMaterial.volumeMm3 << " mm³\n"
+       << "  Residual   : " << result.symmetricDifferenceVolumeMm3 << " mm³ [" << (boolPass ? "PASS" : "FAIL") << "]\n\n";
+  } else {
+    ss << "  A-B volume : N/A\n"
+       << "  B-A volume : N/A\n"
+       << "  Residual   : N/A\n\n";
+  }
+
+  ss << "TIMING\n"
      << "  Load       : " << (result.timings.loadReferenceMs + result.timings.loadCandidateMs) << " ms\n"
      << "  Normalize  : " << (result.timings.normalizeReferenceMs + result.timings.normalizeCandidateMs) << " ms\n"
      << "  Match      : " << result.normalizedTopology.elapsedMs << " ms\n"

@@ -99,7 +99,7 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
       if (polStr == L"strict") {
         options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::Strict;
       } else if (polStr == L"collection") {
-        options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::CollectionOnly;
+        throw std::invalid_argument("multi-solid collection policy is not implemented yet");
       } else if (polStr == L"pairwise") {
         options.config.multiSolidPolicy = cadstep::MultiSolidPolicy::Pairwise;
       } else {

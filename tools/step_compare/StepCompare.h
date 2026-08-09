@@ -82,10 +82,10 @@ struct CompareConfig {
   bool printHumanSummary = true;
 
   bool allowMultipleSolids = false;
-  MultiSolidPolicy multiSolidPolicy = MultiSolidPolicy::Strict;
-  double solidMatchVolumeRelTol = 0.001;
-  double solidMatchCentroidTolMm = 0.01;
-  double solidMatchBoundsTolMm = 0.01;
+  MultiSolidPolicy multiSolidPolicy = MultiSolidPolicy::Pairwise;
+  double solidMatchVolumeRelTol = 1e-4;
+  double solidMatchCentroidTolMm = 0.1;
+  double solidMatchBoundsTolMm = 0.1;
 };
 
 struct Point3 {
@@ -337,11 +337,21 @@ struct SolidMatchRecord {
   double relativeVolumeDifference = 0.0;
   double centroidDistanceMm = 0.0;
   double boundsDifferenceMm = 0.0;
+
+  bool volumeEligible = false;
+  bool centroidEligible = false;
+  bool boundsEligible = false;
+  double volumeTolerance = 0.0;
+  double centroidToleranceMm = 0.0;
+  double boundsToleranceMm = 0.0;
+  std::vector<std::string> rejectReasons;
 };
 
 struct MultiSolidAudit {
+  bool allowed = false;
+  bool executed = false;
   bool enabled = false;
-  MultiSolidPolicy policy = MultiSolidPolicy::Strict;
+  MultiSolidPolicy policy = MultiSolidPolicy::Pairwise;
   int referenceSolidCount = 0;
   int candidateSolidCount = 0;
   int matchedSolidCount = 0;
@@ -368,6 +378,7 @@ struct CompareResult {
   TimingAudit timings;
   BooleanConsistencyMetrics booleanConsistency;
   bool booleanExecuted = false;
+  bool globalMetricsExecuted = false;
   std::string decisionPath;
   double absoluteInputVolumeDifferenceMm3 = 0.0;
   double relativeInputVolumeDifference = 0.0;

@@ -499,6 +499,140 @@ void TestMultiSolidUnmatchedSolidsIsDifferent(const std::filesystem::path &root)
   Expect(result.multiSolid.unmatchedReferenceSolidCount == 1, "unmatched ref count must be 1");
 }
 
+void TestSingleSolidWithAllowMultiSolidUsesSingleSolidPath(const std::filesystem::path &root) {
+  const TopoDS_Shape box1 = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape box2 = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const auto reference = root / "single_allow_multi_ref.step";
+  const auto candidate = root / "single_allow_multi_cand.step";
+  WriteStep(box1, reference);
+  WriteStep(box2, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Equal, "1v1 single solid with AllowMultiSolid must be EQUAL");
+  Expect(result.multiSolid.allowed, "multiSolid.allowed must be true");
+  Expect(!result.multiSolid.executed, "multiSolid.executed must be false for 1v1 single-solid model");
+  Expect(result.globalMetricsExecuted, "globalMetricsExecuted must be true for single-solid path");
+}
+
+void TestMultiSolidWithoutAllowIsUnsupported(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(20.0, 20.0, 20.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  const auto reference = root / "multisolid_no_allow_ref.step";
+  const auto candidate = root / "multisolid_no_allow_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(compRef, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = false;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::UnsupportedShape, "multi-solid with AllowMultiSolid=false must be UNSUPPORTED_SHAPE");
+}
+
+void TestMultiSolidBoundsRejection(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  // Slightly scaled bounds
+  const TopoDS_Shape boxB = BRepPrimAPI_MakeBox(10.5, 9.5, 10.0).Shape();
+  const TopoDS_Shape boxDummy = Translated(BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxDummy);
+
+  TopoDS_Compound compCand;
+  builder.MakeCompound(compCand);
+  builder.Add(compCand, boxB);
+  builder.Add(compCand, boxDummy);
+
+  const auto reference = root / "multisolid_bounds_rej_ref.step";
+  const auto candidate = root / "multisolid_bounds_rej_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(compCand, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+  config.solidMatchBoundsTolMm = 0.01;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Different, "bounds difference in multi-solid mode must be DIFFERENT");
+}
+
+void TestIndependentBoundsTolerance(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape(), 100.0);
+  const TopoDS_Shape boxC = Translated(BRepPrimAPI_MakeBox(10.0, 10.0, 10.5).Shape(), 100.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  TopoDS_Compound compCand;
+  builder.MakeCompound(compCand);
+  builder.Add(compCand, boxA);
+  builder.Add(compCand, boxC);
+
+  const auto reference = root / "indep_bounds_ref.step";
+  const auto candidate = root / "indep_bounds_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(compCand, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+  config.solidMatchCentroidTolMm = 10.0;
+  config.solidMatchBoundsTolMm = 0.01;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(result.status == cadstep::CompareStatus::Different, "bounds difference exceeding solidMatchBoundsTolMm must fail matching");
+  Expect(result.multiSolid.solidMatches.size() >= 1, "matches recorded");
+  bool foundBoundsRejection = false;
+  for (const auto &m : result.multiSolid.solidMatches) {
+    for (const auto &reason : m.rejectReasons) {
+      if (reason == "BOUNDS_THRESHOLD_EXCEEDED") {
+        foundBoundsRejection = true;
+      }
+    }
+  }
+  Expect(foundBoundsRejection, "rejectReasons must contain BOUNDS_THRESHOLD_EXCEEDED");
+}
+
+void TestNotExecutedGlobalMetrics(const std::filesystem::path &root) {
+  const TopoDS_Shape boxA = BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape();
+  const TopoDS_Shape boxB = Translated(BRepPrimAPI_MakeBox(20.0, 20.0, 20.0).Shape(), 50.0);
+
+  BRep_Builder builder;
+  TopoDS_Compound compRef;
+  builder.MakeCompound(compRef);
+  builder.Add(compRef, boxA);
+  builder.Add(compRef, boxB);
+
+  const auto reference = root / "not_executed_ref.step";
+  const auto candidate = root / "not_executed_cand.step";
+  WriteStep(compRef, reference);
+  WriteStep(boxA, candidate);
+
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = true;
+
+  const auto result = cadstep::CompareStepFiles(reference, candidate, config);
+  Expect(!result.globalMetricsExecuted, "globalMetricsExecuted must be false when multi-solid pre-match fails");
+  const std::string summary = cadstep::ToHumanSummary(result);
+  Expect(summary.find("NOT EXECUTED") != std::string::npos, "Summary must contain NOT EXECUTED for unexecuted global metrics");
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -530,6 +664,11 @@ int main(int argc, char **argv) {
     TestMultiSolidBoxesEqual(root);
     TestMultiSolidBoxesPermutationEqual(root);
     TestMultiSolidUnmatchedSolidsIsDifferent(root);
+    TestSingleSolidWithAllowMultiSolidUsesSingleSolidPath(root);
+    TestMultiSolidWithoutAllowIsUnsupported(root);
+    TestMultiSolidBoundsRejection(root);
+    TestIndependentBoundsTolerance(root);
+    TestNotExecutedGlobalMetrics(root);
     std::cout << "cad_step_compare_tests: PASS\n";
     return 0;
   } catch (const std::exception &error) {
