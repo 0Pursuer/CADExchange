@@ -92,7 +92,7 @@ CliOptions ParseArguments(const std::vector<std::wstring> &arguments) {
       options.config.enableNormalizedFastPath = true;
     } else if (argument == L"--allow-multi-solid" || argument == L"--allow-multiple-solids") {
       options.config.allowMultipleSolids = true;
-    } else if (argument == L"--no-allow-multi-solid") {
+    } else if (argument == L"--no-allow-multi-solid" || argument == L"--no-allow-multiple-solids" || argument == L"--disallow-multi-solid") {
       options.config.allowMultipleSolids = false;
     } else if (argument == L"--multi-solid-policy") {
       const std::wstring polStr = requireValue();

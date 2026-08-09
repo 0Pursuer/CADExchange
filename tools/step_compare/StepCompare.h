@@ -81,7 +81,7 @@ struct CompareConfig {
 
   bool printHumanSummary = true;
 
-  bool allowMultipleSolids = false;
+  bool allowMultipleSolids = true;
   MultiSolidPolicy multiSolidPolicy = MultiSolidPolicy::Pairwise;
   double solidMatchVolumeRelTol = 1e-4;
   double solidMatchCentroidTolMm = 0.1;

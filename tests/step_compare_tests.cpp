@@ -302,8 +302,10 @@ void TestMultipleSolidsAreUnsupported(const std::filesystem::path &root) {
   WriteStep(compound, reference);
   WriteStep(BRepPrimAPI_MakeBox(10.0, 10.0, 10.0).Shape(), candidate);
 
+  cadstep::CompareConfig config;
+  config.allowMultipleSolids = false;
   const auto result =
-      cadstep::CompareStepFiles(reference, candidate, cadstep::CompareConfig{});
+      cadstep::CompareStepFiles(reference, candidate, config);
   Expect(result.status == cadstep::CompareStatus::UnsupportedShape,
          "multiple solids must be UNSUPPORTED_SHAPE");
   Expect(cadstep::ExitCode(result.status) == 2,
