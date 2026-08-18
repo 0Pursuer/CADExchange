@@ -87,7 +87,9 @@ public:
                       LevelStr(level), f, line, msgbuf);
 
         std::lock_guard<std::mutex> lk(m_mutex);
-        std::fputs(linebuf, level >= LogLevel::Error ? stderr : stdout);
+        FILE* stream = level >= LogLevel::Error ? stderr : stdout;
+        std::fputs(linebuf, stream);
+        std::fflush(stream);
         if (m_file.is_open()) {
             m_file << linebuf;
             m_file.flush();
