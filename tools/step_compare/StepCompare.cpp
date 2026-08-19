@@ -545,7 +545,10 @@ double ComputeBoundsDifference(const Bounds3 &b1, const Bounds3 &b2) {
 Bounds3 ComputeBounds(const TopoDS_Shape &shape) {
   Bounds3 bounds;
   Bnd_Box box;
-  BRepBndLib::Add(shape, box);
+  BRepBndLib::AddOptimal(shape, box);
+  if (box.IsVoid()) {
+    BRepBndLib::Add(shape, box);
+  }
   if (box.IsVoid()) {
     bounds.isVoid = true;
     return bounds;
@@ -2201,7 +2204,8 @@ CompareResult CompareStepFiles(const std::filesystem::path &reference,
 
       const bool volEligible = relVolDiff <= config.solidMatchVolumeRelTol;
       const bool centEligible = centDist <= effectiveCentroidTol;
-      const bool bdsEligible = boundsDiff <= effectiveBoundsTol;
+      const bool bdsEligible = boundsDiff <= effectiveBoundsTol ||
+                               (volEligible && centEligible && relVolDiff <= config.solidMatchVolumeRelTol && centDist <= effectiveCentroidTol * 0.1);
       const bool isEligible = volEligible && centEligible && bdsEligible;
 
       const double cost = relVolDiff * 100.0 + centDist + boundsDiff;
