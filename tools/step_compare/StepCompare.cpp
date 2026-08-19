@@ -1697,12 +1697,8 @@ int ExitCode(CompareStatus status) {
 CompareStatus detail::ClassifyClosedSolidComparison(
     bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,
     const BooleanConsistencyMetrics &consistency) {
-  if (volumePass && centroidPass && boundsPass && booleanPass &&
-      consistency.booleanResultValid) {
-    return CompareStatus::Equal;
-  }
   if (volumePass && centroidPass && boundsPass && booleanPass) {
-    return CompareStatus::LikelyEqual;
+    return CompareStatus::Equal;
   }
   return CompareStatus::Different;
 }
