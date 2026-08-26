@@ -219,6 +219,7 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("LINE", CSketchSeg::SegType::LINE)
       .value("CIRCLE", CSketchSeg::SegType::CIRCLE)
       .value("ARC", CSketchSeg::SegType::ARC)
+      .value("ELLIPSE", CSketchSeg::SegType::ELLIPSE)
       .value("SPLINE", CSketchSeg::SegType::SPLINE)
       .value("POINT", CSketchSeg::SegType::POINT);
 

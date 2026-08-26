@@ -202,7 +202,7 @@ struct CRefPoint : public CRefFeature {
  * @brief 草图元素基类。
  */
 struct CSketchSeg {
-  enum class SegType { LINE, CIRCLE, ARC, SPLINE, POINT } type;
+  enum class SegType { LINE, CIRCLE, ARC, ELLIPSE, SPLINE, POINT } type;
   std::string localID;         ///< 元素局部ID
   bool isConstruction = false; ///< 是否为参考几何
   virtual ~CSketchSeg() = default;
@@ -227,6 +227,17 @@ struct CSketchArc : public CSketchSeg {
   double endAngle = 0.0;
   bool isClockwise = false;
   CSketchArc() { type = SegType::ARC; }
+};
+
+struct CSketchEllipse : public CSketchSeg {
+  CPoint3D center;
+  double majorRadius = 0.0;
+  double minorRadius = 0.0;
+  double rotation = 0.0;    ///< 长轴相对局部X轴的旋转角 (弧度)
+  double startAngle = 0.0;  ///< 起始参数角 (弧度)
+  double endAngle = 0.0;    ///< 终止参数角 (弧度)
+  bool isClockwise = false;
+  CSketchEllipse() { type = SegType::ELLIPSE; }
 };
 
 struct CSketchPoint : public CSketchSeg {

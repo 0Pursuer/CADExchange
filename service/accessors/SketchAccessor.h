@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "../../core/TypeAdapters.h"
 #include "AccessorMacros.h"
 #include "FeatureAccessorBase.h"
@@ -165,6 +165,44 @@ public:
     outStart = s;
     outEnd = e;
     outRadius = r;
+    outClockWise = cw;
+    return true;
+  }
+
+  // --- 椭圆 / 椭圆弧特有方法 ---
+  bool GetEllipseParams(CPoint3D &outCenter, double &outMajorRadius,
+                        double &outMinorRadius, double &outRotation,
+                        double &outStart, double &outEnd,
+                        bool &outClockWise) const {
+    if (auto ellipse = std::dynamic_pointer_cast<const CSketchEllipse>(m_seg)) {
+      outCenter = ellipse->center;
+      outMajorRadius = ellipse->majorRadius;
+      outMinorRadius = ellipse->minorRadius;
+      outRotation = ellipse->rotation;
+      outStart = ellipse->startAngle;
+      outEnd = ellipse->endAngle;
+      outClockWise = ellipse->isClockwise;
+      return true;
+    }
+    return false;
+  }
+
+  template <typename PointT>
+  bool GetEllipseParams(PointT &outCenter, double &outMajorRadius,
+                        double &outMinorRadius, double &outRotation,
+                        double &outStart, double &outEnd,
+                        bool &outClockWise) const {
+    CPoint3D c;
+    double a, b, rot, s, e;
+    bool cw;
+    if (!GetEllipseParams(c, a, b, rot, s, e, cw))
+      return false;
+    outCenter = PointWriter<PointT>::Convert(c);
+    outMajorRadius = a;
+    outMinorRadius = b;
+    outRotation = rot;
+    outStart = s;
+    outEnd = e;
     outClockWise = cw;
     return true;
   }

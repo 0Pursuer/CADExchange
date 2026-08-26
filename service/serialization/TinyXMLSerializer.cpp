@@ -226,6 +226,8 @@ std::string SegTypeToString(CSketchSeg::SegType type) {
     return "Circle";
   case CSketchSeg::SegType::ARC:
     return "Arc";
+  case CSketchSeg::SegType::ELLIPSE:
+    return "Ellipse";
   case CSketchSeg::SegType::SPLINE:
     return "Spline";
   case CSketchSeg::SegType::POINT:
@@ -244,6 +246,8 @@ CSketchSeg::SegType SegTypeFromString(const char *text) {
     return CSketchSeg::SegType::CIRCLE;
   if (value == "arc")
     return CSketchSeg::SegType::ARC;
+  if (value == "ellipse")
+    return CSketchSeg::SegType::ELLIPSE;
   if (value == "spline")
     return CSketchSeg::SegType::SPLINE;
   if (value == "point")
@@ -1358,6 +1362,14 @@ void TinyXMLSerializer::SaveSketchSeg(XMLDocument &doc, XMLElement *parent,
     segElem->SetAttribute("StartAngle", arc->startAngle);
     segElem->SetAttribute("EndAngle", arc->endAngle);
     segElem->SetAttribute("Clockwise", arc->isClockwise);
+  } else if (auto ellipse = std::dynamic_pointer_cast<CSketchEllipse>(seg)) {
+    SavePoint3D(segElem, "Center", ellipse->center);
+    segElem->SetAttribute("MajorRadius", ellipse->majorRadius);
+    segElem->SetAttribute("MinorRadius", ellipse->minorRadius);
+    segElem->SetAttribute("Rotation", ellipse->rotation);
+    segElem->SetAttribute("StartAngle", ellipse->startAngle);
+    segElem->SetAttribute("EndAngle", ellipse->endAngle);
+    segElem->SetAttribute("Clockwise", ellipse->isClockwise);
   } else if (auto pt = std::dynamic_pointer_cast<CSketchPoint>(seg)) {
     SavePoint3D(segElem, "Position", pt->position);
   }
@@ -2228,6 +2240,18 @@ TinyXMLSerializer::LoadSketchSeg(XMLElement *element) {
     element->QueryBoolAttribute("Clockwise", &clockwise);
     arc->isClockwise = clockwise;
     seg = arc;
+  } else if (type == "Ellipse") {
+    auto ellipse = std::make_shared<CSketchEllipse>();
+    ellipse->center = LoadPoint3D(element, "Center");
+    element->QueryDoubleAttribute("MajorRadius", &ellipse->majorRadius);
+    element->QueryDoubleAttribute("MinorRadius", &ellipse->minorRadius);
+    element->QueryDoubleAttribute("Rotation", &ellipse->rotation);
+    element->QueryDoubleAttribute("StartAngle", &ellipse->startAngle);
+    element->QueryDoubleAttribute("EndAngle", &ellipse->endAngle);
+    bool clockwise = false;
+    element->QueryBoolAttribute("Clockwise", &clockwise);
+    ellipse->isClockwise = clockwise;
+    seg = ellipse;
   } else if (type == "Point") {
     auto pt = std::make_shared<CSketchPoint>();
     pt->position = LoadPoint3D(element, "Position");

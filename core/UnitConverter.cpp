@@ -122,6 +122,12 @@ void ScaleSketch(CSketch &sketch, double factor, UnitScaleContext &ctx) {
       arc->radius *= factor;
       continue;
     }
+    if (auto ellipse = std::dynamic_pointer_cast<CSketchEllipse>(seg)) {
+      ScalePoint(ellipse->center, factor);
+      ellipse->majorRadius *= factor;
+      ellipse->minorRadius *= factor;
+      continue;
+    }
     if (auto point = std::dynamic_pointer_cast<CSketchPoint>(seg)) {
       ScalePoint(point->position, factor);
       continue;

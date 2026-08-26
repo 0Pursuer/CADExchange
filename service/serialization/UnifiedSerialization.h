@@ -177,6 +177,20 @@ template <class Archive> void serialize(Archive &ar, CSketchArc &arc) {
 }
 
 /**
+ * @brief 序列化椭圆 / 椭圆弧。
+ */
+template <class Archive> void serialize(Archive &ar, CSketchEllipse &ellipse) {
+  ar(cereal::base_class<CSketchSeg>(&ellipse),
+     cereal::make_nvp("Center", ellipse.center),
+     cereal::make_nvp("MajorRadius", ellipse.majorRadius),
+     cereal::make_nvp("MinorRadius", ellipse.minorRadius),
+     cereal::make_nvp("Rotation", ellipse.rotation),
+     cereal::make_nvp("StartAngle", ellipse.startAngle),
+     cereal::make_nvp("EndAngle", ellipse.endAngle),
+     cereal::make_nvp("Clockwise", ellipse.isClockwise));
+}
+
+/**
  * @brief 序列化点草图段，记录位置。
  */
 template <class Archive> void serialize(Archive &ar, CSketchPoint &point) {

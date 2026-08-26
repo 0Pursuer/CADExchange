@@ -116,6 +116,31 @@ public:
   }
 
   /**
+   * @brief 添加椭圆 / 椭圆弧。
+   */
+  template <typename PointT>
+  std::string AddEllipse(const PointT &center, double majorRadius, double minorRadius,
+                         double rotation = 0.0, double startAngle = 0.0,
+                         double endAngle = 6.28318530717958647692,
+                         bool isClockwise = false, bool isConstruction = false) {
+    if (majorRadius <= 0 || minorRadius <= 0) {
+      throw std::invalid_argument("radii must be positive");
+    }
+    auto ellipse = std::make_shared<CSketchEllipse>();
+    ellipse->center = PointAdapter<PointT>::Convert(center);
+    ellipse->majorRadius = majorRadius;
+    ellipse->minorRadius = minorRadius;
+    ellipse->rotation = rotation;
+    ellipse->startAngle = startAngle;
+    ellipse->endAngle = endAngle;
+    ellipse->isClockwise = isClockwise;
+    ellipse->isConstruction = isConstruction;
+    ellipse->localID = GenerateLocalID("E");
+    m_feature->segments.push_back(ellipse);
+    return ellipse->localID;
+  }
+
+  /**
    * @brief 添加点。
    */
   template <typename PointT> std::string AddPoint(const PointT &pos) {
