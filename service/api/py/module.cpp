@@ -87,6 +87,93 @@ py::dict GetArcData(const SketchSegmentAccessor &segment) {
   return result;
 }
 
+py::dict GetEllipseData(const SketchSegmentAccessor &segment) {
+  CPoint3D center;
+  double majorRadius = 0.0;
+  double minorRadius = 0.0;
+  double rotation = 0.0;
+  double startAngle = 0.0;
+  double endAngle = 0.0;
+  bool clockwise = false;
+  py::dict result;
+  if (!segment.GetEllipseParams(center, majorRadius, minorRadius, rotation,
+                                startAngle, endAngle, clockwise)) {
+    return result;
+  }
+  result["center"] = PointToVector(center);
+  result["major_radius"] = majorRadius;
+  result["minor_radius"] = minorRadius;
+  result["rotation"] = rotation;
+  result["start_angle"] = startAngle;
+  result["end_angle"] = endAngle;
+  result["clockwise"] = clockwise;
+  return result;
+}
+
+std::vector<double> GetFaceSamplePointOrEmpty(const ReferenceAccessor &ref) {
+  CPoint3D p;
+  if (!ref.GetFaceCentroid(p)) {
+    return {};
+  }
+  return PointToVector(p);
+}
+
+std::vector<double> GetFaceNormalOrEmpty(const ReferenceAccessor &ref) {
+  CVector3D n;
+  if (!ref.GetFaceNormal(n)) {
+    return {};
+  }
+  return VectorToVector(n);
+}
+
+std::vector<double> GetPlaneOriginOrEmpty(const ReferenceAccessor &ref) {
+  CPoint3D p;
+  if (!ref.GetPlaneOrigin(p)) {
+    return {};
+  }
+  return PointToVector(p);
+}
+
+std::vector<double> GetPlaneNormalOrEmpty(const ReferenceAccessor &ref) {
+  CVector3D n;
+  if (!ref.GetPlaneNormal(n)) {
+    return {};
+  }
+  return VectorToVector(n);
+}
+
+std::vector<double> GetVertexPositionOrEmpty(const ReferenceAccessor &ref) {
+  CPoint3D p;
+  if (!ref.GetVertexPosition(p)) {
+    return {};
+  }
+  return PointToVector(p);
+}
+
+std::vector<double> GetPointPositionOrEmpty(const ReferenceAccessor &ref) {
+  CPoint3D p;
+  if (!ref.GetPointPosition(p)) {
+    return {};
+  }
+  return PointToVector(p);
+}
+
+std::vector<double> GetRefAxisOriginOrEmpty(const ReferenceAccessor &ref) {
+  CPoint3D p;
+  if (!ref.GetAxisOrigin(p)) {
+    return {};
+  }
+  return PointToVector(p);
+}
+
+std::vector<double> GetRefAxisDirectionOrEmpty(const ReferenceAccessor &ref) {
+  CVector3D d;
+  if (!ref.GetAxisDirection(d)) {
+    return {};
+  }
+  return VectorToVector(d);
+}
+
 std::vector<double> GetPointCoord(const SketchSegmentAccessor &segment) {
   CPoint3D point;
   if (!segment.GetPointCoord(point)) {
@@ -172,6 +259,15 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("SPCURVE", CGeoCurveType::SPCURVE)
       .value("CONSTPARAM", CGeoCurveType::CONSTPARAM)
       .value("TRIMMED", CGeoCurveType::TRIMMED);
+
+  py::enum_<CGeoSurfaceType>(m, "CGeoSurfaceType")
+      .value("UNKNOWN", CGeoSurfaceType::UNKNOWN)
+      .value("PLANE", CGeoSurfaceType::PLANE)
+      .value("CYLINDER", CGeoSurfaceType::CYLINDER)
+      .value("CONE", CGeoSurfaceType::CONE)
+      .value("SPHERE", CGeoSurfaceType::SPHERE)
+      .value("TORUS", CGeoSurfaceType::TORUS)
+      .value("BSURFACE", CGeoSurfaceType::BSURFACE);
 
   py::enum_<ChamferMode>(m, "ChamferMode")
       .value("UNKNOWN", ChamferMode::UNKNOWN)
@@ -263,8 +359,17 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def_property_readonly("sketch_segment_local_id",
                              &ReferenceAccessor::GetSketchSegmentLocalID)
       .def_property_readonly("is_standard", &ReferenceAccessor::IsStandard)
+      .def_property_readonly("face_surface_type", &ReferenceAccessor::GetFaceSurfaceType)
       .def("point_hint", &GetReferencePointOrEmpty)
-      .def("direction_hint", &GetReferenceDirectionOrEmpty);
+      .def("direction_hint", &GetReferenceDirectionOrEmpty)
+      .def("face_sample_point", &GetFaceSamplePointOrEmpty)
+      .def("face_normal", &GetFaceNormalOrEmpty)
+      .def("plane_origin", &GetPlaneOriginOrEmpty)
+      .def("plane_normal", &GetPlaneNormalOrEmpty)
+      .def("vertex_position", &GetVertexPositionOrEmpty)
+      .def("point_position", &GetPointPositionOrEmpty)
+      .def("axis_origin", &GetRefAxisOriginOrEmpty)
+      .def("axis_direction", &GetRefAxisDirectionOrEmpty);
 
   py::class_<SketchConstraintAccessor>(m, "SketchConstraintAccessor")
       .def("is_valid", &SketchConstraintAccessor::IsValid)
@@ -290,6 +395,7 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("circle_center", &GetCircleCenter)
       .def("circle_radius", &GetCircleRadius)
       .def("arc_data", &GetArcData)
+      .def("ellipse_data", &GetEllipseData)
       .def("point_coord", &GetPointCoord);
 
   py::class_<FeatureAccessorBase>(m, "FeatureAccessorBase")
