@@ -4,8 +4,10 @@
 #include "../../accessors/DatumPlaneAccessor.h"
 #include "../../accessors/ExtrudeAccessor.h"
 #include "../../accessors/FeatureAccessorBase.h"
+#include "../../accessors/FilletAccessor.h"
 #include "../../accessors/ModelAccessor.h"
 #include "../../accessors/ReferenceAccessor.h"
+#include "../../accessors/RibAccessor.h"
 #include "../../accessors/RevolveAccessor.h"
 #include "../../accessors/SketchAccessor.h"
 #include "../../serialization/CADSerializer.h"
@@ -122,6 +124,24 @@ GetReferenceDirectionOrEmpty(const Accessor::ReferenceAccessor &ref) {
     return VectorToVector(dir);
   }
   return {};
+}
+
+inline std::vector<double>
+GetReferenceEdgeStartPointOrEmpty(const Accessor::ReferenceAccessor &ref) {
+  CPoint3D point;
+  if (!ref.GetEdgeStartPoint(point)) {
+    return {};
+  }
+  return PointToVector(point);
+}
+
+inline std::vector<double>
+GetReferenceEdgeEndPointOrEmpty(const Accessor::ReferenceAccessor &ref) {
+  CPoint3D point;
+  if (!ref.GetEdgeEndPoint(point)) {
+    return {};
+  }
+  return PointToVector(point);
 }
 
 } // namespace CADExchange::PythonApi

@@ -33,6 +33,26 @@ DatumPlaneAccessor FeatureAsDatumPlane(const FeatureAccessorBase &feature) {
   return DatumPlaneAccessor(feature.GetRaw());
 }
 
+RibAccessor FeatureAsRib(const FeatureAccessorBase &feature) {
+  return RibAccessor(feature.GetRaw());
+}
+
+FilletAccessor FeatureAsFillet(const FeatureAccessorBase &feature) {
+  return FilletAccessor(feature.GetRaw());
+}
+
+int GetFilletReferenceCount(const FilletAccessor &fillet) {
+  return static_cast<int>(fillet.GetReferences().size());
+}
+
+ReferenceAccessor GetFilletReference(const FilletAccessor &fillet, int index) {
+  const auto &references = fillet.GetReferences();
+  if (index < 0 || index >= static_cast<int>(references.size())) {
+    return ReferenceAccessor(nullptr);
+  }
+  return ReferenceAccessor(references[static_cast<size_t>(index)]);
+}
+
 std::vector<double> GetLineStart(const SketchSegmentAccessor &segment) {
   CPoint3D start;
   CPoint3D end;
@@ -194,6 +214,20 @@ std::vector<double> GetDirectionVector(const ExtrudeAccessor &extrude) {
   return VectorToVector(extrude.GetDirection());
 }
 
+std::vector<double> GetRibThicknessDirection(const RibAccessor &rib) {
+  const auto option = rib.GetThicknessOption();
+  return option.direction.has_value() ? VectorToVector(*option.direction)
+                                      : std::vector<double>{};
+}
+
+std::vector<double> GetRibMaterialDirection(const RibAccessor &rib) {
+  return VectorToVector(rib.GetMaterialOption().direction);
+}
+
+std::vector<double> GetRibMaterialReferencePoint(const RibAccessor &rib) {
+  return PointToVector(rib.GetMaterialOption().referencePoint);
+}
+
 py::dict GetPlaneConstraintData(const PlaneConstraint &constraint) {
   py::dict result;
   result["type"] = constraint.type;
@@ -276,6 +310,32 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("TWO_OFFSETS", ChamferMode::TWO_OFFSETS)
       .value("DISTANCE_ANGLE", ChamferMode::DISTANCE_ANGLE)
       .value("VERTEX_3DISTANCES", ChamferMode::VERTEX_3DISTANCES);
+
+  py::enum_<FilletMode>(m, "FilletMode")
+      .value("UNKNOWN", FilletMode::UNKNOWN)
+      .value("CONSTANT_RADIUS", FilletMode::CONSTANT_RADIUS)
+      .value("VARIABLE_RADIUS", FilletMode::VARIABLE_RADIUS)
+      .value("FACE_FILLET", FilletMode::FACE_FILLET)
+      .value("FULL_ROUND", FilletMode::FULL_ROUND)
+      .value("CHORDAL", FilletMode::CHORDAL);
+
+  py::enum_<FilletCrossSection>(m, "FilletCrossSection")
+      .value("UNKNOWN", FilletCrossSection::UNKNOWN)
+      .value("CIRCULAR", FilletCrossSection::CIRCULAR)
+      .value("CONIC", FilletCrossSection::CONIC)
+      .value("CURVATURE_CONTINUOUS", FilletCrossSection::CURVATURE_CONTINUOUS);
+
+  py::enum_<FilletReferenceMode>(m, "FilletReferenceMode")
+      .value("UNKNOWN", FilletReferenceMode::UNKNOWN)
+      .value("EDGE_CHAIN", FilletReferenceMode::EDGE_CHAIN)
+      .value("FACE_FACE", FilletReferenceMode::FACE_FACE)
+      .value("FULL_ROUND_THREE_FACES", FilletReferenceMode::FULL_ROUND_THREE_FACES);
+
+  py::enum_<FilletDriveType>(m, "FilletDriveType")
+      .value("UNKNOWN", FilletDriveType::UNKNOWN)
+      .value("RADIUS", FilletDriveType::RADIUS)
+      .value("SINGLE_DISTANCE", FilletDriveType::SINGLE_DISTANCE)
+      .value("TWO_DISTANCES", FilletDriveType::TWO_DISTANCES);
 
   py::enum_<PlaneMethod>(m, "PlaneMethod")
       .value("UNKNOWN", PlaneMethod::UNKNOWN)
@@ -362,6 +422,9 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def_property_readonly("face_surface_type", &ReferenceAccessor::GetFaceSurfaceType)
       .def("point_hint", &GetReferencePointOrEmpty)
       .def("direction_hint", &GetReferenceDirectionOrEmpty)
+      .def("edge_start_point", &GetReferenceEdgeStartPointOrEmpty)
+      .def("edge_end_point", &GetReferenceEdgeEndPointOrEmpty)
+      .def_property_readonly("edge_curve_type", &ReferenceAccessor::GetEdgeCurveType)
       .def("face_sample_point", &GetFaceSamplePointOrEmpty)
       .def("face_normal", &GetFaceNormalOrEmpty)
       .def("plane_origin", &GetPlaneOriginOrEmpty)
@@ -408,7 +471,9 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("as_extrude", &FeatureAsExtrude)
       .def("as_revolve", &FeatureAsRevolve)
       .def("as_chamfer", &FeatureAsChamfer)
-      .def("as_datum_plane", &FeatureAsDatumPlane);
+      .def("as_datum_plane", &FeatureAsDatumPlane)
+      .def("as_fillet", &FeatureAsFillet)
+      .def("as_rib", &FeatureAsRib);
 
   py::class_<ModelAccessor>(m, "ModelAccessor")
       .def("is_valid", &ModelAccessor::IsValid)
@@ -464,7 +529,33 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def_property_readonly("is_draft_outward", &ExtrudeAccessor::IsDraftOutward)
       .def_property_readonly("has_thin_wall", &ExtrudeAccessor::HasThinWall)
       .def_property_readonly("thin_wall_thickness",
-                             &ExtrudeAccessor::GetThinWallThickness);
+                             &ExtrudeAccessor::GetThinWallThickness)
+      .def_property_readonly("thin_wall_one_sided",
+                             &ExtrudeAccessor::IsThinWallOneSided)
+      .def_property_readonly("thin_wall_outward",
+                             &ExtrudeAccessor::IsThinWallOutward)
+      .def_property_readonly("thin_wall_covered",
+                             &ExtrudeAccessor::IsThinWallCovered)
+      .def_property_readonly("thin_wall_start_offset",
+                             &ExtrudeAccessor::GetThinWallStartOffset)
+      .def_property_readonly("thin_wall_end_offset",
+                             &ExtrudeAccessor::GetThinWallEndOffset);
+
+  py::class_<RibAccessor>(m, "RibAccessor")
+      .def("is_valid", &RibAccessor::IsValid)
+      .def_property_readonly("section_sketch_id",
+                             &RibAccessor::GetSectionSketchID)
+      .def_property_readonly("thickness_symmetric", [](const RibAccessor &a) {
+        return a.GetThicknessOption().symmetric;
+      })
+      .def_property_readonly("thickness", [](const RibAccessor &a) {
+        return a.GetThicknessOption().thickness;
+      })
+      .def_property_readonly("thickness_direction",
+                             &GetRibThicknessDirection)
+      .def_property_readonly("material_direction", &GetRibMaterialDirection)
+      .def_property_readonly("material_reference_point",
+                             &GetRibMaterialReferencePoint);
 
   py::class_<RevolveAccessor>(m, "RevolveAccessor")
       .def("is_valid", &RevolveAccessor::IsValid)
@@ -518,6 +609,21 @@ PYBIND11_MODULE(cadexchange_py, m) {
       })
       .def_property_readonly("reference_count", &ChamferAccessor::GetReferenceCount)
       .def("get_reference", &ChamferAccessor::GetReference);
+
+  py::class_<FilletAccessor>(m, "FilletAccessor")
+      .def("is_valid", &FilletAccessor::IsValid)
+      .def_property_readonly("mode", &FilletAccessor::GetMode)
+      .def_property_readonly("drive_type", &FilletAccessor::GetDriveType)
+      .def_property_readonly("cross_section", &FilletAccessor::GetCrossSection)
+      .def_property_readonly("reference_mode", &FilletAccessor::GetReferenceMode)
+      .def_property_readonly("has_primary_value", &FilletAccessor::HasPrimaryValue)
+      .def_property_readonly("primary_value", &FilletAccessor::GetPrimaryValue)
+      .def_property_readonly("has_second_value", &FilletAccessor::HasSecondValue)
+      .def_property_readonly("second_value", &FilletAccessor::GetSecondValue)
+      .def_property_readonly("tangent_propagation",
+                             &FilletAccessor::HasTangentPropagation)
+      .def_property_readonly("reference_count", &GetFilletReferenceCount)
+      .def("get_reference", &GetFilletReference);
 
   py::class_<DatumPlaneAccessor>(m, "DatumPlaneAccessor")
       .def("is_valid", &DatumPlaneAccessor::IsValid)
