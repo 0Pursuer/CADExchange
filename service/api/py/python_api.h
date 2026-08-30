@@ -10,6 +10,7 @@
 #include "../../accessors/RibAccessor.h"
 #include "../../accessors/RevolveAccessor.h"
 #include "../../accessors/SketchAccessor.h"
+#include "../../accessors/SweepAccessor.h"
 #include "../../serialization/CADSerializer.h"
 
 #include <stdexcept>

@@ -25,6 +25,10 @@ RevolveAccessor FeatureAsRevolve(const FeatureAccessorBase &feature) {
   return RevolveAccessor(feature.GetRaw());
 }
 
+SweepAccessor FeatureAsSweep(const FeatureAccessorBase &feature) {
+  return SweepAccessor(feature.GetRaw());
+}
+
 ChamferAccessor FeatureAsChamfer(const FeatureAccessorBase &feature) {
   return ChamferAccessor(feature.GetRaw());
 }
@@ -214,6 +218,64 @@ std::vector<double> GetDirectionVector(const ExtrudeAccessor &extrude) {
   return VectorToVector(extrude.GetDirection());
 }
 
+std::vector<double> GetSweepPathStartPoint(const SweepAccessor &sweep) {
+  return sweep.HasPathStartPoint() ? PointToVector(sweep.GetPathStartPoint())
+                                   : std::vector<double>{};
+}
+
+std::vector<double> GetSweepPathEndPoint(const SweepAccessor &sweep) {
+  return sweep.HasPathEndPoint() ? PointToVector(sweep.GetPathEndPoint())
+                                 : std::vector<double>{};
+}
+
+std::vector<double> GetSweepEmbeddedOrigin(const SweepAccessor &sweep) {
+  const auto *sketch = sweep.GetEmbeddedProfileSketch();
+  return sketch ? PointToVector(sketch->sketchCSys.origin)
+                : std::vector<double>{};
+}
+
+std::vector<double> GetSweepEmbeddedXAxis(const SweepAccessor &sweep) {
+  const auto *sketch = sweep.GetEmbeddedProfileSketch();
+  return sketch ? VectorToVector(sketch->sketchCSys.xDir)
+                : std::vector<double>{};
+}
+
+std::vector<double> GetSweepEmbeddedYAxis(const SweepAccessor &sweep) {
+  const auto *sketch = sweep.GetEmbeddedProfileSketch();
+  return sketch ? VectorToVector(sketch->sketchCSys.yDir)
+                : std::vector<double>{};
+}
+
+std::vector<double> GetSweepEmbeddedZAxis(const SweepAccessor &sweep) {
+  const auto *sketch = sweep.GetEmbeddedProfileSketch();
+  return sketch ? VectorToVector(sketch->sketchCSys.zDir)
+                : std::vector<double>{};
+}
+
+SketchSegmentAccessor GetSweepEmbeddedSegment(const SweepAccessor &sweep,
+                                              int index) {
+  const auto *sketch = sweep.GetEmbeddedProfileSketch();
+  if (!sketch || index < 0 ||
+      index >= static_cast<int>(sketch->segments.size())) {
+    return SketchSegmentAccessor(nullptr);
+  }
+  return SketchSegmentAccessor(sketch->segments[static_cast<size_t>(index)]);
+}
+
+std::vector<double> GetSweepGuideStartPoint(const SweepAccessor &sweep,
+                                            int guidePathIndex) {
+  return sweep.HasGuidePathStartPoint(guidePathIndex)
+             ? PointToVector(sweep.GetGuidePathStartPoint(guidePathIndex))
+             : std::vector<double>{};
+}
+
+std::vector<double> GetSweepGuideEndPoint(const SweepAccessor &sweep,
+                                          int guidePathIndex) {
+  return sweep.HasGuidePathEndPoint(guidePathIndex)
+             ? PointToVector(sweep.GetGuidePathEndPoint(guidePathIndex))
+             : std::vector<double>{};
+}
+
 std::vector<double> GetRibThicknessDirection(const RibAccessor &rib) {
   const auto option = rib.GetThicknessOption();
   return option.direction.has_value() ? VectorToVector(*option.direction)
@@ -371,6 +433,21 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("THRU_POINT", SweepExtent::Type::THRU_POINT)
       .value("UNKNOWN", SweepExtent::Type::UNKNOWN);
 
+  py::enum_<SweepProfileKind>(m, "SweepProfileKind")
+      .value("SKETCH_REFERENCE", SweepProfileKind::SketchReference)
+      .value("EMBEDDED_SKETCH", SweepProfileKind::EmbeddedSketch)
+      .value("CIRCULAR", SweepProfileKind::Circular);
+
+  py::enum_<SweepSectionPlacement>(m, "SweepSectionPlacement")
+      .value("EXISTING_PROFILE_PLANE",
+             SweepSectionPlacement::ExistingProfilePlane)
+      .value("PATH_NORMAL_AT_START",
+             SweepSectionPlacement::PathNormalAtStart);
+
+  py::enum_<SweepPathOrientation>(m, "SweepPathOrientation")
+      .value("FOLLOW_PATH", SweepPathOrientation::FollowPath)
+      .value("KEEP_PROFILE_NORMAL", SweepPathOrientation::KeepProfileNormal);
+
   py::enum_<CSketchSeg::SegType>(m, "SketchSegType")
       .value("LINE", CSketchSeg::SegType::LINE)
       .value("CIRCLE", CSketchSeg::SegType::CIRCLE)
@@ -470,6 +547,7 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("as_sketch", &FeatureAsSketch)
       .def("as_extrude", &FeatureAsExtrude)
       .def("as_revolve", &FeatureAsRevolve)
+      .def("as_sweep", &FeatureAsSweep)
       .def("as_chamfer", &FeatureAsChamfer)
       .def("as_datum_plane", &FeatureAsDatumPlane)
       .def("as_fillet", &FeatureAsFillet)
@@ -540,6 +618,71 @@ PYBIND11_MODULE(cadexchange_py, m) {
                              &ExtrudeAccessor::GetThinWallStartOffset)
       .def_property_readonly("thin_wall_end_offset",
                              &ExtrudeAccessor::GetThinWallEndOffset);
+
+  py::class_<SweepAccessor>(m, "SweepAccessor")
+      .def("is_valid", &SweepAccessor::IsValid)
+      .def_property_readonly("profile_sketch_id",
+                             &SweepAccessor::GetProfileSketchID)
+      .def_property_readonly("profile_kind", &SweepAccessor::GetProfileKind)
+      .def_property_readonly("section_placement",
+                             &SweepAccessor::GetSectionPlacement)
+      .def_property_readonly("has_profile_path_angle_cos",
+                             &SweepAccessor::HasProfilePathAngleCos)
+      .def_property_readonly("profile_path_angle_cos",
+                             &SweepAccessor::GetProfilePathAngleCos)
+      .def_property_readonly("has_embedded_profile",
+                             &SweepAccessor::HasEmbeddedProfile)
+      .def_property_readonly("embedded_profile_origin",
+                             &GetSweepEmbeddedOrigin)
+      .def_property_readonly("embedded_profile_x_axis",
+                             &GetSweepEmbeddedXAxis)
+      .def_property_readonly("embedded_profile_y_axis",
+                             &GetSweepEmbeddedYAxis)
+      .def_property_readonly("embedded_profile_z_axis",
+                             &GetSweepEmbeddedZAxis)
+      .def_property_readonly("embedded_profile_segment_count",
+                             &SweepAccessor::GetEmbeddedProfileSegmentCount)
+      .def("get_embedded_profile_segment", &GetSweepEmbeddedSegment)
+      .def_property_readonly("has_circular_profile",
+                             &SweepAccessor::HasCircularProfile)
+      .def_property_readonly("circular_outer_radius",
+                             &SweepAccessor::GetCircularOuterRadius)
+      .def_property_readonly("circular_inner_radius",
+                             &SweepAccessor::GetCircularInnerRadius)
+      .def_property_readonly("operation", &SweepAccessor::GetOperation)
+      .def_property_readonly("orientation", &SweepAccessor::GetOrientation)
+      .def_property_readonly("path_reference_count",
+                             &SweepAccessor::GetPathReferenceCount)
+      .def("get_path_reference", &SweepAccessor::GetPathReference)
+      .def_property_readonly("path_closed", &SweepAccessor::IsPathClosed)
+      .def_property_readonly("has_path_start_point",
+                             &SweepAccessor::HasPathStartPoint)
+      .def_property_readonly("path_start_point", &GetSweepPathStartPoint)
+      .def_property_readonly("has_path_end_point",
+                             &SweepAccessor::HasPathEndPoint)
+      .def_property_readonly("path_end_point", &GetSweepPathEndPoint)
+      .def_property_readonly("guide_path_count",
+                             &SweepAccessor::GetGuidePathCount)
+      .def("get_guide_path_reference_count",
+           &SweepAccessor::GetGuidePathReferenceCount)
+      .def("get_guide_path_reference",
+           &SweepAccessor::GetGuidePathReference)
+      .def("is_guide_path_closed", &SweepAccessor::IsGuidePathClosed)
+      .def("guide_path_start_point", &GetSweepGuideStartPoint)
+      .def("guide_path_end_point", &GetSweepGuideEndPoint)
+      .def_property_readonly("has_thin_wall", &SweepAccessor::HasThinWall)
+      .def_property_readonly("thin_wall_thickness",
+                             &SweepAccessor::GetThinWallThickness)
+      .def_property_readonly("thin_wall_one_sided",
+                             &SweepAccessor::IsThinWallOneSided)
+      .def_property_readonly("thin_wall_outward",
+                             &SweepAccessor::IsThinWallOutward)
+      .def_property_readonly("thin_wall_covered",
+                             &SweepAccessor::IsThinWallCovered)
+      .def_property_readonly("thin_wall_start_offset",
+                             &SweepAccessor::GetThinWallStartOffset)
+      .def_property_readonly("thin_wall_end_offset",
+                             &SweepAccessor::GetThinWallEndOffset);
 
   py::class_<RibAccessor>(m, "RibAccessor")
       .def("is_valid", &RibAccessor::IsValid)
