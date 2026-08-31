@@ -354,6 +354,7 @@ void ScaleLinearPattern(CLinearPattern &pattern, double factor, UnitScaleContext
 
 void ScaleCircularPatternDir(CCircularPatternDir &dir, double factor, UnitScaleContext &ctx) {
   ScaleRefEntity(dir.axisRef, factor, ctx);
+  ScalePoint(dir.origin, factor);
 }
 
 void ScaleCircularPattern(CCircularPattern &pattern, double factor, UnitScaleContext &ctx) {
