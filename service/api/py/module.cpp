@@ -45,6 +45,18 @@ FilletAccessor FeatureAsFillet(const FeatureAccessorBase &feature) {
   return FilletAccessor(feature.GetRaw());
 }
 
+LinearPatternAccessor FeatureAsLinearPattern(const FeatureAccessorBase &feature) {
+  return LinearPatternAccessor(feature.GetRaw());
+}
+
+CircularPatternAccessor FeatureAsCircularPattern(const FeatureAccessorBase &feature) {
+  return CircularPatternAccessor(feature.GetRaw());
+}
+
+MirrorPatternAccessor FeatureAsMirrorPattern(const FeatureAccessorBase &feature) {
+  return MirrorPatternAccessor(feature.GetRaw());
+}
+
 int GetFilletReferenceCount(const FilletAccessor &fillet) {
   return static_cast<int>(fillet.GetReferences().size());
 }
@@ -327,12 +339,24 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("Shell", FeatureType::Shell)
       .value("Sketch", FeatureType::Sketch)
       .value("DatumPlane", FeatureType::DatumPlane)
-      .value("Draft", FeatureType::Draft);
+      .value("Draft", FeatureType::Draft)
+      .value("LinearPattern", FeatureType::LinearPattern)
+      .value("CircularPattern", FeatureType::CircularPattern)
+      .value("MirrorPattern", FeatureType::MirrorPattern);
 
   py::enum_<BooleanOp>(m, "BooleanOp")
       .value("BOSS", BooleanOp::BOSS)
       .value("CUT", BooleanOp::CUT)
       .value("MERGE", BooleanOp::MERGE);
+
+  py::enum_<PatternScope>(m, "PatternScope")
+      .value("FEATURES", PatternScope::FEATURES)
+      .value("FACES", PatternScope::FACES)
+      .value("BODIES", PatternScope::BODIES);
+
+  py::enum_<PatternSpacingType>(m, "PatternSpacingType")
+      .value("PITCH_AND_COUNT", PatternSpacingType::PITCH_AND_COUNT)
+      .value("SPAN_AND_COUNT", PatternSpacingType::SPAN_AND_COUNT);
 
   py::enum_<RefType>(m, "RefType")
       .value("FEATURE_DATUM_PLANE", RefType::FEATURE_DATUM_PLANE)
@@ -551,7 +575,10 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("as_chamfer", &FeatureAsChamfer)
       .def("as_datum_plane", &FeatureAsDatumPlane)
       .def("as_fillet", &FeatureAsFillet)
-      .def("as_rib", &FeatureAsRib);
+      .def("as_rib", &FeatureAsRib)
+      .def("as_linear_pattern", &FeatureAsLinearPattern)
+      .def("as_circular_pattern", &FeatureAsCircularPattern)
+      .def("as_mirror_pattern", &FeatureAsMirrorPattern);
 
   py::class_<ModelAccessor>(m, "ModelAccessor")
       .def("is_valid", &ModelAccessor::IsValid)
@@ -767,6 +794,133 @@ PYBIND11_MODULE(cadexchange_py, m) {
                              &FilletAccessor::HasTangentPropagation)
       .def_property_readonly("reference_count", &GetFilletReferenceCount)
       .def("get_reference", &GetFilletReference);
+
+
+  py::class_<LinearPatternAccessor>(m, "LinearPatternAccessor")
+      .def("is_valid", &LinearPatternAccessor::IsValid)
+      .def_property_readonly("dir1_reference", [](const LinearPatternAccessor &a) {
+        return ReferenceAccessor(a.GetDir1().directionRef);
+      })
+      .def_property_readonly("dir1_direction", [](const LinearPatternAccessor &a) {
+        return VectorToVector(a.GetDir1().direction);
+      })
+      .def_property_readonly("dir1_spacing_type", [](const LinearPatternAccessor &a) {
+        return a.GetDir1().spacingType;
+      })
+      .def_property_readonly("dir1_spacing", [](const LinearPatternAccessor &a) {
+        return a.GetDir1().spacing;
+      })
+      .def_property_readonly("dir1_count", [](const LinearPatternAccessor &a) {
+        return a.GetDir1().count;
+      })
+      .def_property_readonly("has_dir2", &LinearPatternAccessor::HasDir2)
+      .def_property_readonly("pattern_seed_only",
+                             &LinearPatternAccessor::IsPatternSeedOnly)
+      .def_property_readonly("scope", &LinearPatternAccessor::GetScope)
+      .def_property_readonly("geometry_pattern",
+                             &LinearPatternAccessor::IsGeometryPattern)
+      .def_property_readonly("seed_object_count",
+                             [](const LinearPatternAccessor &a) {
+                               return static_cast<int>(a.GetSeedObjects().size());
+                             })
+      .def("get_seed_object", [](const LinearPatternAccessor &a, int index) {
+        const auto &seeds = a.GetSeedObjects();
+        if (index < 0 || index >= static_cast<int>(seeds.size())) {
+          return ReferenceAccessor(nullptr);
+        }
+        return ReferenceAccessor(seeds[static_cast<size_t>(index)]);
+      })
+      .def_property_readonly("skipped_instance_count",
+                             [](const LinearPatternAccessor &a) {
+                               return static_cast<int>(
+                                   a.GetSkippedInstances().size());
+                             })
+      .def("get_skipped_instance", [](const LinearPatternAccessor &a, int index) {
+        py::dict result;
+        const auto &items = a.GetSkippedInstances();
+        if (index < 0 || index >= static_cast<int>(items.size())) {
+          return result;
+        }
+        const auto &item = items[static_cast<size_t>(index)];
+        result["dir1_index"] = item.dir1Index;
+        result["dir2_index"] = item.dir2Index;
+        return result;
+      });
+
+  py::class_<CircularPatternAccessor>(m, "CircularPatternAccessor")
+      .def("is_valid", &CircularPatternAccessor::IsValid)
+      .def_property_readonly("axis_reference", [](const CircularPatternAccessor &a) {
+        return ReferenceAccessor(a.GetDir1().axisRef);
+      })
+      .def_property_readonly("axis_origin", [](const CircularPatternAccessor &a) {
+        return PointToVector(a.GetDir1().origin);
+      })
+      .def_property_readonly("axis_direction", [](const CircularPatternAccessor &a) {
+        return VectorToVector(a.GetDir1().direction);
+      })
+      .def_property_readonly("spacing_type", [](const CircularPatternAccessor &a) {
+        return a.GetDir1().spacingType;
+      })
+      .def_property_readonly("angle", [](const CircularPatternAccessor &a) {
+        return a.GetDir1().angle;
+      })
+      .def_property_readonly("count", [](const CircularPatternAccessor &a) {
+        return a.GetDir1().count;
+      })
+      .def_property_readonly("has_dir2", &CircularPatternAccessor::HasDir2)
+      .def_property_readonly("pattern_seed_only",
+                             &CircularPatternAccessor::IsPatternSeedOnly)
+      .def_property_readonly("scope", &CircularPatternAccessor::GetScope)
+      .def_property_readonly("geometry_pattern",
+                             &CircularPatternAccessor::IsGeometryPattern)
+      .def_property_readonly("seed_object_count",
+                             [](const CircularPatternAccessor &a) {
+                               return static_cast<int>(a.GetSeedObjects().size());
+                             })
+      .def("get_seed_object", [](const CircularPatternAccessor &a, int index) {
+        const auto &seeds = a.GetSeedObjects();
+        if (index < 0 || index >= static_cast<int>(seeds.size())) {
+          return ReferenceAccessor(nullptr);
+        }
+        return ReferenceAccessor(seeds[static_cast<size_t>(index)]);
+      })
+      .def_property_readonly("skipped_instance_count",
+                             [](const CircularPatternAccessor &a) {
+                               return static_cast<int>(
+                                   a.GetSkippedInstances().size());
+                             })
+      .def("get_skipped_instance", [](const CircularPatternAccessor &a, int index) {
+        py::dict result;
+        const auto &items = a.GetSkippedInstances();
+        if (index < 0 || index >= static_cast<int>(items.size())) {
+          return result;
+        }
+        const auto &item = items[static_cast<size_t>(index)];
+        result["dir1_index"] = item.dir1Index;
+        result["dir2_index"] = item.dir2Index;
+        return result;
+      });
+
+  py::class_<MirrorPatternAccessor>(m, "MirrorPatternAccessor")
+      .def("is_valid", &MirrorPatternAccessor::IsValid)
+      .def_property_readonly("mirror_plane_reference",
+                             [](const MirrorPatternAccessor &a) {
+                               return ReferenceAccessor(a.GetMirrorPlaneRef());
+                             })
+      .def_property_readonly("scope", &MirrorPatternAccessor::GetScope)
+      .def_property_readonly("geometry_pattern",
+                             &MirrorPatternAccessor::IsGeometryPattern)
+      .def_property_readonly("seed_object_count",
+                             [](const MirrorPatternAccessor &a) {
+                               return static_cast<int>(a.GetSeedObjects().size());
+                             })
+      .def("get_seed_object", [](const MirrorPatternAccessor &a, int index) {
+        const auto &seeds = a.GetSeedObjects();
+        if (index < 0 || index >= static_cast<int>(seeds.size())) {
+          return ReferenceAccessor(nullptr);
+        }
+        return ReferenceAccessor(seeds[static_cast<size_t>(index)]);
+      });
 
   py::class_<DatumPlaneAccessor>(m, "DatumPlaneAccessor")
       .def("is_valid", &DatumPlaneAccessor::IsValid)
