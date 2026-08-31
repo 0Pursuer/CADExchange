@@ -6,6 +6,7 @@
 #include "../../accessors/FeatureAccessorBase.h"
 #include "../../accessors/FilletAccessor.h"
 #include "../../accessors/ModelAccessor.h"
+#include "../../accessors/PatternAccessor.h"
 #include "../../accessors/ReferenceAccessor.h"
 #include "../../accessors/RibAccessor.h"
 #include "../../accessors/RevolveAccessor.h"
