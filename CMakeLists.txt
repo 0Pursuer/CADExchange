@@ -98,6 +98,19 @@ if(CADEXCHANGE_BUILD_STEP_COMPARE)
 
     add_library(cad_step_compare_core STATIC
         tools/step_compare/StepCompare.cpp
+        tools/step_compare/domain/DecisionCode.cpp
+        tools/step_compare/domain/DescriptorMatching.cpp
+        tools/step_compare/domain/TolerancePolicy.cpp
+        tools/step_compare/geometry/ArtifactWriter.cpp
+        tools/step_compare/geometry/BooleanVerifier.cpp
+        tools/step_compare/geometry/ShapeAudit.cpp
+        tools/step_compare/geometry/ShapeNormalizer.cpp
+        tools/step_compare/geometry/StepLoader.cpp
+        tools/step_compare/pipeline/MultiSolidPipeline.cpp
+        tools/step_compare/pipeline/SolidPairPipeline.cpp
+        tools/step_compare/report/HumanReport.cpp
+        tools/step_compare/report/JsonReport.cpp
+        tools/step_compare/report/ResultWriter.cpp
     )
     target_compile_definitions(cad_step_compare_core PUBLIC CADEXCHANGE_HAS_OCCT)
     target_include_directories(cad_step_compare_core
