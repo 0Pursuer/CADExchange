@@ -1,4 +1,7 @@
-// STL / BREP writers and the VTP visualisation writers.
+/**
+ * @file ArtifactWriter.cpp
+ * @brief STL / BREP 写出器与 VTP 可视化写出器。
+ */
 
 #include "geometry/ArtifactWriter.h"
 #include "domain/GeometryMath.h"
@@ -31,6 +34,13 @@
 namespace cadstep {
 namespace detail {
 
+/**
+ * @brief 把面类型名映射成写入 VTP 的整数编码。
+ * @param type SurfaceTypeName() 产出的类型串
+ * @return PLANE=0, CYLINDER=1, CONE=2, SPHERE=3, TORUS=4, BSPLINE=5，其余=6
+ *
+ * @warning 编码值写进 VTP 文件的 geometry_type_code 列，属于可视化契约。
+ */
 int SurfaceTypeCode(const std::string &type) {
   if (type == "PLANE") return 0;
   if (type == "CYLINDER") return 1;
@@ -41,6 +51,13 @@ int SurfaceTypeCode(const std::string &type) {
   return 6;
 }
 
+/**
+ * @brief 把曲线类型名映射成写入 VTP 的整数编码。
+ * @param type CurveTypeName() 产出的类型串
+ * @return LINE=0, CIRCLE=1, ELLIPSE=2, BSPLINE=3，其余=4
+ *
+ * @warning 编码值写进 VTP 文件的 geometry_type_code 列，属于可视化契约。
+ */
 int CurveTypeCode(const std::string &type) {
   if (type == "LINE") return 0;
   if (type == "CIRCLE") return 1;
@@ -49,6 +66,13 @@ int CurveTypeCode(const std::string &type) {
   return 4;
 }
 
+/**
+ * @brief 把匹配状态映射成写入 VTP 的整数编码。
+ * @param status 匹配状态
+ * @return Matched=0, Unmatched=1, Ambiguous=2，其他状态=3
+ *
+ * @warning 编码值写进 VTP 文件的 match_status_code 列，属于可视化契约。
+ */
 int MatchStatusCode(MatchStatus status) {
   switch (status) {
     case MatchStatus::Matched: return 0;
@@ -58,9 +82,15 @@ int MatchStatusCode(MatchStatus status) {
   }
 }
 
-// The CellData carries a match-status code per entity. Both writers derive it the
-// same way: the entity id ends in the visual index, and entities the matcher
-// never compared fall back to "unmatched" at the call site.
+/**
+ * @brief 面与边两个 VTP writer 的公共前奏：推导每个 visualIndex 的匹配状态码。
+ * @param matches 匹配集合
+ * @param side 实体侧别（决定读取 referenceId 还是 candidateId）
+ * @return visualIndex → 匹配状态码 的映射；匹配器从未比较到的实体不出现在
+ *         映射里，由调用点回退为 "unmatched"
+ *
+ * 实体 id 的尾部就是 visualIndex（最后一个 ':' 之后的数字），据此建索引。
+ */
 std::map<int, int> BuildMatchStatusByVisualIndex(const MatchCollection &matches,
                                                  EntitySide side) {
   std::map<int, int> statusByIndex;
@@ -85,6 +115,12 @@ std::map<int, int> BuildMatchStatusByVisualIndex(const MatchCollection &matches,
   return statusByIndex;
 }
 
+/**
+ * @brief 面与边两个 VTP writer 的公共前奏：把审计明细按 visualIndex 建索引。
+ * @tparam Info NormalizedFaceInfo / NormalizedEdgeInfo 等带 visualIndex 的明细类型
+ * @param infos 明细列表
+ * @return visualIndex → 明细 的映射
+ */
 template <typename Info>
 std::map<int, Info> IndexByVisualIndex(const std::vector<Info> &infos) {
   std::map<int, Info> byIndex;
@@ -102,9 +138,9 @@ bool ExportFacesVtp(const TopoDS_Shape &solid,
                     const std::filesystem::path &outputPath) {
   if (solid.IsNull() || normalizedFaces.IsEmpty()) return false;
 
-  // Kept non-const deliberately: the CellData loops below index with
-  // `count(i) ? map[i] : default`, which relies on operator[]; making these
-  // const is a compile error rather than a silent behaviour change.
+  // 刻意保持非 const：下方写 CellData 的循环用 `count(i) ? map[i] : 默认值`
+  // 索引，依赖 operator[] 的插入语义；改成 const 会直接编译报错（而非悄悄
+  // 改变行为），这条注释说明为什么不能"顺手"加 const。
   std::map<int, int> matchStatusMap = BuildMatchStatusByVisualIndex(faceMatches, side);
   std::map<int, NormalizedFaceInfo> infoMap = IndexByVisualIndex(faceInfos);
 

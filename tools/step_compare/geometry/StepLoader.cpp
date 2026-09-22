@@ -1,4 +1,7 @@
-// Reads a STEP file into OCCT shapes and audits every solid it contains.
+/**
+ * @file StepLoader.cpp
+ * @brief 把 STEP 文件读入 OCCT 形状，并逐个审计其中包含的实体。
+ */
 
 #include "geometry/StepLoader.h"
 #include "geometry/ShapeAudit.h"
@@ -27,6 +30,11 @@
 namespace cadstep {
 namespace detail {
 
+/**
+ * @brief 把 IFSelect_ReturnStatus 翻成可读文本（文件局部辅助）。
+ * @param status STEP 读取器的返回状态
+ * @return "void"/"done"/"error"/"fail"/"stop"；无法识别时返回 "unknown"
+ */
 const char *ReadStatusText(IFSelect_ReturnStatus status) {
   switch (status) {
   case IFSelect_RetVoid:

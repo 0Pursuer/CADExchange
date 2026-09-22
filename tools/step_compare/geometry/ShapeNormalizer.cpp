@@ -1,5 +1,7 @@
-// Same-domain normalisation plus the edge-role classification and the
-// original-to-normalised topology mapping it produces.
+/**
+ * @file ShapeNormalizer.cpp
+ * @brief 同域归一化、边角色分类，以及随之产出的原拓扑到归一化拓扑的映射。
+ */
 
 #include "geometry/ShapeNormalizer.h"
 #include "domain/Timing.h"
@@ -34,12 +36,21 @@
 namespace cadstep {
 namespace detail {
 
+/**
+ * @brief 归一化后单条边的比较角色分类结果（文件局部）。
+ */
 struct EdgeComparisonClassification {
-  EdgeComparisonRole role = EdgeComparisonRole::Unsupported;
-  bool comparable = false;
-  std::string exclusionReason;
+  EdgeComparisonRole role = EdgeComparisonRole::Unsupported; ///< 归一化边的比较角色
+  bool comparable = false;           ///< 是否参与一对一边匹配
+  std::string exclusionReason;       ///< 不可比时的排除原因码（如 "DEGENERATED"）
 };
 
+/**
+ * @brief 按退化与接缝判定归一化边的比较角色。
+ * @param edge 待分类的边
+ * @param edgeFacesMap 边到所属面列表的祖先映射（用于接缝判定）
+ * @return 分类结果：退化边→Degenerated，接缝边→PeriodicSeam，其余 Comparable
+ */
 EdgeComparisonClassification ClassifyNormalizedEdge(
     const TopoDS_Edge &edge,
     const TopTools_IndexedDataMapOfShapeListOfShape &edgeFacesMap) {
@@ -159,9 +170,8 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
       }
     }
 
-    // audit.faces deliberately stays empty on this path, but matching still needs
-    // every face: the audit additionally carries source-mapping detail that only
-    // the normalisation path can produce, so the two cannot be the same list.
+    // 此路径上 audit.faces 刻意保持为空，但匹配仍需要全部面：审计明细额外
+    // 携带只有归一化路径才能产出的源映射信息，因此两者不能是同一份列表。
     result.faceDescriptors.reserve(static_cast<std::size_t>(result.normalizedFaces.Extent()));
     for (int i = 1; i <= result.normalizedFaces.Extent(); ++i) {
       const TopoDS_Face f = TopoDS::Face(result.normalizedFaces(i));
@@ -234,7 +244,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   TopExp::MapShapes(result.solid, TopAbs_FACE, result.normalizedFaces);
   TopExp::MapShapes(result.solid, TopAbs_EDGE, result.normalizedEdges);
 
-  // Build faces detail list
+  // 构建面明细列表
   std::map<int, NormalizedFaceInfo> normFaceMap;
   for (int i = 1; i <= result.normalizedFaces.Extent(); ++i) {
     const TopoDS_Face f = TopoDS::Face(result.normalizedFaces(i));
@@ -269,7 +279,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     normFaceMap[i] = info;
   }
 
-  // Build edges detail list
+  // 构建边明细列表
   std::map<int, NormalizedEdgeInfo> normEdgeMap;
   for (int i = 1; i <= result.normalizedEdges.Extent(); ++i) {
     const TopoDS_Edge e = TopoDS::Edge(result.normalizedEdges(i));
@@ -288,7 +298,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
     normEdgeMap[i] = info;
   }
 
-  // Map original topology to normalized topology using history
+  // 用归一化产出的 History 把原拓扑映射回归一化拓扑
   bool faceMappingComplete = true;
   for (int i = 1; i <= originalIndex.faces.Extent(); ++i) {
     const TopoDS_Face origF = TopoDS::Face(originalIndex.faces(i));
@@ -438,8 +448,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   result.audit.edgeMappingComplete = edgeMappingComplete;
   result.audit.mappingComplete = faceMappingComplete && edgeMappingComplete;
 
-  // Descriptors are projected from the audit records above: the per-entity
-  // geometry is measured once, so all that remains here is the projection.
+  // 描述符由上面的审计记录投影而来：逐实体几何只测一次，此处仅做投影。
   const auto descriptorStart = std::chrono::high_resolution_clock::now();
   result.faceDescriptors.reserve(result.audit.faces.size());
   for (const auto &info : result.audit.faces) {
@@ -455,7 +464,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   }
   result.descriptorBuildMs = ElapsedMs(descriptorStart);
 
-  // Type Statistics
+  // 类型统计
   std::map<std::string, std::pair<int, double>> faceTypeStats;
   for (const auto &info : result.audit.faces) {
     auto &item = faceTypeStats[info.surfaceType];

@@ -11,19 +11,49 @@ namespace cadstep {
 namespace detail {
 namespace {
 
-// How "the same size" is judged for a measure pair.
+/**
+ * @brief 一对度量之间"尺寸是否相当"的判据方式。
+ */
 enum class MeasureGate {
-  // Faces: the measure is an area, compared relative to the reference measure.
-  RelativeToReference,
-  // Edges: the measure is a length, compared against the distance tolerance.
-  Absolute,
+  RelativeToReference, ///< 面：度量为面积，相对参考度量做比较
+  Absolute,            ///< 边：度量为长度，与距离容差做绝对比较
 };
 
+/**
+ * @brief 由三项归一化误差合成的匹配得分。
+ * @param measureErr 尺寸误差，已归一化到 [0,1]
+ * @param centroidErr 质心距离误差，已按特征尺度归一化到 [0,1]
+ * @param boundsErr 包围盒差误差，已按特征尺度归一化到 [0,1]
+ * @return [0,1] 区间内的得分，三项权重分别为 0.4 / 0.3 / 0.3
+ *
+ * @note 权重与夹取范围属于可观察行为：得分决定"最优候选"的挑选与
+ *       歧义裕度的比较，改动会直接改变匹配结果。
+ */
 double DescriptorScore(double measureErr, double centroidErr, double boundsErr) {
   const double score = 1.0 - 0.4 * measureErr - 0.3 * centroidErr - 0.3 * boundsErr;
   return std::clamp(score, 0.0, 1.0);
 }
 
+/**
+ * @brief 贪心一对一匹配的共享实现，面与边两个公开入口都委托到这里。
+ * @param reference 参考侧描述符
+ * @param candidate 候选侧描述符
+ * @param config 提供歧义匹配裕度；面的相对判据还会用到 relativeVolumeTolerance
+ * @param characteristicScale 特征尺度，把质心/包围盒/长度误差归一化到 [0,1]
+ * @param tolerances 由 Derive() 得到的容差
+ * @param gate 尺寸判据方式（面为相对判据，边为绝对判据）
+ * @param idPrefix 生成 EntityMatch::id 时的前缀，如 "face-match:" / "edge-match:"
+ * @param kind 生成配对 id 时使用的实体种类（面或边）
+ * @return 匹配集合
+ *
+ * 算法要点：
+ *  - 先比较两侧的类型直方图，写入 typeHistogramEqual；
+ *  - 对每个参考实体，在**未被占用**且**类型相同**的候选里挑三项判据都
+ *    通过、得分最高者，同时记录次优得分用于歧义判定；
+ *  - 严格小于比较保证并列时取先出现的候选；
+ *  - 只有 Matched 才占用候选，Ambiguous 不占用；
+ *  - unmatchedReferenceIds 按参考顺序、unmatchedCandidateIds 按候选顺序写入。
+ */
 MatchCollection MatchDescriptors(const std::vector<DescriptorView> &reference,
                                  const std::vector<DescriptorView> &candidate,
                                  const CompareConfig &config,

@@ -15,6 +15,9 @@ namespace cadstep {
 namespace detail {
 namespace {
 
+/**
+ * @brief 把 OCCT 三维点转成本工程的公共值类型 Point3。
+ */
 Point3 ToPoint3(const gp_Pnt &point) {
   return {point.X(), point.Y(), point.Z()};
 }

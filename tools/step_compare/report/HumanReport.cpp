@@ -1,4 +1,9 @@
-// Rendering of the comparison result as a human-readable summary.
+// 比较结果的人类可读文本摘要（ToHumanSummary 的定义，Doxygen 文档见
+// StepCompare.h 声明处）。
+//
+// 与 JsonReport.cpp 同源：PASS/FAIL 标志同样通过 detail::TolerancePolicy
+// 派生的容差与 EvaluateGeometryPasses / EvaluateBooleanPass 计算，
+// 保证摘要文案与 result.json 的 checks 标志一致，不会各说各话。
 
 #include "StepCompare.h"
 
@@ -10,6 +15,9 @@
 #include <string>
 
 namespace cadstep {
+
+// 摘要分区顺序：COMPARE MODE → INPUT → [MULTI-SOLID MATCH] → NORMALIZATION →
+// DESCRIPTOR MATCH → GLOBAL METRICS → BOOLEAN → TIMING → RESULT。
 
 std::string ToHumanSummary(const CompareResult &result) {
   std::ostringstream ss;

@@ -7,6 +7,11 @@
 namespace cadstep {
 namespace detail {
 
+// 「静态下限 + 特征尺度相对比例」模型：
+//   距离容差 = max(用户静态下限, 1e-4 × 参考包围盒对角线)
+//   绝对体积容差 = max(用户静态下限, 相对容差 × 参考体积)
+// 两者都取 max，即用户配置只是下限，小零件按特征尺度自动放宽、
+// 大零件不会被过小的静态下限卡死。
 TolerancePolicy TolerancePolicy::Derive(const CompareConfig &config,
                                         const InputAudit &reference) {
   TolerancePolicy policy;

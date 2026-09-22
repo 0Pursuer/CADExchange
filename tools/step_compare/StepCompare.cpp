@@ -6,6 +6,8 @@
 
 namespace cadstep {
 
+// 各 ToString() 重载返回的拼写会原样写入 result.json，属输出契约，不得改动。
+
 const char *ToString(EdgeComparisonRole role) {
   switch (role) {
     case EdgeComparisonRole::Comparable: return "COMPARABLE";
@@ -16,6 +18,7 @@ const char *ToString(EdgeComparisonRole role) {
   }
 }
 
+// id 前缀（ref:/cand:）+ 种类段（face:/edge:/nface:/nedge:）+ 6 位零填充序号。
 std::string MakeEntityId(EntitySide side, EntityKind kind, int index) {
   std::ostringstream ss;
   ss << (side == EntitySide::Reference ? "ref:" : "cand:");
@@ -87,6 +90,7 @@ const char *ToString(VerificationLevel level) {
   return "UNKNOWN";
 }
 
+// 退出码与 CompareStatus 枚举声明顺序对应；UI/CI 依赖这套数值，不得改动。
 int ExitCode(CompareStatus status) {
   switch (status) {
   case CompareStatus::Equal:
@@ -107,6 +111,8 @@ int ExitCode(CompareStatus status) {
   return 5;
 }
 
+// 有意忽略 consistency 参数（上游提交 01f2556 的行为）：四项判据全过即
+// Equal，否则 Different，LikelyEqual 分支不可达；配套测试有一条因此按原样失败。
 CompareStatus detail::ClassifyClosedSolidComparison(
     bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,
     const BooleanConsistencyMetrics &consistency) {

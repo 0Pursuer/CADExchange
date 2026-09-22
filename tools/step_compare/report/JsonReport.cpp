@@ -1,8 +1,18 @@
-// Serialisation of the comparison result as result.json.
+// result.json 的序列化实现（ToJson 的定义，Doxygen 文档见 StepCompare.h 声明处）。
 //
-// The key insertion order matters: result.json is built with ordered_json and is
-// read by GuiApp/src/step_compare_result.py, so this is the single place that
-// knows the on-disk schema.
+// 本文件是 result.json 落盘 schema 的唯一拥有者：
+//  - 使用 nlohmann::ordered_json + dump(2) 序列化，**键的插入顺序即对外契约**。
+//    下游 GuiApp/src/step_compare_result.py 按顺序读取各分区（如
+//    require_key(data, "normalization")），任何键的插入顺序都不得调整。
+//  - checks 分区的 passed 标志通过 detail::TolerancePolicy::Derive 与
+//    EvaluateGeometryPasses / EvaluateBooleanPass 计算，保证报告显示与
+//    判定结论同源，避免两套公式漂移。
+//
+// 顶层键的插入顺序：
+//   schema_version, overall, configuration, multi_solid,
+//   global_metrics_executed, inputs, normalization, matches,
+//   differences, metrics, boolean_consistency, checks,
+//   timings_ms, artifacts
 
 #include "StepCompare.h"
 
@@ -97,10 +107,10 @@ std::string ToJson(const CompareResult &result) {
   multiNode["unmatched_candidate_solid_ids"] = result.multiSolid.unmatchedCandidateSolidIds;
   root["multi_solid"] = multiNode;
 
-  // 4. inputs
+  // 3.5 全局度量是否执行的顶层标志（位于 multi_solid 与 inputs 之间，顺序即契约）
   root["global_metrics_executed"] = result.globalMetricsExecuted;
 
-  // 4. inputs
+  // 4. inputs：参考与候选的输入审计，两侧行结构完全一致
   auto MakeInputNode = [](const InputAudit &audit) {
     json node = json::object();
     node["path"] = audit.path;
@@ -221,7 +231,9 @@ std::string ToJson(const CompareResult &result) {
   normJson["candidate"] = MakeNormNode(result.candidateNormalization);
   root["normalization"] = normJson;
 
-  // 6. matches
+  // 6. matches：面/边匹配集合 + 边审计错误 + 快路径审计。
+  //    effective 阈值（effectiveDistTol/effectiveAbsVolTol）由 TolerancePolicy 派生，
+  //    与判定流程使用的容差同源。
   auto MakeMatchCollectionNode = [](const MatchCollection &col) {
     json node = json::object();
     json summary = json::object();
@@ -281,7 +293,7 @@ std::string ToJson(const CompareResult &result) {
       {"block_reasons", result.normalizedTopology.fastPath.blockReasons}};
   root["matches"] = matchesJson;
 
-  // 6. differences
+  // 7. differences：两个方向的布尔差分结果（缺失/新增材料）
   json diffs = json::object();
   diffs["missing_material"] = {
       {"succeeded", result.missingMaterial.succeeded},
@@ -297,7 +309,7 @@ std::string ToJson(const CompareResult &result) {
   };
   root["differences"] = diffs;
 
-  // 7. metrics
+  // 8. metrics：全局度量原始值；布尔一致性度量单独挂在 boolean_consistency 键下
   json metricsJson = json::object();
   metricsJson["absolute_input_volume_difference_mm3"] = result.absoluteInputVolumeDifferenceMm3;
   metricsJson["relative_input_volume_difference"] = result.relativeInputVolumeDifference;
@@ -317,7 +329,10 @@ std::string ToJson(const CompareResult &result) {
   boolCons["invalid_reason"] = result.booleanConsistency.invalidReason;
   root["boolean_consistency"] = boolCons;
 
-  // 8. checks
+  // 9. checks：六项检查的展示与判定。
+  //    passed 标志必须取自 EvaluateGeometryPasses / EvaluateBooleanPass，
+  //    不得在此重新计算判据，否则报告与结论会漂移。
+  //    diagnostic=true 的两项（面/边描述符匹配）只作诊断展示，不参与终态分类。
   const detail::GeometryPassFlags passes =
       detail::EvaluateGeometryPasses(result, tolerances);
   const bool volPass = passes.volume;
@@ -427,7 +442,7 @@ std::string ToJson(const CompareResult &result) {
   });
   root["checks"] = checks;
 
-  // 9. timings_ms
+  // 10. timings_ms：各阶段耗时（毫秒）
   json timingsJson = json::object();
   timingsJson["load_reference"] = result.timings.loadReferenceMs;
   timingsJson["load_candidate"] = result.timings.loadCandidateMs;
@@ -442,7 +457,7 @@ std::string ToJson(const CompareResult &result) {
   timingsJson["total"] = result.timings.totalMs;
   root["timings_ms"] = timingsJson;
 
-  // 10. artifacts
+  // 11. artifacts：以工件键名为键的动态对象；entity_index_array 仅在非空时输出
   json artJson = json::object();
   for (const auto &item : result.artifacts.items) {
     json info = json::object();

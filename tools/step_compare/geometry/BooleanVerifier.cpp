@@ -1,4 +1,7 @@
-// Boolean difference used for the fine-grained material comparison.
+/**
+ * @file BooleanVerifier.cpp
+ * @brief 细粒度材料对比所用的布尔差分实现。
+ */
 
 #include "geometry/BooleanVerifier.h"
 #include "geometry/ShapeAudit.h"

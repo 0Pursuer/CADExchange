@@ -22,12 +22,32 @@
 namespace cadstep {
 namespace detail {
 
+/**
+ * @brief 判定结论的载体：状态、判定码与原因三者作为一个整体一起更新。
+ *
+ * 把三者收进一个值，是为了让流程**不必回读** CompareResult::status 或比较
+ * decisionPath 字符串来决定下一步走哪条分支。CompareResult 仍是对外报告的
+ * DTO，在本函数末尾一次性从这里落盘。
+ *
+ * @warning 设置判定结论往往是**闩锁**而非终止：全局度量失败会记录
+ *          GlobalMetricsFailed 但执行继续进入布尔校验，后者可能同时覆盖
+ *          status 与 code。整个流程里只有归一化快路径会提前返回。
+ * @note 初始 status 取 CompareResult 的默认值 InternalError，reason 为空，
+ *       与 CompareResult 的默认构造保持一致。
+ */
 struct ComparisonDecision {
-  CompareStatus status = CompareStatus::InternalError;
-  DecisionCode code = DecisionCode::BooleanAfterOriginal;
-  std::string reason;
+  CompareStatus status = CompareStatus::InternalError; ///< 最终状态
+  DecisionCode code = DecisionCode::BooleanAfterOriginal; ///< 产生该状态的判定分支
+  std::string reason; ///< 写入 result.json 的 reason 字段
 };
 
+/**
+ * @brief 一次性更新判定结论的三个字段。
+ * @param decision 待更新的判定结论
+ * @param status 最终状态
+ * @param code 产生该状态的判定分支
+ * @param reason 原因文案，原样写入 result.reason
+ */
 void SetDecision(ComparisonDecision &decision, CompareStatus status,
                  DecisionCode code, std::string reason) {
   decision.status = status;
@@ -35,6 +55,19 @@ void SetDecision(ComparisonDecision &decision, CompareStatus status,
   decision.reason = reason;
 }
 
+/**
+ * @brief 校验两侧归一化审计与边匹配结果之间的自洽性。
+ * @param refNorm 参考侧归一化审计
+ * @param candNorm 候选侧归一化审计
+ * @param edgeMatches 边匹配结果
+ * @return 校验结果；valid=false 时 errors 里给出逐条原因
+ *
+ * 检查项包括：审计里的边数与 edgeCountAfter 一致、comparable 边的
+ * comparableIndex 连续且不重复、不可比较边的 comparableIndex 必须为 0、
+ * 匹配集合的规模与审计一致等。该校验是归一化快路径的**阻断条件**之一
+ * （不一致会在 fastPath.blockReasons 里记为 EDGE_AUDIT_INCONSISTENT），
+ * 但不会终止比较。
+ */
 EdgeAuditValidation ValidateEdgeAudit(const NormalizationAudit &refNorm,
                                      const NormalizationAudit &candNorm,
                                      const MatchCollection &edgeMatches) {
@@ -93,6 +126,31 @@ EdgeAuditValidation ValidateEdgeAudit(const NormalizationAudit &refNorm,
   return validation;
 }
 
+/**
+ * @brief 阶段 4：写出一对实体的 STL / BREP / VTP 产物并登记进 result.artifacts。
+ *
+ * 从 CompareSolidPairInternal 拆出的独立函数——它完全由判定流程已经产生的
+ * 状态驱动，自身不做任何判定。
+ *
+ * @param outputDirectory 输出目录；调用方已保证非空
+ * @param artifactSuffix 产物文件名后缀；为空表示单实体路径，此时会先清理旧产物
+ * @param config 提供 exportStl / exportBrep 开关
+ * @param solidRef 参考侧**原始**实体（用于 reference_original.brep）
+ * @param solidCand 候选侧**原始**实体（用于 candidate_original.brep）
+ * @param compareRef 参考侧**比较用**实体（归一化成功时为归一化实体），
+ *                   用于 reference_base.stl —— 注意与 solidRef 不是同一个
+ * @param compareCand 候选侧**比较用**实体，用于 candidate_base.stl
+ * @param normRef / normCand 归一化结果，提供归一化 BREP 与 VTP 所需的面/边映射
+ * @param normalizationPairUsable 是否两侧归一化都成功；决定是否导出 *_normalized.brep
+ * @param missingRes / addedRes 两个方向的布尔差分结果，提供差分体积的 STL
+ * @param result 只读其 booleanExecuted / missingMaterial / addedMaterial /
+ *               normalizedTopology，并追加 artifacts.items
+ *
+ * @note 调用方负责测量 artifactExportMs；本函数内部不再计时。
+ * @warning 基础 STL 用的是**比较用实体**、而 *_original.brep 用的是**原始
+ *          实体**，两者在归一化改变形状时并不相同——传错会静默产出与
+ *          历史版本不一致的文件。
+ */
 void ExportPairArtifacts(const std::filesystem::path &outputDirectory,
                          const std::string &artifactSuffix,
                          const CompareConfig &config,

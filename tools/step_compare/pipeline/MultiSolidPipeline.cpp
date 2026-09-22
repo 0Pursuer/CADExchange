@@ -24,23 +24,50 @@
 namespace cadstep {
 namespace detail {
 
+/**
+ * @brief 一个候选实体相对某个参考实体的全部度量与资格判定。
+ *
+ * 把原先散落的 24 个 best 系列与 bestRejected 系列局部变量收进一个值对象。
+ */
 struct SolidPairCandidate {
-  int index = -1;
-  double cost = 1.0e12;
-  double volumeDifferenceMm3 = 0.0;
-  double relativeVolumeDifference = 0.0;
-  double centroidDistanceMm = 0.0;
-  double boundsDifferenceMm = 0.0;
-  bool volumeEligible = false;
-  bool centroidEligible = false;
-  bool boundsEligible = false;
+  int index = -1;                          ///< 候选实体在 loadedCand.solids 中的下标；-1 表示未选中
+  double cost = 1.0e12;                    ///< 挑选代价：相对体积差×100 + 质心距 + 包围盒差
+  double volumeDifferenceMm3 = 0.0;        ///< 体积差绝对值（mm^3）
+  double relativeVolumeDifference = 0.0;   ///< 体积差相对值（除以参考体积）
+  double centroidDistanceMm = 0.0;         ///< 质心距离（mm）
+  double boundsDifferenceMm = 0.0;         ///< 包围盒差（mm）
+  bool volumeEligible = false;             ///< 相对体积差是否落在 solidMatchVolumeRelTol 内
+  bool centroidEligible = false;           ///< 质心距是否落在有效质心容差内
+  bool boundsEligible = false;             ///< 包围盒差是否落在有效包围盒容差内（含放宽条款）
 };
 
+/**
+ * @brief 一次选择的结果：最便宜的合格候选 + 最便宜的被拒候选。
+ *
+ * 保留被拒者是为了在没有任何候选合格时，仍能在审计里说明"最接近的候选
+ * 差在哪"，而不是只给一句"无匹配"。
+ */
 struct SolidCandidateSelection {
-  SolidPairCandidate best;
-  SolidPairCandidate bestRejected;
+  SolidPairCandidate best;         ///< 三项资格都通过者中代价最低的；index=-1 表示没有合格者
+  SolidPairCandidate bestRejected; ///< 至少一项资格不通过者中代价最低的；用于解释拒绝原因
 };
 
+/**
+ * @brief 为一个参考实体挑选最合适的候选实体。
+ * @param refItem 参考实体及其输入审计
+ * @param candidates 候选实体列表（参考侧与候选侧各自的 solids）
+ * @param candidateTaken 各候选是否已被先前的参考实体占用（保证一对一）
+ * @param config 提供体积相对容差
+ * @param centroidToleranceMm 有效质心容差 = max(配置值, 距离容差)
+ * @param boundsToleranceMm 有效包围盒容差 = max(配置值, 距离容差)
+ * @return best 为三项资格都通过者中代价最低者；bestRejected 为被拒者中代价最低者
+ *
+ * @note 代价函数为 `相对体积差×100 + 质心距 + 包围盒差`，即体积项占主导。
+ *       使用严格小于比较，因此并列时取**先出现**的候选——这是既有行为，
+ *       改成 `<=` 会改变结果。
+ * @note 包围盒资格存在一条放宽条款：当体积与质心都已达标且质心距极小
+ *       （< 质心容差的 1/10）时，即使包围盒差超容差也视为合格。
+ */
 SolidCandidateSelection SelectSolidCandidate(
     const LoadedSolidItem &refItem,
     const std::vector<LoadedSolidItem> &candidates,
@@ -96,6 +123,19 @@ SolidCandidateSelection SelectSolidCandidate(
   return selection;
 }
 
+/**
+ * @brief 把各配对的判定结论汇总成多实体的整体结论。
+ * @param result 已填好 multiSolid 计数与 unmatched 列表；本函数写 status/reason/decisionPath
+ * @param pairResults 各成功配对的比较结果
+ * @param matchedCount 成功配对数（用于 reason 文案）
+ *
+ * 汇总优先级（与既有行为一致）：
+ *  1. 任何一侧存在未匹配实体 → DIFFERENT / multi_solid_unmatched
+ *  2. 全部配对 EQUAL                    → EQUAL / multi_solid_pairs_equal
+ *  3. 存在配对 DIFFERENT                → DIFFERENT / multi_solid_pair_different
+ *  4. 存在配对 LIKELY_EQUAL             → LIKELY_EQUAL / multi_solid_pairs_likely_equal
+ *  5. 其余                              → INDETERMINATE / multi_solid_pairs_indeterminate
+ */
 void AggregateMultiSolidStatus(CompareResult &result,
                                const std::vector<CompareResult> &pairResults,
                                int matchedCount) {
@@ -147,6 +187,17 @@ void AggregateMultiSolidStatus(CompareResult &result,
   }
 }
 
+/**
+ * @brief 多实体路径的产物导出：整体 STL + 各配对的产物清单汇总。
+ * @param outputDirectory 输出目录；调用方已保证非空且 config.exportStl 为真
+ * @param config 提供 exportStl 开关
+ * @param loadedRef / loadedCand 两侧载入结果，用于把各自全部实体装进一个 Compound
+ * @param pairResults 各配对的比较结果，其 artifacts.items 会被原样并入 result
+ * @param result 追加 artifacts.items
+ *
+ * @note 与单实体路径不同，这里的基础 STL 由**所有实体拼成的 Compound** 导出，
+ *       文件名不带配对后缀（reference_base.stl / candidate_base.stl）。
+ */
 void ExportCompositeArtifacts(const std::filesystem::path &outputDirectory,
                               const CompareConfig &config,
                               const LoadedStepModel &loadedRef,
