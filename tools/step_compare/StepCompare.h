@@ -18,9 +18,7 @@ namespace cadstep {
 enum class CompareStatus {
   /// 判定相等：全部判据通过
   Equal,
-  /// 判定很可能相等。当前单实体分类器 detail::ClassifyClosedSolidComparison
-  /// 只会返回 Equal/Different，该值在单实体路径不可达，仅供多实体配对等
-  /// 上游场景与输出契约保留
+  /// 全局判据通过，但布尔证据未通过可信度检查，不能确认相等
   LikelyEqual,
   /// 判定不同：存在判据不通过
   Different,
@@ -589,7 +587,7 @@ struct InputAudit {
  * @brief 一个方向的布尔差分（A-B 或 B-A）的结果。
  */
 struct DifferenceAudit {
-  /// 布尔差分是否成功
+  /// 布尔差分是否成功且结果形状与体积有效
   bool succeeded = false;
   /// 差分残留体积（立方毫米）
   double volumeMm3 = 0.0;
@@ -633,11 +631,8 @@ namespace detail {
  * @param boundsPass 包围盒差判据是否通过
  * @param booleanPass 布尔残差判据是否通过
  * @param consistency 布尔一致性度量
- * @return 四项判据全部通过返回 Equal，否则返回 Different
- *
- * @warning 当前实现**忽略 consistency 参数**：只要前四项布尔参数全部为真
- *          即返回 Equal，LikelyEqual 分支因此不可达。这是上游提交 01f2556
- *          的有意行为，配套测试中有一条因此按原样失败，并非缺陷。
+ * @return 全局判据失败返回 Different；布尔证据无效返回 LikelyEqual；
+ *         否则根据布尔残差返回 Equal 或 Different
  */
 CompareStatus ClassifyClosedSolidComparison(
     bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,

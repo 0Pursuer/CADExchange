@@ -180,13 +180,13 @@ void ExportPairArtifacts(const std::filesystem::path &outputDirectory,
     if (ExportShapeStl(compareCand, candStl)) {
       result.artifacts.items.push_back({"candidate_base" + sfx, "candidate_base" + sfx + ".stl", "STL", true, ""});
     }
-    if (result.booleanExecuted && result.missingMaterial.volumeMm3 > 0.0) {
+    if (result.booleanConsistency.booleanResultValid && result.missingMaterial.volumeMm3 > 0.0) {
       const auto missStl = outputDirectory / ("missing_material" + sfx + ".stl");
       if (ExportShapeStl(missingRes.shape, missStl)) {
         result.artifacts.items.push_back({"missing_material" + sfx, "missing_material" + sfx + ".stl", "STL", true, ""});
       }
     }
-    if (result.booleanExecuted && result.addedMaterial.volumeMm3 > 0.0) {
+    if (result.booleanConsistency.booleanResultValid && result.addedMaterial.volumeMm3 > 0.0) {
       const auto addStl = outputDirectory / ("added_material" + sfx + ".stl");
       if (ExportShapeStl(addedRes.shape, addStl)) {
         result.artifacts.items.push_back({"added_material" + sfx, "added_material" + sfx + ".stl", "STL", true, ""});
@@ -366,18 +366,24 @@ CompareResult CompareSolidPairInternal(const TopoDS_Solid &solidRef,
     result.addedMaterial = addedRes.audit;
 
     if (!result.missingMaterial.succeeded || !result.addedMaterial.succeeded) {
-      SetDecision(decision, CompareStatus::Indeterminate, DecisionCode::BooleanFailed,
-                  "boolean cut operation failed: " + result.missingMaterial.report + " " +
-                      result.addedMaterial.report);
+      result.booleanConsistency.cutReferenceMinusCandidateSucceeded = result.missingMaterial.succeeded;
+      result.booleanConsistency.cutCandidateMinusReferenceSucceeded = result.addedMaterial.succeeded;
+      result.booleanConsistency.invalidReason =
+          "boolean cut failed or returned an invalid shape; see directional kernel reports";
+      if (!passes.volume || !passes.centroid || !passes.bounds) {
+        SetDecision(decision, CompareStatus::Different, DecisionCode::GlobalMetricsFailed,
+                    "global geometry thresholds failed; boolean evidence is unavailable");
+      } else {
+        SetDecision(decision, CompareStatus::Indeterminate, DecisionCode::BooleanFailed,
+                    result.booleanConsistency.invalidReason);
+      }
     } else {
       result.symmetricDifferenceVolumeMm3 = result.missingMaterial.volumeMm3 + result.addedMaterial.volumeMm3;
       result.symmetricDifferenceRelative = volDenom > 0.0 ? (result.symmetricDifferenceVolumeMm3 / volDenom) : 0.0;
 
-      // Deliberately NOT detail::EvaluateBooleanPass: this is a mutable latch,
-      // not the rendered flag. The original-solid fallback below may flip it to
-      // true, and the result feeds ClassifyClosedSolidComparison. The report
-      // writers use the helper (which also short-circuits on !booleanExecuted);
-      // the two agree here because booleanExecuted is true at this point.
+      // Keep the raw residual test mutable for the original-solid fallback.
+      // Boolean consistency is evaluated below and gates final classification;
+      // report writers additionally require that consistency to be valid.
       bool booleanPass = (result.missingMaterial.volumeMm3 <= effectiveAbsVolTol) &&
                          (result.addedMaterial.volumeMm3 <= effectiveAbsVolTol);
 
@@ -438,7 +444,9 @@ CompareResult CompareSolidPairInternal(const TopoDS_Solid &solidRef,
                     "geometry thresholds passed but boolean conservation is invalid");
       } else {
         SetDecision(decision, CompareStatus::Different, DecisionCode::BooleanDifference,
-                    "geometry thresholds failed: input_volume centroid symmetric_difference");
+                    consistency.booleanResultValid
+                        ? "geometry thresholds failed (see global metrics and boolean checks)"
+                        : "global geometry thresholds failed; boolean evidence is unreliable");
       }
     }
   }

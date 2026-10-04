@@ -40,7 +40,8 @@ bool EvaluateBooleanPass(const CompareResult &result,
   if (!result.booleanExecuted) {
     return true;
   }
-  return result.missingMaterial.volumeMm3 <= tolerances.absoluteVolumeMm3() &&
+  return result.booleanConsistency.booleanResultValid &&
+         result.missingMaterial.volumeMm3 <= tolerances.absoluteVolumeMm3() &&
          result.addedMaterial.volumeMm3 <= tolerances.absoluteVolumeMm3();
 }
 

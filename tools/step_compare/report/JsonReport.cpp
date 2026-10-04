@@ -436,7 +436,7 @@ std::string ToJson(const CompareResult &result) {
       {"limit", effectiveAbsVolTol},
       {"limit_text", FormatDouble(effectiveAbsVolTol, 4) + " mm³"},
       {"limit_unit", "mm3"},
-      {"available", result.booleanExecuted},
+      {"available", result.booleanExecuted && result.booleanConsistency.booleanResultValid},
       {"diagnostic", false},
       {"passed", boolPass},
   });

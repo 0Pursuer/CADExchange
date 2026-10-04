@@ -1,4 +1,5 @@
 #include "StepCompare.h"
+#include "geometry/BooleanVerifier.h"
 
 #include <BRepAlgoAPI_Cut.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
@@ -15,6 +16,8 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Face.hxx>
+#include <TopoDS_Shell.hxx>
+#include <TopoDS_Solid.hxx>
 #include <gp_Ax2.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pnt.hxx>
@@ -114,7 +117,50 @@ void TestInvalidBooleanConservationIsLikelyEqual() {
   const auto status = cadstep::detail::ClassifyClosedSolidComparison(
       true, true, true, true, consistency);
   Expect(status == cadstep::CompareStatus::LikelyEqual,
-         "invalid boolean conservation must produce LIKELY_EQUAL");
+          "invalid boolean conservation must produce LIKELY_EQUAL");
+  Expect(cadstep::detail::ClassifyClosedSolidComparison(
+             true, true, true, false, consistency) ==
+             cadstep::CompareStatus::LikelyEqual,
+         "an untrusted large residual must not prove a geometric difference");
+  Expect(cadstep::detail::ClassifyClosedSolidComparison(
+             false, true, true, false, consistency) ==
+             cadstep::CompareStatus::Different,
+         "invalid boolean evidence must not hide a measured input volume difference");
+}
+
+void TestInvalidBooleanReport() {
+  cadstep::CompareResult result;
+  result.booleanExecuted = true;
+  result.missingMaterial.succeeded = true;
+  result.addedMaterial.succeeded = true;
+  result.booleanConsistency.invalidReason = "boolean volume conservation check failed";
+  const auto summary = cadstep::ToHumanSummary(result);
+  Expect(summary.find("UNRELIABLE") != std::string::npos,
+         "invalid boolean evidence must be labelled UNRELIABLE in the human summary");
+  Expect(summary.find("Residual   : N/A") != std::string::npos,
+         "an invalid boolean residual must not be displayed as a measured material difference");
+}
+
+void TestOpenBooleanResultIsRejected() {
+  // A shell missing one face can be returned by a completed Cut with no fatal
+  // kernel error. Completion alone must not certify a material difference.
+  const TopoDS_Shape box = BRepPrimAPI_MakeBox(20.0, 30.0, 40.0).Shape();
+  BRep_Builder builder;
+  TopoDS_Shell shell;
+  builder.MakeShell(shell);
+  TopExp_Explorer faces(box, TopAbs_FACE);
+  faces.Next();
+  for (; faces.More(); faces.Next()) {
+    builder.Add(shell, faces.Current());
+  }
+  TopoDS_Solid openSolid;
+  builder.MakeSolid(openSolid);
+  builder.Add(openSolid, shell);
+  const TopoDS_Solid distantTool =
+      BRepPrimAPI_MakeBox(gp_Pnt(50.0, 0.0, 0.0), 10.0, 10.0, 10.0).Solid();
+  const auto result = cadstep::detail::CutSolids(openSolid, distantTool, 0.001);
+  Expect(!result.audit.succeeded,
+         "an open boolean result must not be accepted as a valid solid difference");
 }
 
 void TestTranslatedBoxIsDifferent(const std::filesystem::path &root) {
@@ -650,6 +696,8 @@ int main(int argc, char **argv) {
     TestBooleanConservationMetrics(root);
     TestLikelyEqualExitCode();
     TestInvalidBooleanConservationIsLikelyEqual();
+    TestInvalidBooleanReport();
+    TestOpenBooleanResultIsRejected();
     TestDimensionChangeIsDifferent(root);
     TestRelativeVolumeThresholdIsIndependent(root);
     TestAbsoluteVolumeThresholdIsIndependent(root);

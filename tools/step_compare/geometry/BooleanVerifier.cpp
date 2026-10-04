@@ -7,6 +7,7 @@
 #include "geometry/ShapeAudit.h"
 
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepCheck_Analyzer.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
 #include <Standard_Failure.hxx>
@@ -14,6 +15,7 @@
 #include <TopoDS_Solid.hxx>
 
 #include <cmath>
+#include <sstream>
 #include <string>
 
 namespace cadstep {
@@ -27,9 +29,7 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
     return result;
   }
   if (tool.IsNull()) {
-    result.audit.succeeded = true;
-    result.audit.volumeMm3 = 0.0;
-    result.audit.componentCount = 0;
+    result.audit.succeeded = false;
     result.audit.report = "tool solid is null";
     return result;
   }
@@ -50,9 +50,14 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
     cutAlgo.SetNonDestructive(true);
     cutAlgo.Build();
 
+    std::ostringstream kernelReport;
+    cutAlgo.DumpErrors(kernelReport);
+    cutAlgo.DumpWarnings(kernelReport);
+    result.audit.report = kernelReport.str();
+
     if (cutAlgo.HasErrors()) {
       result.audit.succeeded = false;
-      result.audit.report = "BRepAlgoAPI_Cut failed";
+      result.audit.report = "BRepAlgoAPI_Cut failed: " + result.audit.report;
       return result;
     }
 
@@ -66,9 +71,13 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
 
     GProp_GProps props;
     BRepGProp::VolumeProperties(result.shape, props);
-    result.audit.succeeded = true;
     result.audit.volumeMm3 = std::abs(props.Mass());
     result.audit.componentCount = CountUniqueSubShapes(result.shape, TopAbs_SOLID);
+    result.audit.succeeded = BRepCheck_Analyzer(result.shape).IsValid() &&
+                             std::isfinite(result.audit.volumeMm3);
+    if (!result.audit.succeeded) {
+      result.audit.report = "invalid boolean result shape or volume: " + result.audit.report;
+    }
   } catch (const Standard_Failure &e) {
     result.audit.succeeded = false;
     result.audit.report = std::string("BRepAlgoAPI_Cut exception: ") + e.GetMessageString();
