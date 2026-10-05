@@ -162,7 +162,7 @@ enum class CGeoCurveType {
 struct CRefEdge : public CRefSubTopo {
   CPoint3D startPoint;
   CPoint3D endPoint;
-  CPoint3D midPoint;
+  CPoint3D midPoint; ///< 裁剪边参数区间中间位置，不是弦中点。
   CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
   double length = 0.0;
 

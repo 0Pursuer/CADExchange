@@ -9,24 +9,17 @@ namespace detail {
  * ToString() 返回的拼写会原样写入 result.json 的 overall.decision_path
  * 以及人类可读摘要，因此它属于**可观察输出契约**，任何一项的字符串都不得改动。
  *
- * @note 重要的语义：GlobalMetricsFailed 是**中间闩锁**而非终态分支——
- *       全局度量不通过只会阻止归一化快路径，执行仍会继续进入布尔校验，
- *       并由后者覆盖该 code。把它建模成枚举是为了在不依赖自由字符串的
- *       前提下原样保留既有行为。
- *
- * @warning 既有行为中并非所有枚举值都可达：GlobalMetricsFailed 与
- *          BooleanConservationInvalid 在最终输出中不会出现（前者总是被
- *          布尔阶段的结论覆盖，后者因 ClassifyClosedSolidComparison 只返回
- *          Equal/Different 而不可达）。保留它们是为了如实反映流程的分支。
+ * @note 全局度量失败后仍执行布尔校验；若布尔证据不可用，
+ *       GlobalMetricsFailed 保留由全局度量证明的 DIFFERENT 结论。
  */
 enum class DecisionCode {
   BooleanAfterNormalization,      ///< 对归一化后的实体做布尔差分得出结论
   BooleanAfterOriginal,           ///< 归一化不可用时对原始实体做布尔差分
-  GlobalMetricsFailed,            ///< 【中间闩锁】全局度量不通过（见类说明）
+  GlobalMetricsFailed,            ///< 全局度量不通过
   NormalizedTopologyFastPath,     ///< 归一化拓扑全匹配，走快路径直接判等，唯一会提前返回的分支
   BooleanFailed,                  ///< 布尔差分运算本身失败，结论为 Indeterminate
   BooleanAfterOriginalFallback,   ///< 归一化实体差分超差、但原始实体差分通过，判定相等
-  BooleanConservationInvalid,     ///< 布尔体积守恒校验失败（当前实现中不可达）
+  BooleanConservationInvalid,     ///< 全局度量通过，但布尔体积守恒校验失败
   BooleanDifference,              ///< 几何或布尔判据不通过，结论为 Different
   InputInvalid,                   ///< 输入文件无法读取或不是合法 STEP
   InputUnsupported,               ///< 输入形状不受支持（非单一封闭实体等）

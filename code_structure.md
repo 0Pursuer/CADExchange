@@ -1,5 +1,17 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 边参考原有契约（2026-10-05）
+
+- `core/UnifiedFeatures.h`：`CRefEdge` 保持原有起点、终点、参数中点、曲线类型
+  和长度字段；没有增加定位点或圆支撑结构。
+- `ReferenceBuilder.h/ReferenceAccessor.h` 和 TinyXML/cereal XML 保持原有边引用
+  接口及格式；目标 CAD 可以把源参数中点作为边上定位点，不要求双方中点一致。
+- `UnitConverter.cpp` 缩放原有三点和长度；原生圆参数及圆边拆分匹配由各桥接
+  内部负责，不扩展共享协议。
+- `tools/step_compare/geometry/ShapeAudit.*::ComputeVolumeProperties` 是输入、
+  规范化前后和布尔差体的共同自适应积分入口，审计记录数值积分误差估计。
+  该估计不替代形体有效性、体积守恒或布尔成功检查。
+
 ## 独立 STEP 终态比较器
 
 - `tools/step_compare/StepCompare.h/.cpp`：STEP 读取、单位归一到毫米、单闭合
@@ -135,6 +147,7 @@
 - `examples/RecommendedApproach.cpp`：推荐构建路径演示（Builder + SaveModel）。  
 - `examples/PartReconstructionDemo.cpp`：加载/遍历/提取/依赖分析/重建模拟演示。  
 - `examples/MigrationRegressionTest.cpp`：旋转/扫掠/倒角特征迁移回归测试（尤其 `SweepExtent`、sweep path 引用语义与倒角 mode/参数链路）。
+- `tests/serialization_precision_tests.cpp`：TinyXML 真实保存/加载回归，验证坐标、坐标系方向和极小非零值完整保留 double 精度；测试输出目录由命令行指定。
 
 ## 2.9 thirdParty
 

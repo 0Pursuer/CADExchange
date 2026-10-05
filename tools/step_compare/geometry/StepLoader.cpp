@@ -149,7 +149,7 @@ LoadedStepModel LoadStepModel(const std::filesystem::path &stepPath, const Compa
     }
 
     GProp_GProps systemProps;
-    BRepGProp::VolumeProperties(s, systemProps);
+    item.audit.volumeIntegrationRelativeError = ComputeVolumeProperties(s, systemProps);
     item.audit.signedVolumeMm3 = systemProps.Mass();
 
     GProp_GProps surfaceProps;
@@ -161,6 +161,9 @@ LoadedStepModel LoadStepModel(const std::filesystem::path &stepPath, const Compa
     item.audit.boundsMm = ComputeBounds(s);
 
     totalVolume += item.audit.signedVolumeMm3;
+    result.compositeAudit.volumeIntegrationRelativeError = std::max(
+        result.compositeAudit.volumeIntegrationRelativeError,
+        item.audit.volumeIntegrationRelativeError);
     totalSurfaceArea += item.audit.surfaceAreaMm2;
     weightedCentroidSum += gp_Vec(centroidPnt.X(), centroidPnt.Y(), centroidPnt.Z()) * item.audit.signedVolumeMm3;
 

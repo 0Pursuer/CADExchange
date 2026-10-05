@@ -83,7 +83,10 @@ std::string ToHumanSummary(const CompareResult &result) {
      << "  Ambiguous : faces=" << result.normalizedTopology.faces.ambiguousCount << ", edges=" << result.normalizedTopology.edges.ambiguousCount << "\n"
      << "  Unmatched : faces=" << result.normalizedTopology.faces.unmatchedReferenceIds.size()
      << ", edges=" << result.normalizedTopology.edges.unmatchedReferenceIds.size() << "\n\n"
-     << "GLOBAL METRICS\n";
+     << "GLOBAL METRICS\n"
+     << "  Effective volume tol : " << effectiveAbsVolTol << " mm³ (relative "
+     << result.thresholds.relativeVolumeTolerance * 100.0 << "%)\n"
+     << "  Effective distance tol : " << effectiveDistTol << " mm\n";
 
   if (result.globalMetricsExecuted) {
     ss << "  Volume diff : " << result.absoluteInputVolumeDifferenceMm3 << " mm³ ("
@@ -99,9 +102,24 @@ std::string ToHumanSummary(const CompareResult &result) {
   ss << "BOOLEAN\n"
      << "  Executed   : " << (result.booleanExecuted ? "YES" : "NO") << "\n";
   if (result.booleanExecuted) {
-    ss << "  A-B volume : " << result.missingMaterial.volumeMm3 << " mm³\n"
-       << "  B-A volume : " << result.addedMaterial.volumeMm3 << " mm³\n"
-       << "  Residual   : " << result.symmetricDifferenceVolumeMm3 << " mm³ [" << (boolPass ? "PASS" : "FAIL") << "]\n\n";
+    ss << "  Reliable   : " << (result.booleanConsistency.booleanResultValid ? "YES" : "NO") << "\n";
+    if (result.booleanConsistency.booleanResultValid) {
+      ss << "  A-B volume : " << result.missingMaterial.volumeMm3 << " mm³\n"
+         << "  B-A volume : " << result.addedMaterial.volumeMm3 << " mm³\n"
+         << "  Residual   : " << result.symmetricDifferenceVolumeMm3 << " mm³ [" << (boolPass ? "PASS" : "FAIL") << "]\n";
+    } else {
+      ss << "  A-B volume : N/A [UNRELIABLE; raw=" << result.missingMaterial.volumeMm3 << " mm³]\n"
+         << "  B-A volume : N/A [UNRELIABLE; raw=" << result.addedMaterial.volumeMm3 << " mm³]\n"
+         << "  Residual   : N/A [UNRELIABLE]\n"
+         << "  Reason     : " << result.booleanConsistency.invalidReason << "\n";
+    }
+    if (!result.missingMaterial.report.empty()) {
+      ss << "  A-B kernel : " << result.missingMaterial.report << "\n";
+    }
+    if (!result.addedMaterial.report.empty()) {
+      ss << "  B-A kernel : " << result.addedMaterial.report << "\n";
+    }
+    ss << "\n";
   } else {
     ss << "  A-B volume : N/A\n"
        << "  B-A volume : N/A\n"

@@ -116,10 +116,13 @@ int ExitCode(CompareStatus status) {
 CompareStatus detail::ClassifyClosedSolidComparison(
     bool volumePass, bool centroidPass, bool boundsPass, bool booleanPass,
     const BooleanConsistencyMetrics &consistency) {
-  if (volumePass && centroidPass && boundsPass && booleanPass) {
-    return CompareStatus::Equal;
+  if (!volumePass || !centroidPass || !boundsPass) {
+    return CompareStatus::Different;
   }
-  return CompareStatus::Different;
+  if (!consistency.booleanResultValid) {
+    return CompareStatus::LikelyEqual;
+  }
+  return booleanPass ? CompareStatus::Equal : CompareStatus::Different;
 }
 
 const char *ToString(MultiSolidPolicy policy) {

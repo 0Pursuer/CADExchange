@@ -83,6 +83,7 @@ void ScaleRefEntity(const std::shared_ptr<CRefEntityBase> &ref, double factor,
     ScalePoint(edge->startPoint, factor);
     ScalePoint(edge->endPoint, factor);
     ScalePoint(edge->midPoint, factor);
+    edge->length *= factor;
     return;
   }
   if (auto vertex = std::dynamic_pointer_cast<CRefVertex>(ref)) {

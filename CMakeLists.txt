@@ -80,6 +80,9 @@ if(CADEXCHANGE_BUILD_EXAMPLES)
     add_executable(MigrationRegressionTest examples/MigrationRegressionTest.cpp)
     target_link_libraries(MigrationRegressionTest PRIVATE cadexchange)
 
+    add_executable(serialization_precision_tests tests/serialization_precision_tests.cpp)
+    target_link_libraries(serialization_precision_tests PRIVATE cadexchange)
+
     add_executable(PythonBindingSmokeTest examples/PythonBindingSmokeTest.cpp)
     target_link_libraries(PythonBindingSmokeTest PRIVATE cadexchange)
 

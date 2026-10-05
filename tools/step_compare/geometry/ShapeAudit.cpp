@@ -10,6 +10,8 @@
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedMapOfShape.hxx>
 #include <gp_Pnt.hxx>
+#include <cmath>
+#include <stdexcept>
 
 namespace cadstep {
 namespace detail {
@@ -23,6 +25,16 @@ Point3 ToPoint3(const gp_Pnt &point) {
 }
 
 } // namespace
+
+double ComputeVolumeProperties(const TopoDS_Shape &shape, GProp_GProps &properties) {
+  properties = GProp_GProps{};
+  const double error = BRepGProp::VolumeProperties(shape, properties, 1.0e-10);
+  if (!std::isfinite(properties.Mass()) || !std::isfinite(error) ||
+      error < 0.0 || error > 1.0e-8) {
+    throw std::runtime_error("adaptive volume integration failed its precision budget");
+  }
+  return error;
+}
 
 Bounds3 ComputeBounds(const TopoDS_Shape &shape) {
   Bounds3 bounds;
