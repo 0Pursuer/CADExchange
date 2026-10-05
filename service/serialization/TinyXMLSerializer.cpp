@@ -6,6 +6,9 @@
 #include <cstdio>
 #include <sstream>
 #include <cmath>
+#include <iomanip>
+#include <limits>
+#include <locale>
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -17,19 +20,13 @@ namespace CADExchange {
 using namespace tinyxml2;
 
 namespace {
-// Helper to format a single double value with max 6 decimals, treating near-zero values as 0
-double CleanupZero(double value) {
-  if (std::abs(value) < 1e-10)
-    return 0.0;
-  return value;
-}
-
-// Format one component with %.6g: strips trailing zeros per-component.
-// e.g. 1.0->"1", 0.5->"0.5", 3.141593->"3.14159"
+// Geometry persistence must round-trip doubles, independently of display
+// precision, model units, or the process's decimal separator.
 std::string FormatDouble(double v) {
-  char buf[32];
-  std::snprintf(buf, sizeof(buf), "%.6g", CleanupZero(v));
-  return buf;
+  std::ostringstream stream;
+  stream.imbue(std::locale::classic());
+  stream << std::setprecision(std::numeric_limits<double>::max_digits10) << v;
+  return stream.str();
 }
 
 // Format a (x,y,z) triple; each component formatted independently.

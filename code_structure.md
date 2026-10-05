@@ -135,6 +135,7 @@
 - `examples/RecommendedApproach.cpp`：推荐构建路径演示（Builder + SaveModel）。  
 - `examples/PartReconstructionDemo.cpp`：加载/遍历/提取/依赖分析/重建模拟演示。  
 - `examples/MigrationRegressionTest.cpp`：旋转/扫掠/倒角特征迁移回归测试（尤其 `SweepExtent`、sweep path 引用语义与倒角 mode/参数链路）。
+- `tests/serialization_precision_tests.cpp`：TinyXML 真实保存/加载回归，验证坐标、坐标系方向和极小非零值完整保留 double 精度；测试输出目录由命令行指定。
 
 ## 2.9 thirdParty
 
