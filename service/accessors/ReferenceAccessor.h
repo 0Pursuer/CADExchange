@@ -247,20 +247,6 @@ public:
     return CGeoCurveType::UNKNOWN;
   }
 
-  bool GetEdgeSamplePoint(CPoint3D &point) const {
-    const auto edge = std::dynamic_pointer_cast<const CRefEdge>(m_ref);
-    if (!edge || !edge->geometry.samplePoint) return false;
-    point = *edge->geometry.samplePoint;
-    return true;
-  }
-
-  bool GetEdgeCircleSupport(CCircularEdgeSupport &circle) const {
-    const auto edge = std::dynamic_pointer_cast<const CRefEdge>(m_ref);
-    if (!edge || !edge->geometry.circle) return false;
-    circle = *edge->geometry.circle;
-    return true;
-  }
-
   /**
    * @brief 获取面的曲面类型；若当前不是面引用则返回 UNKNOWN。
    */

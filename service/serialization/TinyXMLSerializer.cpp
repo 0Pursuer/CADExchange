@@ -1041,15 +1041,6 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
           element->SetAttribute("StartPoint", FormatPoint(edge->startPoint).c_str());
           element->SetAttribute("EndPoint", FormatPoint(edge->endPoint).c_str());
           element->SetAttribute("MidPoint", FormatPoint(edge->midPoint).c_str());
-          if (edge->geometry.samplePoint) {
-            element->SetAttribute("SamplePoint", FormatPoint(*edge->geometry.samplePoint).c_str());
-          }
-          if (edge->geometry.circle) {
-            const auto &circle = *edge->geometry.circle;
-            element->SetAttribute("CircleCenter", FormatPoint(circle.center).c_str());
-            element->SetAttribute("CircleNormal", FormatVector(circle.normal).c_str());
-            element->SetAttribute("CircleRadius", circle.radius);
-          }
           element->SetAttribute("CurveType",
                                 CurveTypeToString(edge->curveType).c_str());
         }
@@ -1065,17 +1056,6 @@ static const RefSerializerEntry kRefSerializerEntries[] = {
         edge->startPoint = ParsePointAttribute(element, "StartPoint");
         edge->endPoint = ParsePointAttribute(element, "EndPoint");
         edge->midPoint = ParsePointAttribute(element, "MidPoint");
-        if (element->Attribute("SamplePoint")) {
-          edge->geometry.samplePoint = ParsePointAttribute(element, "SamplePoint");
-        }
-        if (element->Attribute("CircleCenter") && element->Attribute("CircleNormal") &&
-            element->Attribute("CircleRadius")) {
-          CCircularEdgeSupport circle;
-          circle.center = ParsePointAttribute(element, "CircleCenter");
-          circle.normal = ParseVectorAttribute(element, "CircleNormal");
-          element->QueryDoubleAttribute("CircleRadius", &circle.radius);
-          edge->geometry.circle = circle;
-        }
         if (const char *curveTypeText = element->Attribute("CurveType")) {
           if (auto mapped = CurveTypeFromString(curveTypeText)) {
             edge->curveType = *mapped;

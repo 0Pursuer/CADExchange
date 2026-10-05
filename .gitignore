@@ -13,5 +13,30 @@ vcpkg_installed/
 
 # Temp/trail files
 std.out
+std.err
+*.tmp
+*.log
+*.bak
 trail.txt.*
+/*_git_message.txt
+
+# Local CAD parts, generated exchange files and geometry sidecars
+*.[pP][rR][tT]
+*.[pP][rR][tT].*
+*.[sS][lL][dD][pP][rR][tT]
+*.[sS][lL][dD][aA][sS][mM]
+*.[sS][lL][dD][dD][rR][wW]
+*.[cC][aA][tT][pP][aA][rR][tT]
+*.[cC][aA][tT][pP][rR][oO][dD][uU][cC][tT]
+*.[cC][aA][tT][dD][rR][aA][wW][iI][nN][gG]
+*.[sS][tT][eE][pP]
+*.[sS][tT][pP]
+*.[bB][rR][eE][pP]
+*.[sS][tT][lL]
+*.geometry.json
+*.tinyxml.xml
+*_read.json
+*_write.json
+*_rebuild.json
+
 thirdParty/pybind11/pybind11.egg-info/

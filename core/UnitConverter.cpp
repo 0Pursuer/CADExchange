@@ -83,11 +83,6 @@ void ScaleRefEntity(const std::shared_ptr<CRefEntityBase> &ref, double factor,
     ScalePoint(edge->startPoint, factor);
     ScalePoint(edge->endPoint, factor);
     ScalePoint(edge->midPoint, factor);
-    if (edge->geometry.samplePoint) ScalePoint(*edge->geometry.samplePoint, factor);
-    if (edge->geometry.circle) {
-      ScalePoint(edge->geometry.circle->center, factor);
-      edge->geometry.circle->radius *= factor;
-    }
     edge->length *= factor;
     return;
   }

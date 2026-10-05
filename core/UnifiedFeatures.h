@@ -159,26 +159,12 @@ enum class CGeoCurveType {
   TRIMMED = 3009
 };
 
-struct CCircularEdgeSupport {
-  CPoint3D center;
-  CVector3D normal;
-  double radius = 0.0;
-};
-
-struct CEdgeReferenceGeometry {
-  /// 任意边上定位点，不承诺位于参数区间中间。
-  std::optional<CPoint3D> samplePoint;
-  /// 仅在原生 API 明确确认解析圆时填写；禁止从任意样条三点猜圆。
-  std::optional<CCircularEdgeSupport> circle;
-};
-
 struct CRefEdge : public CRefSubTopo {
   CPoint3D startPoint;
   CPoint3D endPoint;
   CPoint3D midPoint; ///< 裁剪边参数区间中间位置，不是弦中点。
   CGeoCurveType curveType = CGeoCurveType::UNKNOWN;
   double length = 0.0;
-  CEdgeReferenceGeometry geometry;
 
   CRefEdge() : CRefSubTopo(RefType::TOPO_EDGE) {}
 };
