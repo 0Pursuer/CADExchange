@@ -1,5 +1,17 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 边参考几何扩展（2026-10-04）
+
+- `core/UnifiedFeatures.h`：`CRefEdge::midPoint` 是裁剪参数中点；可选
+  `CEdgeReferenceGeometry` 分别保存任意定位点和原生解析圆的圆心/法向/半径。
+- `ReferenceBuilder.h/ReferenceAccessor.h`：对应可选字段的构造与只读访问；
+  `UnitConverter.cpp` 缩放定位点、圆心、半径，保持法向不变。
+- TinyXML 使用可选 `SamplePoint/CircleCenter/CircleNormal/CircleRadius` 属性；
+  cereal XML 使用可选 `EdgeGeometry` 子节点。旧 XML 无扩展节点仍可读取。
+- `tools/step_compare/geometry/ShapeAudit.*::ComputeVolumeProperties` 是输入、
+  规范化前后和布尔差体的共同自适应积分入口，审计记录数值积分误差估计。
+  该估计不替代形体有效性、体积守恒或布尔成功检查。
+
 ## 独立 STEP 终态比较器
 
 - `tools/step_compare/StepCompare.h/.cpp`：STEP 读取、单位归一到毫米、单闭合

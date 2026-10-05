@@ -11,11 +11,16 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
+#include <GProp_GProps.hxx>
 
 #include <string>
 
 namespace cadstep {
 namespace detail {
+
+/// Integrate exact surfaces adaptively. Returns OCCT's relative error estimate;
+/// this estimates quadrature error, not the validity of the input geometry.
+double ComputeVolumeProperties(const TopoDS_Shape &shape, GProp_GProps &properties);
 
 /**
  * @file ShapeAudit.h

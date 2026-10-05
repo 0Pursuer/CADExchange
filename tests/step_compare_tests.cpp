@@ -5,8 +5,10 @@
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_Transform.hxx>
+#include <BRepBuilderAPI_NurbsConvert.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeCylinder.hxx>
+#include <BRepPrimAPI_MakeTorus.hxx>
 #include <BRep_Builder.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Interface_Static.hxx>
@@ -83,6 +85,23 @@ void TestEqualBoxes(const std::filesystem::path &root) {
   Expect(cadstep::ToJson(result).find("\"status\": \"EQUAL\"") !=
              std::string::npos,
          "result JSON must contain the EQUAL status");
+}
+
+void TestCurvedSolidVolume(const std::filesystem::path &root) {
+  // Rational spline faces require adaptive integration, even for an analytic
+  // solid represented exactly as NURBS. The volume has an independent oracle.
+  const auto torus = BRepPrimAPI_MakeTorus(100.0, 7.0).Shape();
+  const auto splineTorus = BRepBuilderAPI_NurbsConvert(torus, true).Shape();
+  const auto path = root / "spline_torus.step";
+  WriteStep(splineTorus, path);
+  const auto result = cadstep::CompareStepFiles(path, path, cadstep::CompareConfig{});
+  const double pi = std::acos(-1.0);
+  const double expected = 2.0 * pi * pi * 100.0 * 7.0 * 7.0;
+  // NURBS/STEP conversion has geometric tolerances of its own. This budget
+  // includes those tolerances; the old quadrature error is about 745 mm3.
+  Expect(std::abs(result.reference.signedVolumeMm3 - expected) < 1.0e-2,
+         "spline torus volume must agree with analytic volume within 0.01 mm3; error=" +
+             std::to_string(result.reference.signedVolumeMm3 - expected));
 }
 
 void TestBooleanConservationMetrics(const std::filesystem::path &root) {
@@ -692,6 +711,7 @@ int main(int argc, char **argv) {
     std::filesystem::create_directories(root);
 
     TestEqualBoxes(root);
+    TestCurvedSolidVolume(root);
     TestTranslatedBoxIsDifferent(root);
     TestBooleanConservationMetrics(root);
     TestLikelyEqualExitCode();

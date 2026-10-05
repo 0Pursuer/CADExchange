@@ -110,12 +110,33 @@ template <class Archive> void serialize(Archive &ar, CRefFace &face) {
 /**
  * @brief 序列化边界的端点与中点。
  */
+template <class Archive> void serialize(Archive &ar, CCircularEdgeSupport &circle) {
+  ar(cereal::make_nvp("Center", circle.center),
+     cereal::make_nvp("Normal", circle.normal),
+     cereal::make_nvp("Radius", circle.radius));
+}
+
+template <class Archive> void serialize(Archive &ar, CEdgeReferenceGeometry &geometry) {
+  ar(cereal::make_nvp("SamplePoint", geometry.samplePoint),
+     cereal::make_nvp("Circle", geometry.circle));
+}
+
 template <class Archive> void serialize(Archive &ar, CRefEdge &edge) {
   ar(cereal::base_class<CRefSubTopo>(&edge),
      cereal::make_nvp("StartPoint", edge.startPoint),
      cereal::make_nvp("EndPoint", edge.endPoint),
      cereal::make_nvp("MidPoint", edge.midPoint),
      cereal::make_nvp("CurveType", edge.curveType));
+  if constexpr (Archive::is_loading::value) {
+    edge.geometry = {};
+    // Old XML references end at CurveType. Inspect the next child so missing
+    // extensions do not swallow parse errors or consume the parent's data.
+    if (const char *name = ar.getNodeName(); name && std::string(name) == "EdgeGeometry") {
+      ar(cereal::make_nvp("EdgeGeometry", edge.geometry));
+    }
+  } else {
+    ar(cereal::make_nvp("EdgeGeometry", edge.geometry));
+  }
 }
 
 /**

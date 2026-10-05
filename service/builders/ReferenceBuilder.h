@@ -136,6 +136,16 @@ public:
    */
   BUILDER_ADD_POINT_SETTER(RefEdgeBuilder, midPoint, MidPoint)
 
+  RefEdgeBuilder &SamplePoint(const CPoint3D &point) {
+    m_ptr->geometry.samplePoint = point;
+    return *this;
+  }
+
+  RefEdgeBuilder &CircleSupport(const CCircularEdgeSupport &circle) {
+    m_ptr->geometry.circle = circle;
+    return *this;
+  }
+
   /**
    * @brief 设置边的曲线类型。
    */

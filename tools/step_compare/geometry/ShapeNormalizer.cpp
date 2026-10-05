@@ -112,7 +112,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   result.audit.comparableEdgeCountBefore = result.audit.edgeCountBefore;
 
   GProp_GProps inputProps;
-  BRepGProp::VolumeProperties(input, inputProps);
+  ComputeVolumeProperties(input, inputProps);
   result.audit.volumeBeforeMm3 = inputProps.Mass();
 
   if (!config.enableSameDomainNormalization) {
@@ -222,7 +222,7 @@ NormalizedSolidInternal NormalizeSameDomain(const TopoDS_Solid &input,
   result.audit.elapsedMs = ElapsedMs(normStart);
   if (!result.solid.IsNull()) {
     GProp_GProps outputProps;
-    BRepGProp::VolumeProperties(result.solid, outputProps);
+    ComputeVolumeProperties(result.solid, outputProps);
     result.audit.volumeAfterMm3 = outputProps.Mass();
 
     const double denom = std::abs(result.audit.volumeBeforeMm3);

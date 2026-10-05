@@ -70,7 +70,7 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
     }
 
     GProp_GProps props;
-    BRepGProp::VolumeProperties(result.shape, props);
+    result.audit.volumeIntegrationRelativeError = ComputeVolumeProperties(result.shape, props);
     result.audit.volumeMm3 = std::abs(props.Mass());
     result.audit.componentCount = CountUniqueSubShapes(result.shape, TopAbs_SOLID);
     result.audit.succeeded = BRepCheck_Analyzer(result.shape).IsValid() &&
@@ -81,6 +81,9 @@ BooleanDifferenceResult CutSolids(const TopoDS_Solid &argument, const TopoDS_Sol
   } catch (const Standard_Failure &e) {
     result.audit.succeeded = false;
     result.audit.report = std::string("BRepAlgoAPI_Cut exception: ") + e.GetMessageString();
+  } catch (const std::exception &e) {
+    result.audit.succeeded = false;
+    result.audit.report = std::string("BRepAlgoAPI_Cut measurement failed: ") + e.what();
   } catch (...) {
     result.audit.succeeded = false;
     result.audit.report = "BRepAlgoAPI_Cut unknown exception";

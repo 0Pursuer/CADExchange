@@ -575,6 +575,8 @@ struct InputAudit {
   bool closed = false;
   /// 有符号体积（立方毫米）
   double signedVolumeMm3 = 0.0;
+  /// OCCT 自适应积分误差估计，不代表几何或布尔有效性。
+  double volumeIntegrationRelativeError = 0.0;
   /// 表面积（平方毫米）
   double surfaceAreaMm2 = 0.0;
   /// 质心（毫米）
@@ -591,6 +593,7 @@ struct DifferenceAudit {
   bool succeeded = false;
   /// 差分残留体积（立方毫米）
   double volumeMm3 = 0.0;
+  double volumeIntegrationRelativeError = 0.0;
   /// 残留的连通分量数
   int componentCount = 0;
   /// 几何内核的原始报告文本

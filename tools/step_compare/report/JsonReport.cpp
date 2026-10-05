@@ -123,6 +123,7 @@ std::string ToJson(const CompareResult &result) {
     node["brep_valid"] = audit.brepValid;
     node["closed"] = audit.closed;
     node["volume_mm3"] = audit.signedVolumeMm3;
+    node["volume_integration_relative_error"] = audit.volumeIntegrationRelativeError;
     node["surface_area_mm2"] = audit.surfaceAreaMm2;
     node["centroid_mm"] = {{"x", audit.centroidMm.x}, {"y", audit.centroidMm.y}, {"z", audit.centroidMm.z}};
     node["bounds_mm"] = {
@@ -298,12 +299,14 @@ std::string ToJson(const CompareResult &result) {
   diffs["missing_material"] = {
       {"succeeded", result.missingMaterial.succeeded},
       {"volume_mm3", result.missingMaterial.volumeMm3},
+      {"volume_integration_relative_error", result.missingMaterial.volumeIntegrationRelativeError},
       {"component_count", result.missingMaterial.componentCount},
       {"kernel_report", result.missingMaterial.report},
   };
   diffs["added_material"] = {
       {"succeeded", result.addedMaterial.succeeded},
       {"volume_mm3", result.addedMaterial.volumeMm3},
+      {"volume_integration_relative_error", result.addedMaterial.volumeIntegrationRelativeError},
       {"component_count", result.addedMaterial.componentCount},
       {"kernel_report", result.addedMaterial.report},
   };
