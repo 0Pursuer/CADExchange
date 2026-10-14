@@ -119,6 +119,16 @@ public:
     return *this;
   }
 
+  MirrorPatternBuilder &SetMergeResults(bool merge) {
+    m_feature->mergeResults = merge; return *this;
+  }
+  MirrorPatternBuilder &SetAffectedBodyMode(MirrorAffectedBodyMode mode) {
+    m_feature->affectedBodyMode = mode; return *this;
+  }
+  MirrorPatternBuilder &AddAffectedBody(const std::shared_ptr<CRefBody> &body) {
+    m_feature->affectedBodies.push_back(body); return *this;
+  }
+
   MirrorPatternBuilder &SetGeometryPattern(bool geomPattern) {
     m_feature->geometryPattern = geomPattern;
     return *this;

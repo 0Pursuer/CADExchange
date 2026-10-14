@@ -1,5 +1,29 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 镜像与 Body 引用增量（2026-10-14）
+
+- `core/UnifiedFeatures.h` 在 `RefType::UNKNOWN` 之后追加 `TOPO_BODY`，
+  `CRefBody` 直接继承引用基类，描述镜像前完整封闭实体的包围盒、均匀密度
+  体积/重心、表面积及真实表面采样点。`sourceFeatureIDs` 仅用于诊断。
+- `core/BodyGeometry.h::ValidateBodyReference` 提供无原生 SDK 依赖的指纹门禁；
+  原生引用层仍必须检查每个点属于候选裁剪表面并唯一匹配实体。
+- `ReferenceBuilder.h` 的 `Ref::Body()` 和 `ReferenceAccessor.h` 的
+  `BodyRefAccessor` 负责构建与只读访问。`PatternBuilder/PatternAccessor`
+  区分镜像种子、实体镜像的必填 `mergeResults`、几何特征/面镜像的
+  `affectedBodyMode` 及受影响 `affectedBodies`。
+- TinyXML 引用注册表和 cereal 多态注册均支持 Body。新增 TinyXML 指纹字段
+  严格读取，缺失字段或未知镜像种子不能被省略后误报有效；不补旧镜像数据。
+- `UnitConverter.cpp` 使用共享引用访问集合，几何点缩放一次；面积、体积按
+  长度倍率的二次方、三次方缩放，诊断特征 ID 保持原样。
+- `ModelValidator.cpp` 校验镜像引用、种子类型/顺序与活动选项；Body 不具有
+  父特征依赖。Python 只读接口通过 `as_body()` 暴露指纹及镜像选项。
+- `tests/body_mirror_model_tests.cpp` 使用 Release 有效断言验证校验门、
+  单位转换、TinyXML/cereal 实际往返与缺失/畸形字段；可选
+  `tests/body_mirror_python_tests.py` 验证编译后的 Python 只读接口。
+  输出统一位于上层项目 `tmp/body-mirror-model-tests/`。这些共享层测试
+  不代表 SolidWorks/Creo 原生闭环验证通过。
+
+
 ## 孔特征增量（2026-10-13）
 
 - `core/UnifiedFeatures.h`：在既有枚举末尾追加 `FeatureType::Hole=14`，保留旧值；

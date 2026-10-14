@@ -21,6 +21,28 @@ namespace Builder {
  * @brief 拓扑面引用构建器辅助类。
  * 
  */
+class RefBodyBuilder {
+  std::shared_ptr<CRefBody> m_ptr = std::make_shared<CRefBody>();
+public:
+  BUILDER_ADD_POINT_SETTER(RefBodyBuilder, boundsMin, BoundsMin)
+  BUILDER_ADD_POINT_SETTER(RefBodyBuilder, boundsMax, BoundsMax)
+  BUILDER_ADD_POINT_SETTER(RefBodyBuilder, volumeCentroid, VolumeCentroid)
+  RefBodyBuilder &Volume(double value) { m_ptr->volume = value; return *this; }
+  RefBodyBuilder &SurfaceArea(double value) { m_ptr->surfaceArea = value; return *this; }
+  RefBodyBuilder &SurfacePoints(const std::vector<CPoint3D> &points) {
+    m_ptr->surfacePoints = points; return *this;
+  }
+  RefBodyBuilder &AddSurfacePoint(const CPoint3D &point) {
+    m_ptr->surfacePoints.push_back(point); return *this;
+  }
+  RefBodyBuilder &SourceFeatureIDs(const std::vector<std::string> &ids) {
+    m_ptr->sourceFeatureIDs = ids; return *this;
+  }
+  std::shared_ptr<CRefBody> Build() const { return m_ptr; }
+  operator std::shared_ptr<CRefEntityBase>() const { return m_ptr; }
+  operator std::shared_ptr<CRefBody>() const { return m_ptr; }
+};
+
 class RefFaceBuilder {
   std::shared_ptr<CRefFace> m_ptr;
 
@@ -306,6 +328,8 @@ public:
   /**
    * @brief 创建拓扑面引用。
    */
+  static RefBodyBuilder Body() { return {}; }
+
   static RefFaceBuilder Face(const std::string &parentID, int index = 0) {
     return RefFaceBuilder(parentID, index);
   }
