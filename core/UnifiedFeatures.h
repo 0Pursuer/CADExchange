@@ -38,7 +38,7 @@ enum class FeatureType {
   LinearPattern,
   CircularPattern,
   MirrorPattern,
-  Hole
+  Hole ///< 原生减材孔特征，由 CHole 描述孔位、深度、孔底及入口形状
 };
 
 /**
@@ -482,6 +482,7 @@ struct ThinWallOption {
  * @brief 共享扫掠终止条件。
  *
  * 用于统一 Extrude / Revolve 的单向、双向、对称以及参考终止表达。
+ * CHole 也复用此结构，但首版仅支持 VALUE 定深和 THROUGH_ALL 单向贯穿。
  */
 struct SweepExtent {
   enum class Type {
@@ -509,33 +510,221 @@ struct SweepExtent {
 };
 
 /**
- * @brief 轮廓驱动特征的共享基类。
+ * @brief 盲孔底部的几何形状。
+ *
+ * 与孔口的柱形沉孔 / 锥形沉头相互独立：本枚举描述主孔的末端，
+ * counterbore 和 countersink 描述入口。贯穿孔没有有限孔底，本枚举不生效。
  */
-enum class HoleBottomKind { Unknown, Flat, Conical };
-enum class HoleDepthReference { Unknown, Shoulder, Tip };
+enum class HoleBottomKind {
+  Unknown, ///< 尚未解析孔底；盲孔必须明确孔底，贯穿孔保存时规范为此值
+  Flat,    ///< 平底盲孔；没有钻尖，钻肩深度与总深度相同
+  Conical  ///< 锥底盲孔；必须给出有效的 drillPointAngle 和 depthReference
+};
 
+/**
+ * @brief 盲孔深度数值所对应的轴向终点。
+ *
+ * 起点始终是实际入口平面，本枚举只决定 CHole::extent.value 量到钻肩还是钻尖。
+ * “钻肩”是主孔圆柱段与孔底锥面的交界，不是孔口沉孔的台阶。
+ * 平底盲孔统一使用 Shoulder；贯穿孔不使用此枚举。
+ */
+enum class HoleDepthReference {
+  Unknown,  ///< 深度基准未解析；锥底盲孔不能据此推测深度，贯穿保存时使用此值
+  Shoulder, ///< 从实际入口到主孔圆柱段末端（钻肩）；不包含钻尖高度
+  Tip       ///< 从实际入口到锥底钻尖；包含主孔圆柱段及钻尖高度
+};
+
+/**
+ * @brief 一个孔位的入口坐标及可选定位依赖。
+ *
+ * 几何位置由 entryPoint 表达，positionRef 用于保留源模型中能重建的定位关联。
+ * 首版 CHole 只允许一个孔位；列表形式为后续多孔位表达保留数据结构。
+ */
 struct CHoleLocation {
+  /**
+   * @brief 孔轴与实际入口平面的交点。
+   *
+   * 使用模型全局坐标系，坐标长度随模型单位变化；必须为有限值并位于
+   * CHole::supportRef 对应的平面上。写入 CAD 时以此点定位孔轴，
+   * 不能直接填入定位草图的局部坐标或孔口沉孔底面的坐标。
+   */
   CPoint3D entryPoint;
+
+  /**
+   * @brief 可选的孔位定位引用，空指针表示仅用 entryPoint 定位。
+   *
+   * 复用 CRef* 引用体系保存点、顶点、草图段等源定位依赖，供目标桥接解析
+   * 并建立原生关联；引用不能替代 entryPoint，也不承载完整的草图约束树。
+   * 非空引用必须有效，其目标须为标准引用或模型中先于本孔定义的特征。
+   * 目标系统能否保留该关联由桥接能力决定，不能仅凭此字段保证无损重建。
+   */
   std::shared_ptr<CRefEntityBase> positionRef;
 };
-struct CHoleCounterbore { double diameter = 0.0; double depth = 0.0; };
-struct CHoleCountersink { double diameter = 0.0; double includedAngle = 0.0; };
 
-// All axial lengths start at the actual entry plane. Direction points inward.
-struct CHole : CFeatureBase {
-  std::shared_ptr<CRefEntityBase> supportRef;
-  CVector3D direction{};
-  std::vector<CHoleLocation> locations;
+/**
+ * @brief 孔口柱形沉孔参数，描述用于容纳螺钉头等的同轴大径圆柱凹部。
+ *
+ * 仅在 CHole::counterbore 有值时生效，不能与锥形沉头同时启用。
+ * 两个长度都使用模型单位；盲孔的主孔有效圆柱长度为钻肩深度减去 depth。
+ */
+struct CHoleCounterbore {
+  /**
+   * @brief 孔口沉孔的大径，而非主孔径。
+   *
+   * 必须为有限正值且严格大于 CHole::diameter，用于重建入口的大径圆柱段。
+   */
   double diameter = 0.0;
+
+  /**
+   * @brief 从实际入口沿孔的向内方向量到沉孔台阶的轴向深度。
+   *
+   * 必须为有限正值；对盲孔还须严格小于钻肩深度，以保留正长度的主孔圆柱段。
+   * 主孔深度也从实际入口起算，不能把此值作为主孔深度的起点偏移。
+   */
+  double depth = 0.0;
+};
+
+/**
+ * @brief 孔口锥形沉头参数，描述入口大径到主孔径之间的同轴锥面。
+ *
+ * 仅在 CHole::countersink 有值时生效，不能与柱形沉孔同时启用。
+ * 不另存锥面轴向高度，而由大径 D、主孔径 d、完整夹角 alpha 计算：
+ * @f$ h_{csink} = (D-d)/(2\tan(\alpha/2)) @f$。
+ * 对盲孔，该高度须严格小于钻肩深度，以保留正长度的主孔圆柱段。
+ */
+struct CHoleCountersink {
+  /**
+   * @brief 实际入口平面处沉头锥面的最大直径，使用模型长度单位。
+   *
+   * 必须为有限正值且严格大于 CHole::diameter；与 includedAngle 一起决定
+   * 沉头锥面的轴向高度及其与主孔圆柱的交界位置。
+   */
+  double diameter = 0.0;
+
+  /**
+   * @brief 沉头锥面的完整夹角，单位为弧度。
+   *
+   * 为锥面轴向截面中两条母线的夹角，不是母线与孔轴的半角；
+   * 必须为有限值并满足 0 < includedAngle < pi。
+   * 例如 90 度沉头应保存为 pi/2，而不是 90 或 pi/4。
+   */
+  double includedAngle = 0.0;
+};
+
+/**
+ * @brief 跨 CAD 系统统一的原生减材孔特征。
+ *
+ * 通过主孔径、终止条件和孔底描述普通直孔，并可选择一种入口扩孔：
+ * 柱形沉孔或锥形沉头。继承 CFeatureBase 的特征 ID、名称及抑制状态；
+ * 孔固定为减材语义，不需要外部轮廓草图或额外的布尔操作字段。
+ *
+ * 所有孔位使用模型全局坐标系，所有长度使用模型单位，所有角度为弧度及
+ * 完整夹角。所有轴向深度均从实际入口平面沿 direction 向材料内部量起，
+ * 即使有沉孔 / 沉头，也不能改从入口扩孔的底部起算主孔深度。
+ *
+ * @note 首版限定单孔位、单实体、平面入口、孔轴垂直入口以及单向定深或贯穿。
+ *       默认构造不会产生有效孔，仍需填写活动几何参数并执行模型校验。
+ * @see CHoleLocation, CHoleCounterbore, CHoleCountersink, ResolveHoleGeometry
+ */
+struct CHole : CFeatureBase {
+  /**
+   * @brief 孔入口的支撑引用，用于选择原生放置平面并保留特征依赖。
+   *
+   * 必须能解析为 CRefPlane 基准平面或 surfaceType 为 PLANE 的 CRefFace，
+   * 并与 locations 中的入口点共面、与 direction 垂直。
+   * 引用目标须为标准基准或模型中先于本孔定义的特征；不得为空。
+   */
+  std::shared_ptr<CRefEntityBase> supportRef;
+
+  /**
+   * @brief 从实际入口指向材料内部的孔轴单位向量，使用模型全局坐标系。
+   *
+   * 分量必须有限，向量长度为 1，并垂直于入口平面；本字段无长度单位，
+   * 单位转换时不缩放。平面法向可能与其同向或反向，不能直接代替向内方向。
+   * 默认零向量无效，调用者必须明确提供实际钻孔方向。
+   */
+  CVector3D direction{};
+
+  /**
+   * @brief 孔位列表；每项保存入口点及可选定位引用。
+   *
+   * 所有孔位共用本特征的孔径、孔轴、终止条件、孔底和入口参数。
+   * 首版必须恰好包含一项，空列表和多孔位均不支持，不能静默省略孔位。
+   */
+  std::vector<CHoleLocation> locations;
+
+  /**
+   * @brief 主孔圆柱段的直径，使用模型长度单位。
+   *
+   * 必须为有限正值；不包含沉孔 / 沉头的大径。
+   * 锥底盲孔还用此值与 drillPointAngle 共同计算钻尖高度。
+   */
+  double diameter = 0.0;
+
+  /**
+   * @brief 沿 direction 的单向终止条件，复用共享 SweepExtent 结构。
+   *
+   * - VALUE：盲孔，value 为有限正深度，长度随模型单位变化；
+   *   深度终点由 depthReference 决定，起点始终为实际入口平面。
+   * - THROUGH_ALL：保持原生贯穿语义，value 不生效，不能用猜测长度替代贯穿。
+   *
+   * 首版不支持其它终止类型。hasOffset、isFlip、isFlipMaterialSide 须为 false，
+   * offset 须为有限的 0，referenceEntity 和 helperPoint 须为空；
+   * 孔轴方向只由 direction 表达，不再通过 extent 翻转。
+   */
   SweepExtent extent;
+
+  /**
+   * @brief 盲孔 extent.value 的深度基准，用于区分到钻肩与到钻尖的尺寸标注。
+   *
+   * 对锥底盲孔须明确为 Shoulder 或 Tip，未知基准不能用默认值猜测。
+   * 钻尖高度 h_tip = diameter / (2 * tan(drillPointAngle / 2))，
+   * 到尖深度 = 到肩深度 + h_tip；同一几何可采用这两种等价深度标注。
+   * 平底盲孔规范为 Shoulder，贯穿孔此字段不生效，保存时规范为 Unknown。
+   */
   HoleDepthReference depthReference = HoleDepthReference::Unknown;
+
+  /**
+   * @brief 主孔的孔底形状，仅 VALUE 盲孔生效。
+   *
+   * Flat 表示平底，Conical 表示带钻尖的锥底；盲孔不能为 Unknown。
+   * 贯穿孔不使用孔底参数，保存时规范为 Unknown；入口沉头由 countersink 表达。
+   */
   HoleBottomKind bottom = HoleBottomKind::Unknown;
+
+  /**
+   * @brief 锥底盲孔的钻尖完整夹角，单位为弧度。
+   *
+   * 仅 extent.type 为 VALUE 且 bottom 为 Conical 时必须有值并生效，
+   * 有效范围为有限的 0 < drillPointAngle < pi，用于重建孔底及换算肩 / 尖深度。
+   * 平底或贯穿孔忽略此字段，保存时清空；它与孔口沉头的 includedAngle 独立。
+   */
   std::optional<double> drillPointAngle;
+
+  /**
+   * @brief 可选柱形沉孔入口；有值时按大径和轴向深度重建入口台阶。
+   *
+   * 普通直孔为空；定深和贯穿主孔均可携带此入口描述。
+   * 与 countersink 互斥，盲孔须保证沉孔台阶之后仍有正长度的主孔圆柱段。
+   */
   std::optional<CHoleCounterbore> counterbore;
+
+  /**
+   * @brief 可选锥形沉头入口；有值时按大径和完整夹角重建入口锥面。
+   *
+   * 普通直孔为空；定深和贯穿主孔均可携带此入口描述。
+   * 与 counterbore 互斥；由 CHoleCountersink 的公式推导入口高度，
+   * 盲孔须保证锥面之后仍有正长度的主孔圆柱段。
+   */
   std::optional<CHoleCountersink> countersink;
+
+  /** @brief 初始化特征类型为 Hole；不自动补齐孔的几何参数或执行有效性校验。 */
   CHole() { featureType = FeatureType::Hole; }
 };
 
+/**
+ * @brief 轮廓驱动特征的共享基类。
+ */
 struct CProfiledFeatureBase : public CFeatureBase {
   std::string profileSketchID; ///< 草图轮廓的特征 ID（引用，不嵌入）
   BooleanOp operation = BooleanOp::BOSS;
