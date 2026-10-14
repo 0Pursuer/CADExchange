@@ -3,6 +3,7 @@
 #include "../../core/UnifiedFeatures.h"
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -23,6 +24,25 @@ namespace Accessor {
  * - 再问"你有法向量吗？"(GetFaceNormal)
  * - 最后取数据
  */
+class BodyRefAccessor {
+  std::shared_ptr<const CRefBody> m_ref;
+  const CRefBody &Require() const {
+    if (!m_ref) throw std::runtime_error("Invalid Body reference accessor");
+    return *m_ref;
+  }
+public:
+  explicit BodyRefAccessor(std::shared_ptr<const CRefEntityBase> ref = nullptr)
+      : m_ref(std::dynamic_pointer_cast<const CRefBody>(ref)) {}
+  bool IsValid() const { return m_ref != nullptr; }
+  const CPoint3D &GetBoundsMin() const { return Require().boundsMin; }
+  const CPoint3D &GetBoundsMax() const { return Require().boundsMax; }
+  double GetVolume() const { return Require().volume; }
+  const CPoint3D &GetVolumeCentroid() const { return Require().volumeCentroid; }
+  double GetSurfaceArea() const { return Require().surfaceArea; }
+  const std::vector<CPoint3D> &GetSurfacePoints() const { return Require().surfacePoints; }
+  const std::vector<std::string> &GetSourceFeatureIDs() const { return Require().sourceFeatureIDs; }
+};
+
 class ReferenceAccessor {
 private:
   std::shared_ptr<const CRefEntityBase> m_ref;
@@ -408,6 +428,8 @@ public:
     outPos = PointWriter<PointT>::Convert(tmp);
     return true;
   }
+
+  BodyRefAccessor AsBody() const { return BodyRefAccessor(m_ref); }
 
   // --- 底层访问 ---
   const CRefEntityBase *Data() const { return m_ref.get(); }

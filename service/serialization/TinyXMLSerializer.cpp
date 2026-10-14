@@ -1,4 +1,6 @@
 #include "TinyXMLSerializer.h"
+#include "BodyGeometry.h"
+#include <stdexcept>
 #include <algorithm>
 #include <cctype>
 #include <functional>
@@ -872,8 +874,11 @@ bool TinyXMLSerializer::Save(const UnifiedModel &model,
   root->SetAttribute("SchemaVersion", 1);
 
   // Features
-  for (const auto &feature : model.GetFeatures()) {
-    SaveFeature(doc, root, feature);
+  try {
+    for (const auto &feature : model.GetFeatures()) SaveFeature(doc, root, feature);
+  } catch (const std::exception &exception) {
+    if (errorMessage) *errorMessage = exception.what();
+    return false;
   }
 
   XMLError result = doc.SaveFile(filePath.string().c_str());
@@ -915,7 +920,83 @@ struct RefSerializerEntry {
  * @brief 引用实体序列化注册表。
  * 通过 RefType 注册对应的序列化函数。
  */
+// Body fingerprints are a new strict format: absent or malformed fields
+// must fail loading rather than acquiring a plausible zero/default value.
+CPoint3D ReadRequiredReferencePoint(XMLElement *element, const char *name,
+                                   const char *context = "Body") {
+  const char *text = element->Attribute(name);
+  if (!text) throw std::runtime_error(std::string(context) + " missing " + name);
+  std::istringstream stream(text); stream.imbue(std::locale::classic());
+  char a{}, b{}, c{}, d{}; CPoint3D p;
+  if (!(stream >> a >> p.x >> b >> p.y >> c >> p.z >> d) ||
+      a!='(' || b!=',' || c!=',' || d!=')')
+    throw std::runtime_error(std::string(context) + " invalid " + name);
+  stream >> std::ws;
+  if (!stream.eof() || !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+    throw std::runtime_error(std::string(context) + " invalid " + name);
+  return p;
+}
+
+double ReadBodyNumber(XMLElement *element, const char *name) {
+  const char *text = element->Attribute(name);
+  if (!text) throw std::runtime_error(std::string("Body") + " missing " + name);
+  std::istringstream stream(text); stream.imbue(std::locale::classic()); double value{};
+  if (!(stream >> value)) throw std::runtime_error(std::string("Body") + " invalid " + name);
+  stream >> std::ws;
+  if (!stream.eof() || !std::isfinite(value))
+    throw std::runtime_error(std::string("Body") + " invalid " + name);
+  return value;
+}
+
 static const RefSerializerEntry kRefSerializerEntries[] = {
+    {RefType::TOPO_BODY, "Body", "body",
+     [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
+       const auto body = std::dynamic_pointer_cast<CRefBody>(ref);
+       if (!body) throw std::runtime_error("Body RefType does not match reference class");
+       element->SetAttribute("BoundsMin", FormatPoint(body->boundsMin).c_str());
+       element->SetAttribute("BoundsMax", FormatPoint(body->boundsMax).c_str());
+       element->SetAttribute("Volume", FormatDouble(body->volume).c_str());
+       element->SetAttribute("VolumeCentroid", FormatPoint(body->volumeCentroid).c_str());
+       element->SetAttribute("SurfaceArea", FormatDouble(body->surfaceArea).c_str());
+       auto &doc = *element->GetDocument();
+       auto *points = doc.NewElement("SurfacePoints");
+       for (const auto &point : body->surfacePoints) {
+         auto *child = doc.NewElement("Point");
+         child->SetAttribute("Position", FormatPoint(point).c_str());
+         points->InsertEndChild(child);
+       }
+       element->InsertEndChild(points);
+       if (!body->sourceFeatureIDs.empty()) {
+         auto *ids = doc.NewElement("SourceFeatureIDs");
+         for (const auto &id : body->sourceFeatureIDs) {
+           auto *child = doc.NewElement("Feature"); child->SetAttribute("ID", id.c_str());
+           ids->InsertEndChild(child);
+         }
+         element->InsertEndChild(ids);
+       }
+     },
+     [](XMLElement *element) {
+       auto body = std::make_shared<CRefBody>();
+       body->boundsMin = ReadRequiredReferencePoint(element,"BoundsMin");
+       body->boundsMax = ReadRequiredReferencePoint(element,"BoundsMax");
+       body->volume = ReadBodyNumber(element,"Volume");
+       body->volumeCentroid = ReadRequiredReferencePoint(element,"VolumeCentroid");
+       body->surfaceArea = ReadBodyNumber(element,"SurfaceArea");
+       auto *points = element->FirstChildElement("SurfacePoints");
+       if (!points) throw std::runtime_error("Body missing SurfacePoints");
+       for (auto *point=points->FirstChildElement(); point; point=point->NextSiblingElement()) {
+         if (std::string(point->Name()) != "Point") throw std::runtime_error("Invalid Body sample element");
+         body->surfacePoints.push_back(ReadRequiredReferencePoint(point,"Position"));
+       }
+       if (auto *ids = element->FirstChildElement("SourceFeatureIDs")) {
+         for (auto *child=ids->FirstChildElement("Feature"); child; child=child->NextSiblingElement("Feature")) {
+           if (const char *id=child->Attribute("ID")) body->sourceFeatureIDs.push_back(id);
+         }
+       }
+       std::string detail;
+       if (!ValidateBodyReference(*body,detail)) throw std::runtime_error(detail);
+       return body;
+     }},
     {RefType::FEATURE_DATUM_PLANE, "Plane", "plane",
      [](XMLElement *element, const std::shared_ptr<CRefEntityBase> &ref) {
        if (auto plane = std::dynamic_pointer_cast<CRefPlane>(ref)) {
@@ -2012,21 +2093,28 @@ bool TinyXMLSerializer::Load(UnifiedModel &model,
 
   model.Clear();
 
-  XMLElement *featElem = root->FirstChildElement("Feature");
-  while (featElem) {
-    auto feature = LoadFeature(featElem);
-    if (feature) {
-      model.AddFeature(feature);
-    } else {
-      // 严格模式：记录跳过原因（Type 未知或 ID 缺失）
-      const char *typeStr = featElem->Attribute("Type");
-      const char *idStr   = featElem->Attribute("ID");
-      std::cerr << "[TinyXMLSerializer][WARN] Skipped Feature"
-                << " Type=" << (typeStr ? typeStr : "<missing>")
-                << " ID="   << (idStr   ? idStr   : "<missing>")
-                << " — unknown type or missing ID.\n";
+  try {
+    XMLElement *featElem = root->FirstChildElement("Feature");
+    while (featElem) {
+      auto feature = LoadFeature(featElem);
+      if (feature) {
+        model.AddFeature(feature);
+      } else {
+        // 严格模式：记录跳过原因（Type 未知或 ID 缺失）
+        const char *typeStr = featElem->Attribute("Type");
+        const char *idStr   = featElem->Attribute("ID");
+        std::cerr << "[TinyXMLSerializer][WARN] Skipped Feature"
+                  << " Type=" << (typeStr ? typeStr : "<missing>")
+                  << " ID="   << (idStr   ? idStr   : "<missing>")
+                  << " — unknown type or missing ID.\n";
+      }
+      featElem = featElem->NextSiblingElement("Feature");
     }
-    featElem = featElem->NextSiblingElement("Feature");
+
+  } catch (const std::exception &exception) {
+    model.Clear();
+    if (errorMessage) *errorMessage = exception.what();
+    return false;
   }
 
   return true;
@@ -3200,12 +3288,48 @@ void TinyXMLSerializer::SaveCircularPattern(XMLDocument &doc, XMLElement *elemen
   }
 }
 
+static const char *AffectedBodyModeToString(MirrorAffectedBodyMode mode) {
+  switch (mode) {
+    case MirrorAffectedBodyMode::AllBodies: return "AllBodies";
+    case MirrorAffectedBodyMode::SelectedBodiesWithAutoSelect: return "SelectedBodiesWithAutoSelect";
+    case MirrorAffectedBodyMode::SelectedBodiesOnly: return "SelectedBodiesOnly";
+  }
+  throw std::runtime_error("Invalid mirror AffectedBodyMode");
+}
+
+static MirrorAffectedBodyMode AffectedBodyModeFromString(const char *text) {
+  if (text) {
+    const std::string value(text);
+    if (value == "AllBodies") return MirrorAffectedBodyMode::AllBodies;
+    if (value == "SelectedBodiesWithAutoSelect") return MirrorAffectedBodyMode::SelectedBodiesWithAutoSelect;
+    if (value == "SelectedBodiesOnly") return MirrorAffectedBodyMode::SelectedBodiesOnly;
+  }
+  throw std::runtime_error("Missing or invalid mirror AffectedBodyMode");
+}
+
+static bool ReadMirrorBool(XMLElement *element, const char *name) {
+  if (const char *text=element->Attribute(name)) {
+    const std::string value(text);
+    if (value == "true") return true;
+    if (value == "false") return false;
+  }
+  throw std::runtime_error(std::string("Missing or invalid mirror ") + name);
+}
+
 void TinyXMLSerializer::SaveMirrorPattern(XMLDocument &doc, XMLElement *element,
                                           const std::shared_ptr<CMirrorPattern> &pattern) {
   element->SetAttribute("GeometryPattern", pattern->geometryPattern);
   element->SetAttribute("Scope", PatternScopeToString(pattern->scope).c_str());
   SaveRefEntity(doc, element, "MirrorPlaneReference", pattern->mirrorPlaneRef);
 
+  if (pattern->mergeResults) element->SetAttribute("MergeResults", *pattern->mergeResults);
+  if (pattern->affectedBodyMode)
+    element->SetAttribute("AffectedBodyMode", AffectedBodyModeToString(*pattern->affectedBodyMode));
+  if (!pattern->affectedBodies.empty()) {
+    auto *bodies = doc.NewElement("AffectedBodies");
+    for (const auto &body : pattern->affectedBodies) SaveRefEntity(doc,bodies,"ReferenceEntity",body);
+    element->InsertEndChild(bodies);
+  }
   // SeedObjects
   XMLElement *seedsElem = doc.NewElement("SeedObjects");
   for (const auto &ref : pattern->seedObjects) {
@@ -3341,23 +3465,67 @@ void TinyXMLSerializer::LoadCircularPattern(XMLElement *element,
   }
 }
 
+// Mirror references use a strict geometry contract, without changing the
+// older generic reference loader used by other feature types.
+static void ValidateMirrorReferenceGeometry(XMLElement *element, bool mirrorPlane) {
+  if (!element) throw std::runtime_error("Mirror reference is missing");
+  const char *type = element->Attribute("Type");
+  if (!type) throw std::runtime_error("Mirror reference missing Type");
+  const auto kind = ToLower(type);
+  if (kind == "face") {
+    (void)ReadRequiredReferencePoint(element, "Center", "Mirror face");
+    const auto normal = ReadRequiredReferencePoint(element, "Normal", "Mirror face");
+    const auto surface = SurfaceTypeFromString(element->Attribute("SurfaceType"));
+    if (!surface || *surface == CGeoSurfaceType::UNKNOWN)
+      throw std::runtime_error("Mirror face missing or invalid SurfaceType");
+    // Curved native faces have no constant normal (e.g. IFace2::Normal is
+    // zero on a cylinder). A plane, however, needs an actual plane normal.
+    const bool zeroNormal = normal.x == 0 && normal.y == 0 && normal.z == 0;
+    if ((mirrorPlane || *surface == CGeoSurfaceType::PLANE) && zeroNormal)
+      throw std::runtime_error("Mirror planar face Normal must be nonzero");
+    if (mirrorPlane && *surface != CGeoSurfaceType::PLANE)
+      throw std::runtime_error("Mirror plane face must be planar");
+  } else if (kind == "plane") {
+    (void)ReadRequiredReferencePoint(element, "Origin", "Mirror datum plane");
+    (void)ReadRequiredReferencePoint(element, "Normal", "Mirror datum plane");
+    // A datum plane can be identified solely by TargetFeatureID. In that
+    // existing contract, zero Normal means native datum geometry is resolved.
+  } else if (mirrorPlane) {
+    throw std::runtime_error("Mirror plane requires a Plane or Face reference");
+  }
+}
+
 void TinyXMLSerializer::LoadMirrorPattern(XMLElement *element,
                                           std::shared_ptr<CMirrorPattern> &pattern) {
-  element->QueryBoolAttribute("GeometryPattern", &pattern->geometryPattern);
-  if (const char *scopeStr = element->Attribute("Scope")) {
-    pattern->scope = PatternScopeFromString(scopeStr);
+  pattern->geometryPattern = ReadMirrorBool(element,"GeometryPattern");
+  const char *scope = element->Attribute("Scope");
+  if (!scope || (std::string(scope)!="FEATURES" && std::string(scope)!="FACES" && std::string(scope)!="BODIES"))
+    throw std::runtime_error("Missing or invalid mirror Scope");
+  pattern->scope = PatternScopeFromString(scope);
+  auto *plane = element->FirstChildElement("MirrorPlaneReference");
+  ValidateMirrorReferenceGeometry(plane, true);
+  pattern->mirrorPlaneRef = LoadRefEntity(plane);
+  if (element->Attribute("MergeResults")) pattern->mergeResults = ReadMirrorBool(element,"MergeResults");
+  if (pattern->scope == PatternScope::BODIES && !pattern->mergeResults)
+    throw std::runtime_error("Body mirror missing MergeResults");
+  if (element->Attribute("AffectedBodyMode"))
+    pattern->affectedBodyMode = AffectedBodyModeFromString(element->Attribute("AffectedBodyMode"));
+  if (pattern->geometryPattern && pattern->scope != PatternScope::BODIES && !pattern->affectedBodyMode)
+    throw std::runtime_error("Geometry mirror missing AffectedBodyMode");
+  if (auto *bodies=element->FirstChildElement("AffectedBodies")) {
+    for (auto *ref=bodies->FirstChildElement(); ref; ref=ref->NextSiblingElement()) {
+      if (std::string(ref->Name())!="ReferenceEntity") throw std::runtime_error("Invalid affected Body element");
+      auto body=std::dynamic_pointer_cast<CRefBody>(LoadRefEntity(ref));
+      if (!body) throw std::runtime_error("AffectedBodies requires Body references");
+      pattern->affectedBodies.push_back(body);
+    }
   }
-  if (XMLElement *refElem = element->FirstChildElement("MirrorPlaneReference")) {
-    pattern->mirrorPlaneRef = LoadRefEntity(refElem);
-  }
-
-  // SeedObjects
-  if (XMLElement *seedsElem = element->FirstChildElement("SeedObjects")) {
-    for (XMLElement *refElem = seedsElem->FirstChildElement("ReferenceEntity");
-         refElem != nullptr; refElem = refElem->NextSiblingElement("ReferenceEntity")) {
-      if (auto ref = LoadRefEntity(refElem)) {
-        pattern->seedObjects.push_back(ref);
-      }
+  if (auto *seeds=element->FirstChildElement("SeedObjects")) {
+    for (auto *ref=seeds->FirstChildElement(); ref; ref=ref->NextSiblingElement()) {
+      if (std::string(ref->Name())!="ReferenceEntity") throw std::runtime_error("Invalid mirror seed element");
+      // Preserve failed references so the validation gate cannot accept a partial seed set.
+      ValidateMirrorReferenceGeometry(ref, false);
+      pattern->seedObjects.push_back(LoadRefEntity(ref));
     }
   }
 }

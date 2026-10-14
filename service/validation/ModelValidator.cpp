@@ -2,6 +2,7 @@
 #include "ModelValidator.h"
 #include "UnifiedFeatures.h"
 #include "HoleGeometry.h"
+#include "BodyGeometry.h"
 #include <cmath>
 #include <string>
 #include <unordered_set>
@@ -218,6 +219,94 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       addError("[MODEL_002] Duplicate featureID '" + feature->featureID + "'.");
     }
     seenIDs.insert(feature->featureID);
+
+    if (auto mirror = std::dynamic_pointer_cast<CMirrorPattern>(feature)) {
+      const std::string prefix = "[MIRROR] '" + mirror->featureID + "': ";
+      const auto error = [&](const std::string &message) { addError(prefix + message); };
+      const auto checkBody = [&](const std::shared_ptr<CRefBody> &body) {
+        std::string detail;
+        if (!body) error("Body reference is null");
+        else if (!ValidateBodyReference(*body, detail)) error(detail);
+      };
+      const auto checkDependency = [&](const std::string &id) {
+        if (id.empty() || (!StandardID::IsStandardPlane(id) && !seen.count(id)))
+          error("Missing or forward feature reference '" + id + "'");
+      };
+      if (auto plane = std::dynamic_pointer_cast<CRefPlane>(mirror->mirrorPlaneRef)) {
+        if (plane->refType != RefType::FEATURE_DATUM_PLANE) error("Wrong plane RefType");
+        const auto &origin = plane->origin; const auto &normal = plane->normal;
+        if (!std::isfinite(origin.x) || !std::isfinite(origin.y) || !std::isfinite(origin.z) ||
+            !std::isfinite(normal.x) || !std::isfinite(normal.y) || !std::isfinite(normal.z))
+          error("Invalid mirror datum plane geometry");
+        checkDependency(plane->targetFeatureID);
+      } else if (auto face = std::dynamic_pointer_cast<CRefFace>(mirror->mirrorPlaneRef)) {
+        if (face->refType != RefType::TOPO_FACE || face->surfaceType != CGeoSurfaceType::PLANE)
+          error("Mirror face must be planar");
+        if (!std::isfinite(face->normal.x) || !std::isfinite(face->normal.y) ||
+            !std::isfinite(face->normal.z) || isZeroVec(face->normal) ||
+            !std::isfinite(face->centroid.x) || !std::isfinite(face->centroid.y) ||
+            !std::isfinite(face->centroid.z)) error("Invalid mirror face geometry");
+      } else error("Mirror plane must be a datum plane or planar face");
+      if (mirror->scope != PatternScope::FEATURES && mirror->scope != PatternScope::FACES &&
+          mirror->scope != PatternScope::BODIES) error("Invalid mirror seed scope");
+      if (mirror->seedObjects.empty()) error("Mirror seeds must not be empty");
+      std::unordered_set<const CRefEntityBase *> seeds;
+      std::unordered_set<std::string> seedIDs;
+      for (const auto &ref : mirror->seedObjects) {
+        if (!ref) { error("Mirror seed is null"); continue; }
+        if (!seeds.insert(ref.get()).second) error("Duplicate mirror seed reference");
+        if (mirror->scope == PatternScope::BODIES) {
+          auto body = std::dynamic_pointer_cast<CRefBody>(ref);
+          if (!body) error("BODIES scope requires Body references"); else checkBody(body);
+        } else if (mirror->scope == PatternScope::FACES) {
+          const auto face = std::dynamic_pointer_cast<CRefFace>(ref);
+          if (!face || ref->refType != RefType::TOPO_FACE) error("FACES scope requires face references");
+          else {
+            const auto &center = face->centroid; const auto &normal = face->normal;
+            if (!std::isfinite(center.x) || !std::isfinite(center.y) || !std::isfinite(center.z) ||
+                !std::isfinite(normal.x) || !std::isfinite(normal.y) || !std::isfinite(normal.z))
+              error("Invalid mirror seed face geometry");
+            if (face->surfaceType == CGeoSurfaceType::PLANE &&
+                normal.x == 0 && normal.y == 0 && normal.z == 0)
+              error("Mirror planar seed face Normal must be nonzero");
+            switch (face->surfaceType) {
+              case CGeoSurfaceType::PLANE: case CGeoSurfaceType::CYLINDER:
+              case CGeoSurfaceType::CONE: case CGeoSurfaceType::SPHERE:
+              case CGeoSurfaceType::TORUS: case CGeoSurfaceType::BSURFACE: break;
+              default: error("Invalid mirror seed face SurfaceType");
+            }
+          }
+        } else if (mirror->scope == PatternScope::FEATURES) {
+          auto seed = std::dynamic_pointer_cast<CRefFeature>(ref);
+          if (!seed || typeid(*ref) != typeid(CRefFeature) || ref->refType != RefType::UNKNOWN)
+            error("FEATURES scope requires whole-feature references");
+          else {
+            checkDependency(seed->targetFeatureID);
+            if (!seedIDs.insert(seed->targetFeatureID).second) error("Duplicate seed feature ID");
+          }
+        }
+      }
+      if (mirror->scope == PatternScope::BODIES) {
+        if (!mirror->mergeResults.has_value()) error("Body mirror requires MergeResults");
+        if (mirror->geometryPattern) error("GeometryPattern is inactive for body mirrors");
+      } else if (mirror->mergeResults.has_value()) error("MergeResults is only valid for body mirrors");
+      const bool affectedActive = mirror->scope != PatternScope::BODIES && mirror->geometryPattern;
+      if (affectedActive) {
+        if (!mirror->affectedBodyMode) error("Geometry mirror requires AffectedBodyMode");
+        else if (*mirror->affectedBodyMode == MirrorAffectedBodyMode::AllBodies) {
+          if (!mirror->affectedBodies.empty()) error("AllBodies forbids an explicit affected-body list");
+        } else if (*mirror->affectedBodyMode == MirrorAffectedBodyMode::SelectedBodiesWithAutoSelect ||
+                   *mirror->affectedBodyMode == MirrorAffectedBodyMode::SelectedBodiesOnly) {
+          if (mirror->affectedBodies.empty()) error("Selected-body scope needs affected Bodies");
+        } else error("Invalid AffectedBodyMode");
+      } else if (mirror->affectedBodyMode || !mirror->affectedBodies.empty())
+        error("Affected body options are only valid for feature/face geometry mirrors");
+      std::unordered_set<const CRefBody *> affected;
+      for (const auto &body : mirror->affectedBodies) {
+        checkBody(body);
+        if (body && !affected.insert(body.get()).second) error("Duplicate affected Body reference");
+      }
+    }
 
     if (auto hole = std::dynamic_pointer_cast<CHole>(feature)) {
       const auto prefix = "[HOLE] '" + hole->featureID + "': ";

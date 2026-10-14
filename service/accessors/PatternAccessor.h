@@ -134,6 +134,17 @@ public:
     return IsValid() ? Data()->seedObjects : kEmpty;
   }
 
+  std::optional<bool> GetMergeResults() const {
+    return IsValid() ? Data()->mergeResults : std::nullopt;
+  }
+  std::optional<MirrorAffectedBodyMode> GetAffectedBodyMode() const {
+    return IsValid() ? Data()->affectedBodyMode : std::nullopt;
+  }
+  const std::vector<std::shared_ptr<CRefBody>> &GetAffectedBodies() const {
+    static const std::vector<std::shared_ptr<CRefBody>> empty;
+    return IsValid() ? Data()->affectedBodies : empty;
+  }
+
   bool IsGeometryPattern() const { return IsValid() && Data()->geometryPattern; }
 };
 

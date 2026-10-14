@@ -69,12 +69,26 @@ enum class RefType {
   TOPO_EDGE,            // 拓扑边
   TOPO_VERTEX,          // 拓扑顶点
   TOPO_SKETCH_SEG,      // 拓扑草图段
-  UNKNOWN               // 未知/未初始化类型
+  UNKNOWN,              // 未知/未初始化类型；保留既有数值
+  TOPO_BODY             // 封闭实体的几何指纹，不指向任一来源特征
 };
 
 struct CRefEntityBase {
   RefType refType = RefType::UNKNOWN;
   virtual ~CRefEntityBase() = default;
+};
+
+/// A closed solid's geometry at the referencing feature's historical state.
+/// Source IDs are diagnostic only, never a candidate filter or replay recipe.
+struct CRefBody : public CRefEntityBase {
+  CPoint3D boundsMin{};
+  CPoint3D boundsMax{};
+  double volume = 0.0;
+  CPoint3D volumeCentroid{};
+  double surfaceArea = 0.0;
+  std::vector<CPoint3D> surfacePoints;
+  std::vector<std::string> sourceFeatureIDs;
+  CRefBody() { refType = RefType::TOPO_BODY; }
 };
 
 struct CRefFeature : public CRefEntityBase {
@@ -1246,6 +1260,12 @@ struct CCircularPattern : public CFeatureBase {
 /**
  * @brief 统一镜像特征
  */
+enum class MirrorAffectedBodyMode {
+  AllBodies,
+  SelectedBodiesWithAutoSelect,
+  SelectedBodiesOnly
+};
+
 struct CMirrorPattern : public CFeatureBase {
   std::shared_ptr<CRefEntityBase>
       mirrorPlaneRef; ///< 镜像平面（基准面、实体平面）
@@ -1254,6 +1274,9 @@ struct CMirrorPattern : public CFeatureBase {
   std::vector<std::shared_ptr<CRefEntityBase>> seedObjects;
 
   bool geometryPattern = false;
+  std::optional<bool> mergeResults; ///< Required only for BODIES seeds.
+  std::optional<MirrorAffectedBodyMode> affectedBodyMode;
+  std::vector<std::shared_ptr<CRefBody>> affectedBodies; ///< Geometry-copy scope, separate from seeds.
 
   CMirrorPattern() { featureType = FeatureType::MirrorPattern; }
 };

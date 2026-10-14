@@ -199,3 +199,18 @@ if(CADEXCHANGE_BUILD_PYTHON_BINDINGS)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/python/$<CONFIG>"
     )
 endif()
+
+if(BUILD_TESTING)
+    add_executable(body_mirror_model_tests tests/body_mirror_model_tests.cpp)
+    target_compile_definitions(body_mirror_model_tests PRIVATE ENABLE_CEREAL_SERIALIZATION)
+    target_link_libraries(body_mirror_model_tests PRIVATE cadexchange)
+    add_test(NAME body_mirror_model_contract COMMAND body_mirror_model_tests "${CMAKE_CURRENT_SOURCE_DIR}/../tmp/body-mirror-model-tests")
+endif()
+
+if(BUILD_TESTING AND CADEXCHANGE_BUILD_PYTHON_BINDINGS)
+    set_tests_properties(body_mirror_model_contract PROPERTIES FIXTURES_SETUP body_mirror_fixtures)
+    add_test(NAME body_mirror_python_contract
+             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/body_mirror_python_tests.py"
+                     "$<TARGET_FILE_DIR:cadexchange_py>" "${CMAKE_CURRENT_SOURCE_DIR}/../tmp/body-mirror-model-tests")
+    set_tests_properties(body_mirror_python_contract PROPERTIES FIXTURES_REQUIRED body_mirror_fixtures)
+endif()

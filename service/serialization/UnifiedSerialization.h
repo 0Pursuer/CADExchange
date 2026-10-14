@@ -81,6 +81,17 @@ template <class Archive> void serialize(Archive &ar, CRefSubTopo &ref) {
 /**
  * @brief 序列化参考平面位置与方向。
  */
+template <class Archive> void serialize(Archive &ar, CRefBody &body) {
+  ar(cereal::base_class<CRefEntityBase>(&body),
+     cereal::make_nvp("BoundsMin", body.boundsMin),
+     cereal::make_nvp("BoundsMax", body.boundsMax),
+     cereal::make_nvp("Volume", body.volume),
+     cereal::make_nvp("VolumeCentroid", body.volumeCentroid),
+     cereal::make_nvp("SurfaceArea", body.surfaceArea),
+     cereal::make_nvp("SurfacePoints", body.surfacePoints),
+     cereal::make_nvp("SourceFeatureIDs", body.sourceFeatureIDs));
+}
+
 template <class Archive> void serialize(Archive &ar, CRefPlane &plane) {
   ar(cereal::base_class<CRefFeature>(&plane),
      cereal::make_nvp("Origin", plane.origin),
@@ -572,7 +583,10 @@ template <class Archive> void serialize(Archive &ar, CMirrorPattern &pat) {
      cereal::make_nvp("MirrorPlaneRef", pat.mirrorPlaneRef),
      cereal::make_nvp("Scope", pat.scope),
      cereal::make_nvp("SeedObjects", pat.seedObjects),
-     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern),
+     cereal::make_nvp("MergeResults", pat.mergeResults),
+     cereal::make_nvp("AffectedBodyMode", pat.affectedBodyMode),
+     cereal::make_nvp("AffectedBodies", pat.affectedBodies));
 }
 
 template<class Archive> void serialize(Archive& ar, CHoleLocation& location) {

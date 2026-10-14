@@ -359,6 +359,11 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("FACES", PatternScope::FACES)
       .value("BODIES", PatternScope::BODIES);
 
+  py::enum_<MirrorAffectedBodyMode>(m, "MirrorAffectedBodyMode")
+      .value("AllBodies", MirrorAffectedBodyMode::AllBodies)
+      .value("SelectedBodiesWithAutoSelect", MirrorAffectedBodyMode::SelectedBodiesWithAutoSelect)
+      .value("SelectedBodiesOnly", MirrorAffectedBodyMode::SelectedBodiesOnly);
+
   py::enum_<PatternSpacingType>(m, "PatternSpacingType")
       .value("PITCH_AND_COUNT", PatternSpacingType::PITCH_AND_COUNT)
       .value("SPAN_AND_COUNT", PatternSpacingType::SPAN_AND_COUNT);
@@ -372,7 +377,8 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("TOPO_EDGE", RefType::TOPO_EDGE)
       .value("TOPO_VERTEX", RefType::TOPO_VERTEX)
       .value("TOPO_SKETCH_SEG", RefType::TOPO_SKETCH_SEG)
-      .value("UNKNOWN", RefType::UNKNOWN);
+      .value("UNKNOWN", RefType::UNKNOWN)
+      .value("TOPO_BODY", RefType::TOPO_BODY);
 
   py::enum_<CGeoCurveType>(m, "CGeoCurveType")
       .value("UNKNOWN", CGeoCurveType::UNKNOWN)
@@ -516,8 +522,23 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("FIXED", CSketchConstraint::ConstraintType::FIXED)
       .value("UNKNOWN", CSketchConstraint::ConstraintType::UNKNOWN);
 
+  py::class_<BodyRefAccessor>(m, "BodyRefAccessor")
+      .def("is_valid", &BodyRefAccessor::IsValid)
+      .def_property_readonly("bounds_min", [](const BodyRefAccessor &a) { return PointToVector(a.GetBoundsMin()); })
+      .def_property_readonly("bounds_max", [](const BodyRefAccessor &a) { return PointToVector(a.GetBoundsMax()); })
+      .def_property_readonly("volume", &BodyRefAccessor::GetVolume)
+      .def_property_readonly("volume_centroid", [](const BodyRefAccessor &a) { return PointToVector(a.GetVolumeCentroid()); })
+      .def_property_readonly("surface_area", &BodyRefAccessor::GetSurfaceArea)
+      .def_property_readonly("surface_points", [](const BodyRefAccessor &a) {
+        std::vector<std::vector<double>> points;
+        for (const auto &p : a.GetSurfacePoints()) points.push_back(PointToVector(p));
+        return points;
+      })
+      .def_property_readonly("source_feature_ids", &BodyRefAccessor::GetSourceFeatureIDs);
+
   py::class_<ReferenceAccessor>(m, "ReferenceAccessor")
       .def("is_valid", &ReferenceAccessor::IsValid)
+      .def("as_body", &ReferenceAccessor::AsBody)
       .def_property_readonly("ref_type", &ReferenceAccessor::GetRefType)
       .def_property_readonly("parent_feature_id", &ReferenceAccessor::GetParentFeatureID)
       .def_property_readonly("target_feature_id", &ReferenceAccessor::GetTargetFeatureID)
@@ -939,6 +960,13 @@ PYBIND11_MODULE(cadexchange_py, m) {
                              [](const MirrorPatternAccessor &a) {
                                return ReferenceAccessor(a.GetMirrorPlaneRef());
                              })
+      .def_property_readonly("merge_results", &MirrorPatternAccessor::GetMergeResults)
+      .def_property_readonly("affected_body_mode", &MirrorPatternAccessor::GetAffectedBodyMode)
+      .def_property_readonly("affected_bodies", [](const MirrorPatternAccessor &a) {
+        std::vector<BodyRefAccessor> bodies;
+        for (const auto &body : a.GetAffectedBodies()) bodies.emplace_back(body);
+        return bodies;
+      })
       .def_property_readonly("scope", &MirrorPatternAccessor::GetScope)
       .def_property_readonly("geometry_pattern",
                              &MirrorPatternAccessor::IsGeometryPattern)

@@ -71,6 +71,15 @@ void ScaleRefEntity(const std::shared_ptr<CRefEntityBase> &ref, double factor,
   }
   ctx.scaledRefs.insert(key);
 
+  if (auto body = std::dynamic_pointer_cast<CRefBody>(ref)) {
+    ScalePoint(body->boundsMin, factor);
+    ScalePoint(body->boundsMax, factor);
+    ScalePoint(body->volumeCentroid, factor);
+    for (auto &point : body->surfacePoints) ScalePoint(point, factor);
+    body->surfaceArea *= factor * factor;
+    body->volume *= factor * factor * factor;
+    return;
+  }
   if (auto plane = std::dynamic_pointer_cast<CRefPlane>(ref)) {
     ScalePoint(plane->origin, factor);
     return;
@@ -369,6 +378,7 @@ void ScaleCircularPattern(CCircularPattern &pattern, double factor, UnitScaleCon
 }
 
 void ScaleMirrorPattern(CMirrorPattern &pattern, double factor, UnitScaleContext &ctx) {
+  for (const auto &body : pattern.affectedBodies) ScaleRefEntity(body, factor, ctx);
   ScaleRefEntity(pattern.mirrorPlaneRef, factor, ctx);
   for (auto &seed : pattern.seedObjects) {
     ScaleRefEntity(seed, factor, ctx);
