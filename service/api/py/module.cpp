@@ -12,6 +12,7 @@ using namespace CADExchange::PythonApi;
 namespace {
 
 FeatureAccessorBase InvalidFeature() { return FeatureAccessorBase(nullptr); }
+HoleAccessor FeatureAsHole(const FeatureAccessorBase& feature) { return HoleAccessor(feature.GetRaw()); }
 
 SketchAccessor FeatureAsSketch(const FeatureAccessorBase &feature) {
   return SketchAccessor(feature.GetRaw());
@@ -342,7 +343,11 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("Draft", FeatureType::Draft)
       .value("LinearPattern", FeatureType::LinearPattern)
       .value("CircularPattern", FeatureType::CircularPattern)
-      .value("MirrorPattern", FeatureType::MirrorPattern);
+      .value("MirrorPattern", FeatureType::MirrorPattern)
+      .value("Hole", FeatureType::Hole);
+
+  py::enum_<HoleBottomKind>(m,"HoleBottomKind").value("Unknown",HoleBottomKind::Unknown).value("Flat",HoleBottomKind::Flat).value("Conical",HoleBottomKind::Conical);
+  py::enum_<HoleDepthReference>(m,"HoleDepthReference").value("Unknown",HoleDepthReference::Unknown).value("Shoulder",HoleDepthReference::Shoulder).value("Tip",HoleDepthReference::Tip);
 
   py::enum_<BooleanOp>(m, "BooleanOp")
       .value("BOSS", BooleanOp::BOSS)
@@ -568,6 +573,7 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def_property_readonly("name", &FeatureAccessorBase::GetName)
       .def_property_readonly("is_suppressed", &FeatureAccessorBase::IsSuppressed)
       .def_property_readonly("feature_type", &FeatureAccessorBase::GetFeatureType)
+      .def("as_hole", &FeatureAsHole)
       .def("as_sketch", &FeatureAsSketch)
       .def("as_extrude", &FeatureAsExtrude)
       .def("as_revolve", &FeatureAsRevolve)
@@ -579,6 +585,32 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("as_linear_pattern", &FeatureAsLinearPattern)
       .def("as_circular_pattern", &FeatureAsCircularPattern)
       .def("as_mirror_pattern", &FeatureAsMirrorPattern);
+
+  py::class_<HoleAccessor>(m,"HoleAccessor")
+      .def("is_valid",&HoleAccessor::IsValid)
+      .def_property_readonly("diameter",&HoleAccessor::GetDiameter)
+      .def_property_readonly("bottom",&HoleAccessor::GetBottomKind)
+      .def_property_readonly("depth_reference",&HoleAccessor::GetDepthReference)
+      .def_property_readonly("drill_point_angle",&HoleAccessor::GetDrillPointAngle)
+      .def_property_readonly("direction",[](const HoleAccessor& a) { return VectorToVector(a.GetDirection()); })
+      .def_property_readonly("entry_points",[](const HoleAccessor& a) {
+        std::vector<std::vector<double>> points;for(const auto& location:a.GetLocations()) points.push_back(PointToVector(location.entryPoint));return points;
+      })
+      .def_property_readonly("position_refs",[](const HoleAccessor& a) {
+        std::vector<ReferenceAccessor> refs;
+        for(const auto& location:a.GetLocations()) refs.emplace_back(location.positionRef);
+        return refs;
+      })
+      .def_property_readonly("extent",[](const HoleAccessor& a) {
+        py::dict data;data["type"]=static_cast<int>(a.GetExtent().type);data["value"]=a.GetExtent().value;return data;
+      })
+      .def_property_readonly("support_ref",[](const HoleAccessor& a) { return ReferenceAccessor(a.GetSupportReference()); })
+      .def_property_readonly("counterbore",[](const HoleAccessor& a)->py::object {
+        if(!a.GetCounterbore()) return py::none();auto c=*a.GetCounterbore();py::dict data;data["diameter"]=c.diameter;data["depth"]=c.depth;return data;
+      })
+      .def_property_readonly("countersink",[](const HoleAccessor& a)->py::object {
+        if(!a.GetCountersink()) return py::none();auto c=*a.GetCountersink();py::dict data;data["diameter"]=c.diameter;data["included_angle"]=c.includedAngle;return data;
+      });
 
   py::class_<ModelAccessor>(m, "ModelAccessor")
       .def("is_valid", &ModelAccessor::IsValid)

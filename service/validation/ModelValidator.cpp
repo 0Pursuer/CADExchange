@@ -1,6 +1,7 @@
 // clang-format off
 #include "ModelValidator.h"
 #include "UnifiedFeatures.h"
+#include "HoleGeometry.h"
 #include <cmath>
 #include <string>
 #include <unordered_set>
@@ -217,6 +218,64 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       addError("[MODEL_002] Duplicate featureID '" + feature->featureID + "'.");
     }
     seenIDs.insert(feature->featureID);
+
+    if (auto hole = std::dynamic_pointer_cast<CHole>(feature)) {
+      const auto prefix = "[HOLE] '" + hole->featureID + "': ";
+      HoleResolvedGeometry geometry; std::string detail;
+      if (!ResolveHoleGeometry(*hole,geometry,detail)) addError(prefix+detail);
+      const auto finite3 = [](const auto& v) {
+        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+      };
+      if (!finite3(hole->direction) || std::abs(vecLen(hole->direction)-1) > 1e-6)
+        addError(prefix+"direction must be a finite inward unit vector");
+      if (hole->locations.size()!=1) addError(prefix+"v1 requires exactly one location");
+      CPoint3D origin{}; CVector3D normal{}; bool planar=false;
+      if (auto plane=std::dynamic_pointer_cast<CRefPlane>(hole->supportRef)) {
+        origin=plane->origin; normal=plane->normal;planar=true;
+        // ID-only datum references are an existing shared-model contract.
+        // Resolve missing geometry without relaxing dependency-order validation.
+        if (finite3(origin) && finite3(normal) && vecLen(normal)<GeoUtils::EPSILON) {
+          if (StandardID::IsStandardPlane(plane->targetFeatureID)) {
+            origin={};
+            if(plane->targetFeatureID==StandardID::PLANE_XY) normal={0,0,1};
+            else if(plane->targetFeatureID==StandardID::PLANE_YZ) normal={1,0,0};
+            else if(plane->targetFeatureID==StandardID::PLANE_ZX) normal={0,1,0};
+          } else if(auto datum=model.GetFeatureAs<CDatumPlane>(plane->targetFeatureID)) {
+            if(datum->projectedOrigin && datum->normal) {
+              origin=*datum->projectedOrigin;normal=*datum->normal;
+            }
+          }
+        }
+      } else if (auto face=std::dynamic_pointer_cast<CRefFace>(hole->supportRef)) {
+        origin=face->centroid;normal=face->normal;planar=face->surfaceType==CGeoSurfaceType::PLANE;
+      }
+      const double nLength=vecLen(normal);
+      if (!planar || !finite3(origin) || !finite3(normal) || nLength < GeoUtils::EPSILON)
+        addError(prefix+"support must resolve to a finite plane");
+      else {
+        const double dot=hole->direction.x*normal.x+hole->direction.y*normal.y+hole->direction.z*normal.z;
+        if (!std::isfinite(dot) || std::abs(std::abs(dot/nLength)-1)>1e-6)
+          addError(prefix+"hole axis must be normal to the entry plane");
+        for (const auto& location:hole->locations) {
+          const auto& p=location.entryPoint;
+          const double distance=((p.x-origin.x)*normal.x+(p.y-origin.y)*normal.y+(p.z-origin.z)*normal.z)/nLength;
+          if (!finite3(p) || !std::isfinite(distance) || std::abs(toMeter(distance))>1e-7)
+            addError(prefix+"entry point must be finite and lie on the entry plane");
+        }
+      }
+      auto checkHoleRef = [&](const std::shared_ptr<CRefEntityBase>& ref) {
+        if (!ref) return;
+        std::string id;
+        if (auto r=std::dynamic_pointer_cast<CRefFeature>(ref)) id=r->targetFeatureID;
+        if (auto r=std::dynamic_pointer_cast<CRefSubTopo>(ref)) id=r->parentFeatureID;
+        if (!id.empty() && !StandardID::IsStandardPlane(id) && !StandardID::IsStandardAxis(id) &&
+            !StandardID::IsStandardPoint(id) && !seen.count(id))
+          addError(prefix+"missing or forward reference '"+id+"'");
+        if (ref->refType==RefType::UNKNOWN) addError(prefix+"unknown reference type");
+      };
+      checkHoleRef(hole->supportRef);
+      for(const auto& location:hole->locations) checkHoleRef(location.positionRef);
+    }
 
     // ---- CExtrude ----
     if (auto extrude = std::dynamic_pointer_cast<CExtrude>(feature)) {

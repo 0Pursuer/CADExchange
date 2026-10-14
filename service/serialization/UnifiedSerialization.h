@@ -91,6 +91,10 @@ template <class Archive> void serialize(Archive &ar, CRefPlane &plane) {
 /**
  * @brief 序列化草图引用，扩展特征引用。
  */
+template<class Archive> void serialize(Archive& ar,CRefPoint& point) {
+  ar(cereal::base_class<CRefFeature>(&point),cereal::make_nvp("Position",point.position));
+}
+
 template <class Archive> void serialize(Archive &ar, CRefSketch &sketch) {
   ar(cereal::base_class<CRefFeature>(&sketch));
 }
@@ -571,7 +575,40 @@ template <class Archive> void serialize(Archive &ar, CMirrorPattern &pat) {
      cereal::make_nvp("GeometryPattern", pat.geometryPattern));
 }
 
-template <class Archive> void save(Archive &ar, const UnifiedModel &model) {
+template<class Archive> void serialize(Archive& ar, CHoleLocation& location) {
+  ar(cereal::make_nvp("EntryPoint",location.entryPoint),cereal::make_nvp("PositionRef",location.positionRef));
+}
+template<class Archive> void serialize(Archive& ar, CHoleCounterbore& cbore) {
+  ar(cereal::make_nvp("Diameter",cbore.diameter),cereal::make_nvp("Depth",cbore.depth));
+}
+template<class Archive> void serialize(Archive& ar, CHoleCountersink& csink) {
+  ar(cereal::make_nvp("Diameter",csink.diameter),cereal::make_nvp("IncludedAngle",csink.includedAngle));
+}
+template<class Archive> void serialize(Archive& ar, CHole& hole) {
+  CHole normalized;
+  CHole* value=&hole;
+  if constexpr(Archive::is_saving::value) {
+    normalized=hole;value=&normalized;
+    if(normalized.extent.type==SweepExtent::Type::THROUGH_ALL) {
+      normalized.extent.value=0;normalized.bottom=HoleBottomKind::Unknown;
+      normalized.depthReference=HoleDepthReference::Unknown;normalized.drillPointAngle.reset();
+    } else if(normalized.bottom==HoleBottomKind::Flat) {
+      normalized.depthReference=HoleDepthReference::Shoulder;normalized.drillPointAngle.reset();
+    }
+  }
+  ar(cereal::base_class<CFeatureBase>(value),cereal::make_nvp("SupportRef",value->supportRef),
+     cereal::make_nvp("Direction",value->direction),cereal::make_nvp("Locations",value->locations),
+     cereal::make_nvp("Diameter",value->diameter),cereal::make_nvp("Extent",value->extent),
+     cereal::make_nvp("Bottom",value->bottom),cereal::make_nvp("DepthReference",value->depthReference),
+     cereal::make_nvp("DrillPointAngle",value->drillPointAngle),cereal::make_nvp("Counterbore",value->counterbore),
+     cereal::make_nvp("Countersink",value->countersink));
+}
+
+// Constrain this overload: UnifiedModel has a UnitType converting constructor,
+// which otherwise makes cereal's enum serialization ambiguous through ADL.
+template<class Archive,class Model,
+         std::enable_if_t<std::is_same_v<std::decay_t<Model>,UnifiedModel>,int> = 0>
+void save(Archive &ar, const Model &model) {
   ar(cereal::make_nvp("UnitSystem", model.unit),
      cereal::make_nvp("ModelName", model.modelName));
 

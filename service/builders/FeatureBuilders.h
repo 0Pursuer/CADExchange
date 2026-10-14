@@ -16,6 +16,7 @@
 #include "DraftBuilder.h"
 #include "DatumPlaneBuilder.h"
 #include "PatternBuilder.h"
+#include "HoleBuilder.h"
 
 // clang-format on
 

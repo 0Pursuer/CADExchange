@@ -1245,6 +1245,10 @@ void TinyXMLSerializer::SaveFeature(
   featElem->SetAttribute("Suppressed", feature->isSuppressed);
 
   switch (feature->featureType) {
+    case FeatureType::Hole:
+      featElem->SetAttribute("Type","Hole");
+      SaveHole(doc,featElem,std::static_pointer_cast<CHole>(feature));
+      break;
     case FeatureType::Sketch:
       featElem->SetAttribute("Type", "Sketch");
       SaveSketch(doc, featElem, std::static_pointer_cast<CSketch>(feature));
@@ -2092,7 +2096,9 @@ TinyXMLSerializer::LoadFeature(XMLElement *element) {
 
   std::shared_ptr<CFeatureBase> feature;
 
-  if (type == "Sketch") {
+  if (type == "Hole") {
+    auto hole=std::make_shared<CHole>();LoadHole(element,hole);feature=hole;
+  } else if (type == "Sketch") {
     auto sketch = std::make_shared<CSketch>();
     LoadSketch(element, sketch);
     feature = sketch;
@@ -3354,6 +3360,75 @@ void TinyXMLSerializer::LoadMirrorPattern(XMLElement *element,
       }
     }
   }
+}
+
+void TinyXMLSerializer::SaveHole(XMLDocument& doc,XMLElement* element,const std::shared_ptr<CHole>& hole) {
+  SaveRefEntity(doc,element,"SupportRef",hole->supportRef);
+  SaveVector3D(element,"Direction",hole->direction);
+  element->SetAttribute("Diameter",FormatDouble(hole->diameter).c_str());
+  const bool blind=hole->extent.type==SweepExtent::Type::VALUE;
+  const auto bottom=blind?hole->bottom:HoleBottomKind::Unknown;
+  const auto depth=blind?(bottom==HoleBottomKind::Flat?HoleDepthReference::Shoulder:hole->depthReference):HoleDepthReference::Unknown;
+  element->SetAttribute("Bottom",bottom==HoleBottomKind::Flat?"Flat":bottom==HoleBottomKind::Conical?"Conical":"Unknown");
+  element->SetAttribute("DepthReference",depth==HoleDepthReference::Shoulder?"Shoulder":depth==HoleDepthReference::Tip?"Tip":"Unknown");
+  if(blind && bottom==HoleBottomKind::Conical && hole->drillPointAngle)
+    element->SetAttribute("DrillPointAngle",FormatDouble(*hole->drillPointAngle).c_str());
+  auto extent=doc.NewElement("Extent");element->InsertEndChild(extent);
+  extent->SetAttribute("Type",SweepExtentTypeToString(hole->extent.type).c_str());
+  if(blind) extent->SetAttribute("Value",FormatDouble(hole->extent.value).c_str());
+  extent->SetAttribute("Offset",FormatDouble(hole->extent.offset).c_str());
+  extent->SetAttribute("HasOffset",hole->extent.hasOffset);
+  extent->SetAttribute("Flip",hole->extent.isFlip);
+  extent->SetAttribute("FlipMaterialSide",hole->extent.isFlipMaterialSide);
+  SaveRefEntity(doc,extent,"ReferenceEntity",hole->extent.referenceEntity);
+  auto locations=doc.NewElement("Locations");element->InsertEndChild(locations);
+  for(const auto& location:hole->locations) {
+    auto child=doc.NewElement("Location");locations->InsertEndChild(child);
+    SavePoint3D(child,"EntryPoint",location.entryPoint);
+    SaveRefEntity(doc,child,"PositionRef",location.positionRef);
+  }
+  if(hole->counterbore) {
+    auto child=doc.NewElement("Counterbore");element->InsertEndChild(child);
+    child->SetAttribute("Diameter",FormatDouble(hole->counterbore->diameter).c_str());
+    child->SetAttribute("Depth",FormatDouble(hole->counterbore->depth).c_str());
+  }
+  if(hole->countersink) {
+    auto child=doc.NewElement("Countersink");element->InsertEndChild(child);
+    child->SetAttribute("Diameter",FormatDouble(hole->countersink->diameter).c_str());
+    child->SetAttribute("IncludedAngle",FormatDouble(hole->countersink->includedAngle).c_str());
+  }
+}
+
+void TinyXMLSerializer::LoadHole(XMLElement* element,const std::shared_ptr<CHole>& hole) {
+  hole->supportRef=LoadRefEntity(element->FirstChildElement("SupportRef"));
+  hole->direction=LoadVector3D(element,"Direction");
+  hole->diameter=element->DoubleAttribute("Diameter");
+  const std::string bottom=element->Attribute("Bottom")?element->Attribute("Bottom"):"Unknown";
+  hole->bottom=bottom=="Flat"?HoleBottomKind::Flat:bottom=="Conical"?HoleBottomKind::Conical:HoleBottomKind::Unknown;
+  const std::string depth=element->Attribute("DepthReference")?element->Attribute("DepthReference"):"Unknown";
+  hole->depthReference=depth=="Shoulder"?HoleDepthReference::Shoulder:depth=="Tip"?HoleDepthReference::Tip:HoleDepthReference::Unknown;
+  if(element->Attribute("DrillPointAngle")) hole->drillPointAngle=element->DoubleAttribute("DrillPointAngle");
+  if(auto extent=element->FirstChildElement("Extent")) {
+    if(auto type=SweepExtentTypeFromString(extent->Attribute("Type"))) hole->extent.type=*type;
+    hole->extent.value=extent->DoubleAttribute("Value");hole->extent.offset=extent->DoubleAttribute("Offset");
+    hole->extent.hasOffset=extent->BoolAttribute("HasOffset");hole->extent.isFlip=extent->BoolAttribute("Flip");
+    hole->extent.isFlipMaterialSide=extent->BoolAttribute("FlipMaterialSide");
+    hole->extent.referenceEntity=LoadRefEntity(extent->FirstChildElement("ReferenceEntity"));
+    if(auto helper=extent->FirstChildElement("HelperPoint")) hole->extent.helperPoint=LoadPoint3D(helper,"Value");
+  }
+  if(auto locations=element->FirstChildElement("Locations")) {
+    for(auto child=locations->FirstChildElement("Location");child;child=child->NextSiblingElement("Location")) {
+      CHoleLocation location;
+      if(!TryParseTriple(child->Attribute("EntryPoint"),location.entryPoint.x,location.entryPoint.y,location.entryPoint.z))
+        location.entryPoint.x=std::numeric_limits<double>::quiet_NaN();
+      location.positionRef=LoadRefEntity(child->FirstChildElement("PositionRef"));
+      hole->locations.push_back(std::move(location));
+    }
+  }
+  if(auto cbore=element->FirstChildElement("Counterbore"))
+    hole->counterbore=CHoleCounterbore{cbore->DoubleAttribute("Diameter"),cbore->DoubleAttribute("Depth")};
+  if(auto csink=element->FirstChildElement("Countersink"))
+    hole->countersink=CHoleCountersink{csink->DoubleAttribute("Diameter"),csink->DoubleAttribute("IncludedAngle")};
 }
 
 } // namespace CADExchange

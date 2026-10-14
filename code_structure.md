@@ -1,5 +1,33 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 孔特征增量（2026-10-13）
+
+- `core/UnifiedFeatures.h`：在既有枚举末尾追加 `FeatureType::Hole=14`，保留旧值；
+  `CHole` 使用支撑引用、全局入口点、向内单位方向、主孔径、`SweepExtent`、孔底、
+  肩/尖深度基准和互斥的柱形沉孔/锥形沉头描述单孔。
+- `core/HoleGeometry.h::ResolveHoleGeometry`：不依赖 CAD SDK 的活动参数解析及
+  钻尖、沉头高度计算；普通直孔、柱形沉孔和锥形沉头共用同一深度合同。
+- `service/builders/HoleBuilder.h`、`service/accessors/HoleAccessor.h`：沿用既有
+  Builder/Accessor 聚合接口；无效 HoleAccessor 的尺寸访问抛出明确异常。
+- `core/UnitConverter.cpp`：孔尺寸和位置随模型单位缩放，角度/单位方向保持；
+  引用沿用访问集合，多个位置/特征共享的引用只缩放一次。
+- `service/validation/ModelValidator.cpp`：活动尺寸、单孔位、轴垂直入口、入口
+  位于支撑平面、引用类型/存在性/依赖先后顺序的统一门禁。
+- `service/serialization/TinyXMLSerializer.*`、`UnifiedSerialization.h` 和
+  `SerializationRegistry.cpp`：TinyXML/cereal 双向序列化及 CHole/CRefPoint 多态
+  注册。贯穿和盲孔非活动参数在保存副本上规范化，避免 NaN 写坏 JSON/XML。
+- `service/api/py/module.cpp`：`FeatureType.Hole`、孔枚举、`as_hole()`、入口点、
+  定位引用、深度和入口参数的 Python 只读访问。
+- `tools/model_validate/main.cpp`：`cadexchange_validate` 验证真实共享模型，并
+  检查 XML 特征数量，避免未知特征被加载器遗漏后误报有效。
+- `tests/hole_model_tests.cpp`：纯合同、尺寸与深度、单位往返、引用去重、
+  TinyXML/cereal 多态往返及非活动参数回归；输出写入项目 `tmp/`。
+- 上层 `script/run_hole_regression.ps1` 使用上述验证器，执行独立原生样件读取、
+  原生重建、回读、`compare_xml.py` 的孔深度归一化和完整 STEP 双向布尔差集。
+
+原生 SDK 配方和实测边界见
+`doc/孔特征跨系统转换实现与验证记录_20261013.md`。
+
 ## 边参考原有契约（2026-10-05）
 
 - `core/UnifiedFeatures.h`：`CRefEdge` 保持原有起点、终点、参数中点、曲线类型

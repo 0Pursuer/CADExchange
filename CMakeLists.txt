@@ -15,7 +15,7 @@ if(MINGW OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 endif()
 
 if(MSVC)
-    add_compile_options(/bigobj /utf-8)
+    add_compile_options(/bigobj /utf-8 /EHsc)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
 
@@ -60,6 +60,16 @@ set_target_properties(cadexchange PROPERTIES
     MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>"
 )
+
+include(CTest)
+add_executable(cadexchange_validate tools/model_validate/main.cpp)
+target_link_libraries(cadexchange_validate PRIVATE cadexchange)
+if(BUILD_TESTING)
+    add_executable(hole_model_tests tests/hole_model_tests.cpp)
+    target_compile_definitions(hole_model_tests PRIVATE ENABLE_CEREAL_SERIALIZATION)
+    target_link_libraries(hole_model_tests PRIVATE cadexchange)
+    add_test(NAME hole_model_contract COMMAND hole_model_tests "${CMAKE_CURRENT_SOURCE_DIR}/../tmp/hole-model-tests")
+endif()
 
 if(CADEXCHANGE_BUILD_EXAMPLES)
     # Demo Application

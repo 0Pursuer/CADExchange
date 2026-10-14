@@ -37,7 +37,8 @@ enum class FeatureType {
   Draft,
   LinearPattern,
   CircularPattern,
-  MirrorPattern
+  MirrorPattern,
+  Hole
 };
 
 /**
@@ -510,6 +511,31 @@ struct SweepExtent {
 /**
  * @brief 轮廓驱动特征的共享基类。
  */
+enum class HoleBottomKind { Unknown, Flat, Conical };
+enum class HoleDepthReference { Unknown, Shoulder, Tip };
+
+struct CHoleLocation {
+  CPoint3D entryPoint;
+  std::shared_ptr<CRefEntityBase> positionRef;
+};
+struct CHoleCounterbore { double diameter = 0.0; double depth = 0.0; };
+struct CHoleCountersink { double diameter = 0.0; double includedAngle = 0.0; };
+
+// All axial lengths start at the actual entry plane. Direction points inward.
+struct CHole : CFeatureBase {
+  std::shared_ptr<CRefEntityBase> supportRef;
+  CVector3D direction{};
+  std::vector<CHoleLocation> locations;
+  double diameter = 0.0;
+  SweepExtent extent;
+  HoleDepthReference depthReference = HoleDepthReference::Unknown;
+  HoleBottomKind bottom = HoleBottomKind::Unknown;
+  std::optional<double> drillPointAngle;
+  std::optional<CHoleCounterbore> counterbore;
+  std::optional<CHoleCountersink> countersink;
+  CHole() { featureType = FeatureType::Hole; }
+};
+
 struct CProfiledFeatureBase : public CFeatureBase {
   std::string profileSketchID; ///< 草图轮廓的特征 ID（引用，不嵌入）
   BooleanOp operation = BooleanOp::BOSS;

@@ -3,6 +3,7 @@
 #include "../../accessors/ChamferAccessor.h"
 #include "../../accessors/DatumPlaneAccessor.h"
 #include "../../accessors/ExtrudeAccessor.h"
+#include "../../accessors/HoleAccessor.h"
 #include "../../accessors/FeatureAccessorBase.h"
 #include "../../accessors/FilletAccessor.h"
 #include "../../accessors/ModelAccessor.h"

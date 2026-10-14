@@ -414,6 +414,19 @@ bool ConvertModelUnit(UnifiedModel &model, UnitType targetUnit,
     if (!feature)
       return;
     switch (feature->featureType) {
+      case FeatureType::Hole: {
+        auto& hole=*std::static_pointer_cast<CHole>(feature);
+        hole.diameter*=factor;
+        if(hole.extent.type==SweepExtent::Type::VALUE) hole.extent.value*=factor;
+        ScaleRefEntity(hole.supportRef,factor,ctx);
+        for(auto& location:hole.locations) {
+          ScalePoint(location.entryPoint,factor);
+          ScaleRefEntity(location.positionRef,factor,ctx);
+        }
+        if(hole.counterbore) { hole.counterbore->diameter*=factor;hole.counterbore->depth*=factor; }
+        if(hole.countersink) hole.countersink->diameter*=factor;
+        break;
+      }
       case FeatureType::Sketch:
         ScaleSketch(*std::static_pointer_cast<CSketch>(feature), factor, ctx);
         break;

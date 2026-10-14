@@ -14,6 +14,7 @@
 #include "DraftAccessor.h"
 #include "DatumPlaneAccessor.h"
 #include "PatternAccessor.h"
+#include "HoleAccessor.h"
 #include "ModelAccessor.h"
 
 // clang-format on

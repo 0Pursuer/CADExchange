@@ -52,6 +52,8 @@ public:
                    std::string *errorMessage = nullptr);
 
 private:
+  static void SaveHole(tinyxml2::XMLDocument& doc,tinyxml2::XMLElement* element,const std::shared_ptr<CHole>& hole);
+  static void LoadHole(tinyxml2::XMLElement* element,const std::shared_ptr<CHole>& hole);
   // Helpers for Save
   /**
    * @brief 将单个特征写入到父 XML 元素下（Feature 节点）。
