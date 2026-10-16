@@ -353,6 +353,7 @@ void ScaleLinearPatternDir(CLinearPatternDir &dir, double factor, UnitScaleConte
 }
 
 void ScaleLinearPattern(CLinearPattern &pattern, double factor, UnitScaleContext &ctx) {
+  for (const auto &body : pattern.affectedBodies) ScaleRefEntity(body,factor,ctx);
   ScaleLinearPatternDir(pattern.dir1, factor, ctx);
   if (pattern.dir2) {
     ScaleLinearPatternDir(*pattern.dir2, factor, ctx);
@@ -368,6 +369,7 @@ void ScaleCircularPatternDir(CCircularPatternDir &dir, double factor, UnitScaleC
 }
 
 void ScaleCircularPattern(CCircularPattern &pattern, double factor, UnitScaleContext &ctx) {
+  for (const auto &body : pattern.affectedBodies) ScaleRefEntity(body,factor,ctx);
   ScaleCircularPatternDir(pattern.dir1, factor, ctx);
   if (pattern.dir2) {
     ScaleLinearPatternDir(*pattern.dir2, factor, ctx);

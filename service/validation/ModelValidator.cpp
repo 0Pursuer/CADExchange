@@ -3,8 +3,12 @@
 #include "UnifiedFeatures.h"
 #include "HoleGeometry.h"
 #include "BodyGeometry.h"
+#include "PatternGeometry.h"
 #include <cmath>
+#include <functional>
+#include <set>
 #include <string>
+#include <type_traits>
 #include <unordered_set>
 // clang-format on
 
@@ -16,6 +20,158 @@ bool IsBuiltinStandardDatumID(const std::string& id) {
   return id == StandardID::PLANE_XY ||
          id == StandardID::PLANE_YZ ||
          id == StandardID::PLANE_ZX;
+}
+
+template<class T> bool PatternFinite3(const T &value) {
+  return std::isfinite(value.x)&&std::isfinite(value.y)&&std::isfinite(value.z);
+}
+
+bool PatternUnitDirection(const CVector3D &direction) {
+  return PatternFinite3(direction)&&std::abs(direction.Dot(direction)-1)<=1e-6;
+}
+
+using PatternError=std::function<void(const std::string &)>;
+
+void CheckPatternFace(const CRefFace &face,const PatternError &error) {
+  if(face.refType!=RefType::TOPO_FACE||!PatternFinite3(face.centroid)||
+     !PatternFinite3(face.normal)||!PatternFinite3(face.uDir)||!PatternFinite3(face.vDir))
+    error("Face reference has invalid type or nonfinite geometry");
+  switch(face.surfaceType) {
+    case CGeoSurfaceType::PLANE:
+      if(!PatternUnitDirection(face.normal)) error("Planar face needs a unit normal");
+      break;
+    case CGeoSurfaceType::CYLINDER:case CGeoSurfaceType::CONE:
+    case CGeoSurfaceType::SPHERE:case CGeoSurfaceType::TORUS:
+    case CGeoSurfaceType::BSURFACE:break;
+    default:error("Unknown pattern face SurfaceType");
+  }
+}
+
+void CheckPatternDirectionReference(const std::shared_ptr<CRefEntityBase> &ref,
+                                    const std::unordered_set<std::string> &seen,
+                                    const PatternError &error) {
+  if(!ref) {error("Missing direction/axis reference");return;}
+  if(auto axis=std::dynamic_pointer_cast<CRefAxis>(ref)) {
+    if(axis->refType!=RefType::FEATURE_DATUM_AXIS||!PatternFinite3(axis->origin)||
+       !PatternFinite3(axis->direction)) error("Invalid datum axis reference geometry");
+    if(axis->targetFeatureID.empty()||
+       (!StandardID::IsStandardAxis(axis->targetFeatureID)&&!seen.count(axis->targetFeatureID)))
+      error("Missing or forward direction axis feature '"+axis->targetFeatureID+"'");
+  } else if(auto plane=std::dynamic_pointer_cast<CRefPlane>(ref)) {
+    if(plane->refType!=RefType::FEATURE_DATUM_PLANE||!PatternFinite3(plane->origin)||
+       !PatternFinite3(plane->normal)||!PatternFinite3(plane->xDir)||
+       !PatternFinite3(plane->yDir)) error("Invalid datum plane direction reference geometry");
+    if(plane->targetFeatureID.empty()||
+       (!StandardID::IsStandardPlane(plane->targetFeatureID)&&!seen.count(plane->targetFeatureID)))
+      error("Missing or forward direction plane feature '"+plane->targetFeatureID+"'");
+  } else if(auto edge=std::dynamic_pointer_cast<CRefEdge>(ref)) {
+    if(edge->refType!=RefType::TOPO_EDGE||!PatternFinite3(edge->startPoint)||
+       !PatternFinite3(edge->endPoint)||!PatternFinite3(edge->midPoint)||
+       !std::isfinite(edge->length)||edge->length<0)
+      error("Invalid direction edge geometry");
+    switch(edge->curveType) {
+      case CGeoCurveType::LINE:case CGeoCurveType::CIRCLE:
+      case CGeoCurveType::ELLIPSE:case CGeoCurveType::INTERSECTION:
+      case CGeoCurveType::BCURVE:case CGeoCurveType::SPCURVE:
+      case CGeoCurveType::CONSTPARAM:case CGeoCurveType::TRIMMED:break;
+      default:error("Unknown direction edge CurveType");
+    }
+  } else if(auto face=std::dynamic_pointer_cast<CRefFace>(ref)) {
+    CheckPatternFace(*face,error);
+  } else if(auto segment=std::dynamic_pointer_cast<CRefSketchSeg>(ref)) {
+    if(segment->refType!=RefType::TOPO_SKETCH_SEG||segment->segmentLocalID.empty()||
+       segment->parentFeatureID.empty()||!seen.count(segment->parentFeatureID))
+      error("Missing or forward direction sketch segment");
+  } else error("Unsupported direction/axis reference type");
+}
+
+template<class Pattern>
+void CheckOrdinaryPattern(const Pattern &pattern,
+                          const std::unordered_set<std::string> &seen,
+                          const PatternError &addError) {
+  const PatternError error=[&](const std::string &detail) {
+    addError("[PATTERN] '"+pattern.featureID+"': "+detail);
+  };
+  const auto checkLinear=[&](const CLinearPatternDir &dir) {
+    std::string detail;double pitch=0;
+    if(!ResolveLinearPatternPitch(dir,pitch,detail)) error(detail);
+    if(!PatternUnitDirection(dir.direction)) error("Linear direction must be a finite unit vector");
+    CheckPatternDirectionReference(dir.directionRef,seen,error);
+  };
+  if constexpr(std::is_same<Pattern,CLinearPattern>::value) {
+    checkLinear(pattern.dir1);
+  } else {
+    std::string detail;double pitch=0;
+    if(!ResolveCircularPatternPitch(pattern.dir1,pitch,detail)) error(detail);
+    if(!PatternUnitDirection(pattern.dir1.direction)||!PatternFinite3(pattern.dir1.origin))
+      error("Circular axis needs finite origin and unit direction");
+    CheckPatternDirectionReference(pattern.dir1.axisRef,seen,error);
+  }
+  if(pattern.dir2) checkLinear(*pattern.dir2);
+  const int count2=pattern.dir2?pattern.dir2->count:1;
+  const auto instanceCount=PatternInstanceCount(pattern.dir1.count,count2,pattern.patternSeedOnly);
+  if(instanceCount<=1) error("Pattern must generate at least one instance beyond its seed");
+  if(pattern.patternSeedOnly&&(!pattern.dir2||count2<=1))
+    error("PatternSeedOnly requires an active second direction");
+  std::set<std::pair<int,int>> skips;
+  for(const auto &index:pattern.skippedInstances) {
+    if(!IsPatternIndexInDomain(index,pattern.dir1.count,count2,pattern.patternSeedOnly)||
+       (index.dir1Index==0&&index.dir2Index==0)) error("Skipped index is outside the generated instance domain");
+    if(!skips.emplace(index.dir1Index,index.dir2Index).second) error("Duplicate skipped instance index");
+  }
+  if(instanceCount>1&&pattern.skippedInstances.size()>=instanceCount-1)
+    error("Pattern must retain at least one generated instance");
+  if(pattern.scope!=PatternScope::FEATURES&&pattern.scope!=PatternScope::FACES&&pattern.scope!=PatternScope::BODIES)
+    error("Invalid pattern scope");
+  if(pattern.seedObjects.empty()) error("Pattern seeds must not be empty");
+  std::unordered_set<const CRefEntityBase*> seeds;
+  std::unordered_set<std::string> featureSeeds;
+  for(const auto &ref:pattern.seedObjects) {
+    if(!ref) {error("Pattern seed is null");continue;}
+    if(!seeds.insert(ref.get()).second) error("Duplicate pattern seed reference");
+    if(pattern.scope==PatternScope::BODIES) {
+      auto body=std::dynamic_pointer_cast<CRefBody>(ref);std::string detail;
+      if(!body) error("BODIES requires Body references");
+      else if(!ValidateBodyReference(*body,detail)) error(detail);
+    } else if(pattern.scope==PatternScope::FEATURES) {
+      const auto seed=std::dynamic_pointer_cast<CRefFeature>(ref);
+      if(!seed||typeid(*ref)!=typeid(CRefFeature)||ref->refType!=RefType::UNKNOWN)
+        error("FEATURES requires whole-feature references");
+      else {
+        if(seed->targetFeatureID.empty()||!seen.count(seed->targetFeatureID))
+          error("Missing or forward seed feature '"+seed->targetFeatureID+"'");
+        if(!featureSeeds.insert(seed->targetFeatureID).second) error("Duplicate seed feature ID");
+      }
+    } else if(pattern.scope==PatternScope::FACES) {
+      const auto face=std::dynamic_pointer_cast<CRefFace>(ref);
+      if(!face) error("FACES requires face references");else CheckPatternFace(*face,error);
+    }
+  }
+  if(pattern.scope==PatternScope::BODIES&&pattern.geometryPattern)
+    error("GeometryPattern is inactive for body arrays");
+  const bool affectedActive=pattern.scope==PatternScope::FEATURES&&pattern.geometryPattern;
+  if(affectedActive) {
+    if(!pattern.affectedBodyMode) error("Geometry feature pattern requires AffectedBodyMode");
+    else switch(*pattern.affectedBodyMode) {
+      case PatternAffectedBodyMode::AllBodies:case PatternAffectedBodyMode::AutoSelect:
+        if(!pattern.affectedBodies.empty()) error("AllBodies/AutoSelect forbids a fixed affected Body list");
+        break;
+      case PatternAffectedBodyMode::SelectedBodies:
+        if(pattern.affectedBodies.empty()) error("SelectedBodies requires affected Body references");
+        break;
+      default:error("Invalid AffectedBodyMode");
+    }
+  } else if(pattern.affectedBodyMode||!pattern.affectedBodies.empty())
+    error("Affected Body options are only active for FEATURES geometry patterns");
+  std::unordered_set<const CRefBody*> affected;
+  for(const auto &body:pattern.affectedBodies) {
+    std::string detail;
+    if(!body) error("Affected Body reference is null");
+    else {
+      if(!ValidateBodyReference(*body,detail)) error(detail);
+      if(!affected.insert(body.get()).second) error("Duplicate affected Body reference");
+    }
+  }
 }
 
 } // namespace
@@ -219,6 +375,11 @@ ValidationReport ModelValidator::Validate(const UnifiedModel &model) {
       addError("[MODEL_002] Duplicate featureID '" + feature->featureID + "'.");
     }
     seenIDs.insert(feature->featureID);
+
+    if(auto linear=std::dynamic_pointer_cast<CLinearPattern>(feature))
+      CheckOrdinaryPattern(*linear,seen,addError);
+    if(auto circular=std::dynamic_pointer_cast<CCircularPattern>(feature))
+      CheckOrdinaryPattern(*circular,seen,addError);
 
     if (auto mirror = std::dynamic_pointer_cast<CMirrorPattern>(feature)) {
       const std::string prefix = "[MIRROR] '" + mirror->featureID + "': ";

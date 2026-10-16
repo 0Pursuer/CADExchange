@@ -53,6 +53,13 @@ public:
   }
 
   bool IsGeometryPattern() const { return IsValid() && Data()->geometryPattern; }
+  std::optional<PatternAffectedBodyMode> GetAffectedBodyMode() const {
+    return IsValid()?Data()->affectedBodyMode:std::nullopt;
+  }
+  const std::vector<std::shared_ptr<CRefBody>> &GetAffectedBodies() const {
+    static const std::vector<std::shared_ptr<CRefBody>> empty;
+    return IsValid()?Data()->affectedBodies:empty;
+  }
 };
 
 /**
@@ -99,6 +106,13 @@ public:
   }
 
   bool IsGeometryPattern() const { return IsValid() && Data()->geometryPattern; }
+  std::optional<PatternAffectedBodyMode> GetAffectedBodyMode() const {
+    return IsValid()?Data()->affectedBodyMode:std::nullopt;
+  }
+  const std::vector<std::shared_ptr<CRefBody>> &GetAffectedBodies() const {
+    static const std::vector<std::shared_ptr<CRefBody>> empty;
+    return IsValid()?Data()->affectedBodies:empty;
+  }
 };
 
 /**

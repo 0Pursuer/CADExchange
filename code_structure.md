@@ -1,5 +1,24 @@
 # CADExchange 代码结构说明（基于当前源码）
 
+## 普通阵列合同增量（2026-10-15）
+
+- `core/PatternGeometry.h` 提供统一零基网格域、实例数及线性/圆周步距
+  解析；源实例为 `(0,0)`，圆周第二方向仍表示径向线性平移。原生 CAD
+  的跳过编号与成员映射由桥接层负责，不能套用共享层的遍历顺序。
+- `CLinearPattern/CCircularPattern` 复用 `CRefBody` 作为完整实体种子；
+  `PatternAffectedBodyMode` 与独立 `affectedBodies` 只描述特征几何阵列
+  的受影响实体。Builder/Accessor、TinyXML/cereal、单位转换和 Python
+  只读接口贯通；普通阵列没有镜像的合并选项。
+- `ModelValidator.cpp` 统一校验方向、轴、数量、间距、全部种子及依赖、
+  网格跳过位置和活动作用域。TinyXML 的普通阵列专用严格读取器直接保留
+  单次解析的几何坐标，Body 与非几何引用继续复用注册表；拒绝缺失/畸形
+  字段与未知引用，不改变其他特征的引用格式和镜像的既有解析流程。
+- cereal 补齐既有 `CRefAxis` 的几何字段和多态注册，以保存圆周轴引用。
+  Python 额外暴露 D2 参数和受影响实体，返回只读访问器及容器副本。
+- `tests/pattern_model_tests.cpp` 与 `tests/pattern_python_tests.py`
+  验证共享模型、序列化、引用共享的单位转换与编译后的只读接口；输出
+  位于上层 `tmp/pattern-model-tests/`。这些测试不代表原生阵列验收通过。
+
 ## 镜像与 Body 引用增量（2026-10-14）
 
 - `core/UnifiedFeatures.h` 在 `RefType::UNKNOWN` 之后追加 `TOPO_BODY`，
