@@ -99,6 +99,12 @@ template <class Archive> void serialize(Archive &ar, CRefPlane &plane) {
      cereal::make_nvp("Normal", plane.normal));
 }
 
+template <class Archive> void serialize(Archive &ar, CRefAxis &axis) {
+  ar(cereal::base_class<CRefFeature>(&axis),
+     cereal::make_nvp("Origin",axis.origin),
+     cereal::make_nvp("Direction",axis.direction));
+}
+
 /**
  * @brief 序列化草图引用，扩展特征引用。
  */
@@ -555,7 +561,9 @@ template <class Archive> void serialize(Archive &ar, CLinearPattern &pat) {
      cereal::make_nvp("Scope", pat.scope),
      cereal::make_nvp("SeedObjects", pat.seedObjects),
      cereal::make_nvp("SkippedInstances", pat.skippedInstances),
-     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern),
+     cereal::make_nvp("AffectedBodyMode", pat.affectedBodyMode),
+     cereal::make_nvp("AffectedBodies", pat.affectedBodies));
 }
 
 template <class Archive> void serialize(Archive &ar, CCircularPatternDir &dir) {
@@ -575,7 +583,9 @@ template <class Archive> void serialize(Archive &ar, CCircularPattern &pat) {
      cereal::make_nvp("Scope", pat.scope),
      cereal::make_nvp("SeedObjects", pat.seedObjects),
      cereal::make_nvp("SkippedInstances", pat.skippedInstances),
-     cereal::make_nvp("GeometryPattern", pat.geometryPattern));
+     cereal::make_nvp("GeometryPattern", pat.geometryPattern),
+     cereal::make_nvp("AffectedBodyMode", pat.affectedBodyMode),
+     cereal::make_nvp("AffectedBodies", pat.affectedBodies));
 }
 
 template <class Archive> void serialize(Archive &ar, CMirrorPattern &pat) {

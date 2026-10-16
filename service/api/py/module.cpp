@@ -317,6 +317,35 @@ py::dict GetPlaneConstraintData(const PlaneConstraint &constraint) {
   return result;
 }
 
+template<class PatternAccessor>
+void BindOrdinaryPatternOptions(py::class_<PatternAccessor> &binding) {
+  binding.def_property_readonly("affected_body_mode",&PatternAccessor::GetAffectedBodyMode)
+      .def_property_readonly("affected_bodies",[](const PatternAccessor &accessor) {
+        std::vector<BodyRefAccessor> bodies;
+        for(const auto &body:accessor.GetAffectedBodies()) bodies.emplace_back(body);
+        return bodies;
+      })
+      .def_property_readonly("dir2_reference",[](const PatternAccessor &accessor) {
+        return ReferenceAccessor(accessor.HasDir2()?accessor.GetDir2().directionRef:nullptr);
+      })
+      .def_property_readonly("dir2_direction",[](const PatternAccessor &accessor)->std::optional<std::vector<double>> {
+        if(!accessor.HasDir2())return std::nullopt;
+        return VectorToVector(accessor.GetDir2().direction);
+      })
+      .def_property_readonly("dir2_spacing_type",[](const PatternAccessor &accessor)->std::optional<PatternSpacingType> {
+        if(!accessor.HasDir2())return std::nullopt;
+        return accessor.GetDir2().spacingType;
+      })
+      .def_property_readonly("dir2_spacing",[](const PatternAccessor &accessor)->std::optional<double> {
+        if(!accessor.HasDir2())return std::nullopt;
+        return accessor.GetDir2().spacing;
+      })
+      .def_property_readonly("dir2_count",[](const PatternAccessor &accessor)->std::optional<int> {
+        if(!accessor.HasDir2())return std::nullopt;
+        return accessor.GetDir2().count;
+      });
+}
+
 } // namespace
 
 PYBIND11_MODULE(cadexchange_py, m) {
@@ -363,6 +392,11 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .value("AllBodies", MirrorAffectedBodyMode::AllBodies)
       .value("SelectedBodiesWithAutoSelect", MirrorAffectedBodyMode::SelectedBodiesWithAutoSelect)
       .value("SelectedBodiesOnly", MirrorAffectedBodyMode::SelectedBodiesOnly);
+
+  py::enum_<PatternAffectedBodyMode>(m,"PatternAffectedBodyMode")
+      .value("AllBodies",PatternAffectedBodyMode::AllBodies)
+      .value("AutoSelect",PatternAffectedBodyMode::AutoSelect)
+      .value("SelectedBodies",PatternAffectedBodyMode::SelectedBodies);
 
   py::enum_<PatternSpacingType>(m, "PatternSpacingType")
       .value("PITCH_AND_COUNT", PatternSpacingType::PITCH_AND_COUNT)
@@ -849,8 +883,8 @@ PYBIND11_MODULE(cadexchange_py, m) {
       .def("get_reference", &GetFilletReference);
 
 
-  py::class_<LinearPatternAccessor>(m, "LinearPatternAccessor")
-      .def("is_valid", &LinearPatternAccessor::IsValid)
+  auto linearPattern=py::class_<LinearPatternAccessor>(m,"LinearPatternAccessor");
+  linearPattern.def("is_valid", &LinearPatternAccessor::IsValid)
       .def_property_readonly("dir1_reference", [](const LinearPatternAccessor &a) {
         return ReferenceAccessor(a.GetDir1().directionRef);
       })
@@ -899,9 +933,10 @@ PYBIND11_MODULE(cadexchange_py, m) {
         result["dir2_index"] = item.dir2Index;
         return result;
       });
+  BindOrdinaryPatternOptions(linearPattern);
 
-  py::class_<CircularPatternAccessor>(m, "CircularPatternAccessor")
-      .def("is_valid", &CircularPatternAccessor::IsValid)
+  auto circularPattern=py::class_<CircularPatternAccessor>(m,"CircularPatternAccessor");
+  circularPattern.def("is_valid", &CircularPatternAccessor::IsValid)
       .def_property_readonly("axis_reference", [](const CircularPatternAccessor &a) {
         return ReferenceAccessor(a.GetDir1().axisRef);
       })
@@ -953,6 +988,7 @@ PYBIND11_MODULE(cadexchange_py, m) {
         result["dir2_index"] = item.dir2Index;
         return result;
       });
+  BindOrdinaryPatternOptions(circularPattern);
 
   py::class_<MirrorPatternAccessor>(m, "MirrorPatternAccessor")
       .def("is_valid", &MirrorPatternAccessor::IsValid)

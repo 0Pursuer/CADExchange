@@ -146,9 +146,8 @@ enum class CGeoSurfaceType {
 
 struct CRefFace : public CRefSubTopo {
   CVector3D normal;
-  /// 面上采样点：SolidWorks 二次开发中取三角剖分 (GetTessTriangles)
-  /// 第一个三角形的重心， 保证该点落在面的几何表面内，用于 SelectByRay
-  /// 选面。并非该面的几何质心。
+  /// 真实裁剪面上的采样点，并非几何质心。SolidWorks 以三角剖分重心为
+  /// 初值，投影到原生面并验证归属；曲面的三角形重心本身不在曲面上。
   CPoint3D centroid;
   CVector3D uDir{1, 0, 0};
   CVector3D vDir{0, 1, 0};
@@ -1180,6 +1179,13 @@ enum class PatternSpacingType {
   SPAN_AND_COUNT,  // 给定 数量(Count) + 总跨度(Span)
 };
 
+/// Affected solids of a feature geometry pattern, independently of its seeds.
+enum class PatternAffectedBodyMode {
+  AllBodies = 0,
+  AutoSelect = 1,
+  SelectedBodies = 2
+};
+
 /**
  * @brief 网格坐标，用于精确标记需要跳过（抑制）的阵列实例
  */
@@ -1222,6 +1228,8 @@ struct CLinearPattern : public CFeatureBase {
 
   std::vector<CPatternIndex> skippedInstances; ///< 跳过的阵列实例索引列表
   bool geometryPattern = false;                ///< 是否启用几何阵列（加速复制）
+  std::optional<PatternAffectedBodyMode> affectedBodyMode;
+  std::vector<std::shared_ptr<CRefBody>> affectedBodies;
 
   CLinearPattern() { featureType = FeatureType::LinearPattern; }
 };
@@ -1253,6 +1261,8 @@ struct CCircularPattern : public CFeatureBase {
 
   std::vector<CPatternIndex> skippedInstances;
   bool geometryPattern = false;
+  std::optional<PatternAffectedBodyMode> affectedBodyMode;
+  std::vector<std::shared_ptr<CRefBody>> affectedBodies;
 
   CCircularPattern() { featureType = FeatureType::CircularPattern; }
 };

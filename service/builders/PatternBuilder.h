@@ -50,6 +50,16 @@ public:
     m_feature->geometryPattern = geomPattern;
     return *this;
   }
+
+  LinearPatternBuilder &SetAffectedBodyMode(PatternAffectedBodyMode mode) {
+    m_feature->affectedBodyMode=mode;return *this;
+  }
+  LinearPatternBuilder &AddAffectedBody(const std::shared_ptr<CRefBody> &body) {
+    m_feature->affectedBodies.push_back(body);return *this;
+  }
+  LinearPatternBuilder &SetAffectedBodies(const std::vector<std::shared_ptr<CRefBody>> &bodies) {
+    m_feature->affectedBodies=bodies;return *this;
+  }
 };
 
 /**
@@ -93,6 +103,16 @@ public:
   CircularPatternBuilder &SetGeometryPattern(bool geomPattern) {
     m_feature->geometryPattern = geomPattern;
     return *this;
+  }
+
+  CircularPatternBuilder &SetAffectedBodyMode(PatternAffectedBodyMode mode) {
+    m_feature->affectedBodyMode=mode;return *this;
+  }
+  CircularPatternBuilder &AddAffectedBody(const std::shared_ptr<CRefBody> &body) {
+    m_feature->affectedBodies.push_back(body);return *this;
+  }
+  CircularPatternBuilder &SetAffectedBodies(const std::vector<std::shared_ptr<CRefBody>> &bodies) {
+    m_feature->affectedBodies=bodies;return *this;
   }
 };
 
